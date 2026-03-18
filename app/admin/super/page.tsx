@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown } from "lucide-react";
+import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2 } from "lucide-react";
 
 const DEFAULT_8_PRIZES = [
   { name: "Mimo Surpresa", shortLabel: "Mimo", type: "digital", weight: 12.5, color: "#FF1493", active: true },
@@ -22,6 +22,9 @@ export default function SuperAdmin() {
   
   const [models, setModels] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newModel, setNewModel] = useState({ slug: "", email: "", password: "" });
@@ -38,6 +41,7 @@ export default function SuperAdmin() {
   const fetchData = async () => {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+      
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?select=*&order=created_at.asc`, { headers, cache: 'no-store' });
       setModels(await resMod.json() || []);
       
@@ -52,6 +56,17 @@ export default function SuperAdmin() {
         setGoalAmount(dataGlob[0].goal_amount);
         setGoalReward(dataGlob[0].goal_reward);
       }
+
+      // Busca Transações (Últimos 6 Meses)
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const resTrans = await fetch(`${supabaseUrl}/rest/v1/Transactions?created_at=gte.${sixMonthsAgo.toISOString()}&select=*`, { headers, cache: 'no-store' });
+      setTransactions(await resTrans.json() || []);
+
+      // Busca Pedidos de Saque
+      const resWith = await fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
+      setWithdrawals(await resWith.json() || []);
+
     } catch (err) { console.error(err); }
   };
 
@@ -95,6 +110,23 @@ export default function SuperAdmin() {
     await handleSaveGlobal(nextVal);
   };
 
+  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string) => {
+    const model = models.find(m => m.id === modelId);
+    if (!confirm(`Confirmar que o PIX de R$ ${amount} foi enviado para a modelo ${model?.slug || 'Desconhecida'}?`)) return;
+
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: 'pago' })
+      });
+      alert('Saque marcado como PAGO! A modelo poderá ver no histórico dela (em breve).');
+      fetchData();
+    } catch (err) {
+      alert("Erro ao aprovar saque.");
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -134,6 +166,25 @@ export default function SuperAdmin() {
     return models.map(m => ({ ...m, score: counts[m.id] || 0 })).sort((a, b) => b.score - a.score);
   }, [models, history]);
 
+  // MATEMÁTICA FINANCEIRA DO LIVRO CAIXA
+  const financialData = useMemo(() => {
+    let totalSales = 0;
+    let totalPlatform = 0;
+    let totalModels = 0;
+    const byModel: Record<string, number> = {};
+
+    transactions.forEach(t => {
+      totalSales += Number(t.real_amount) || 0;
+      totalPlatform += Number(t.platform_cut) || 0;
+      totalModels += Number(t.model_cut) || 0;
+      byModel[t.model_id] = (byModel[t.model_id] || 0) + (Number(t.real_amount) || 0);
+    });
+
+    return { totalSales, totalPlatform, totalModels, byModel };
+  }, [transactions]);
+
+  const pendingWithdrawals = withdrawals.filter(w => w.status === 'pendente');
+
   if (!isLogged) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl relative overflow-hidden">
@@ -153,10 +204,10 @@ export default function SuperAdmin() {
   );
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans">
+    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
       <div className="max-w-7xl mx-auto">
         
-        {/* HEADER COMPLETO E BOTÕES DE SAÍDA */}
+        {/* HEADER */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
           <div>
             <h1 className="text-4xl font-black text-[#FF1493] uppercase italic drop-shadow-[0_0_15px_rgba(255,20,147,0.3)]">Savanah Labz</h1>
@@ -168,17 +219,53 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* CARDS DE ESTATÍSTICAS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-          <div className="bg-white/5 border border-white/5 p-6 rounded-[2.5rem]"><p className="text-[9px] font-black text-white/30 uppercase mb-1">Modelos Ativas</p><h3 className="text-2xl font-black">{models.length}</h3></div>
-          <div className="bg-white/5 border border-white/5 p-6 rounded-[2.5rem]"><p className="text-[9px] font-black text-white/30 uppercase mb-1">Total de Giros</p><h3 className="text-2xl font-black text-[#FFD700]">{history.length}</h3></div>
-          <div className="bg-white/5 border border-white/5 p-6 rounded-[2.5rem]"><p className="text-[9px] font-black text-white/30 uppercase mb-1">Status Server</p><h3 className="text-2xl font-black text-emerald-500 flex items-center gap-2">ONLINE <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"/></h3></div>
-          <div className="bg-white/5 border border-white/5 p-6 rounded-[2.5rem]"><p className="text-[9px] font-black text-white/30 uppercase mb-1">Versão</p><h3 className="text-2xl font-black text-white/50">PRO</h3></div>
+        {/* ALERTA DE SAQUES PENDENTES */}
+        {pendingWithdrawals.length > 0 && (
+          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
+            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Solicitações de Saque (PIX)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingWithdrawals.map(w => {
+                const model = models.find(m => m.id === w.model_id);
+                return (
+                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex justify-between items-center">
+                    <div>
+                      <p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug || 'Desconhecida'}</p>
+                      <p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p>
+                    </div>
+                    <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id)} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1">
+                      <CheckCircle2 size={14}/> Pagar
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ESTATÍSTICAS FINANCEIRAS (LIVRO CAIXA) */}
+        <div className="mb-12">
+          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Livro Caixa (Últimos 6 Meses)</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div>
+              <p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Vendas Totais (100%)</p>
+              <h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div>
+              <p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p>
+              <h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3>
+            </div>
+            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden">
+              <p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse às Modelos (70%)</p>
+              <h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* COLUNA ESQUERDA: UNIDADES ATIVAS (COM SENHAS) */}
+          {/* COLUNA ESQUERDA: UNIDADES ATIVAS E FATURAMENTO */}
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -192,7 +279,9 @@ export default function SuperAdmin() {
                       <button onClick={() => handleDelete(m.id, m.slug)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all" title="Excluir"><Trash2 size={16}/></button>
                     </div>
                   </div>
-                  <h3 className="font-black uppercase text-sm mb-3 relative z-10">{m.slug}</h3>
+                  <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
+                  <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  
                   <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10">
                     <div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div>
                     <div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div>
@@ -229,7 +318,6 @@ export default function SuperAdmin() {
                    <input type="text" value={goalReward} onChange={e => setGoalReward(e.target.value)} className="w-full bg-black border border-white/10 p-3 rounded-xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Ex: Bônus de 10% no lucro"/>
                  </div>
                  
-                 {/* BOTÃO DE COMANDO REAL PARA MOSTRAR/OCULTAR NAS MODELOS */}
                  <button onClick={toggleRankingVisibility} className={`w-full py-4 rounded-xl text-[10px] font-black uppercase border transition-all active:scale-95 ${rankVisible ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'bg-red-500/10 border-red-500/50 text-red-500'}`}>
                    {rankVisible ? 'RANKING VISÍVEL P/ ELAS' : 'RANKING OCULTO P/ ELAS'}
                  </button>
