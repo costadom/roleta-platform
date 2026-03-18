@@ -52,53 +52,51 @@ function DashboardContent() {
   const loadData = async () => {
     if (!modelId) return;
     try {
-      const ts = Date.now(); // FURA O CACHE DO NAVEGADOR
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
       
-      // LEITURA BLINDADA DAS CONFIGS GLOBAIS
-      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*&t=${ts}`, { headers, cache: 'no-store' });
+      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers, cache: 'no-store' });
       const dataGlob = await resGlob.json();
-      if (dataGlob && dataGlob[0]) {
+      if (Array.isArray(dataGlob) && dataGlob[0]) {
         setGlobalAnnouncement(dataGlob[0].announcement_msg);
-        
-        // FORÇA A LEITURA CORRETA MESMO SE FOR TEXTO OU BOOLEANO NO BANCO
         const isRankVisible = dataGlob[0].ranking_visible === true || dataGlob[0].ranking_visible === "true";
         setShowRankTab(isRankVisible);
-        
-        // Se a aba atual for ranking e ele foi desativado, volta pra aba prizes
         if (!isRankVisible && activeTab === "ranking") setActiveTab("prizes");
-        
         setMetaValue(dataGlob[0].goal_amount);
         setMetaPrize(dataGlob[0].goal_reward);
       }
       
-      const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*&t=${ts}`, { headers, cache: 'no-store' });
+      const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
       const dataPrizes = await resPrizes.json();
       if (Array.isArray(dataPrizes)) setPrizes(dataPrizes.sort((a: any, b: any) => b.weight - a.weight));
       
-      const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*&t=${ts}`, { headers, cache: 'no-store' });
+      const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
       const dataConfig = await resConfig.json();
-      if (dataConfig && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setWhatsapp(dataConfig[0].whatsapp || ""); setSpinCost(dataConfig[0].spin_cost || 2); setPix10(dataConfig[0].pix_10 || ""); setPix20(dataConfig[0].pix_20 || ""); setPix50(dataConfig[0].pix_50 || ""); }
+      if (Array.isArray(dataConfig) && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setWhatsapp(dataConfig[0].whatsapp || ""); setSpinCost(dataConfig[0].spin_cost || 2); setPix10(dataConfig[0].pix_10 || ""); setPix20(dataConfig[0].pix_20 || ""); setPix50(dataConfig[0].pix_50 || ""); }
       
-      const resHistory = await fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc&t=${ts}`, { headers, cache: 'no-store' });
+      const resHistory = await fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
       const dataHistory = await resHistory.json();
       if (Array.isArray(dataHistory)) setHistory(dataHistory);
       
-      const resAllMod = await fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug&t=${ts}`, { headers, cache: 'no-store' });
-      setAllModels(await resAllMod.json() || []);
+      const resAllMod = await fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers, cache: 'no-store' });
+      const allModData = await resAllMod.json();
+      setAllModels(Array.isArray(allModData) ? allModData : []);
       
-      const resPlayers = await fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&select=id&t=${ts}`, { headers, cache: 'no-store' });
+      const resPlayers = await fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&select=id`, { headers, cache: 'no-store' });
       const dataPlayers = await resPlayers.json();
       if (Array.isArray(dataPlayers)) setPlayersCount(dataPlayers.length);
-    } catch (err) { }
+    } catch (err) { console.error("Erro na leitura:", err); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
 
   const totalChance = useMemo(() => prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0), [prizes]);
+  
   const modelRanking = useMemo(() => {
+    if (!Array.isArray(allModels)) return [];
     const counts: any = {};
-    history.forEach(h => { counts[h.model_id] = (counts[h.model_id] || 0) + 1; });
+    if (Array.isArray(history)) {
+      history.forEach(h => { counts[h.model_id] = (counts[h.model_id] || 0) + 1; });
+    }
     return allModels.map(m => ({ ...m, score: counts[m.id] || 0 })).sort((a, b) => b.score - a.score);
   }, [allModels, history]);
 
@@ -155,7 +153,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* --- DESAFIO DE VENDAS SÓ APARECE SE O BANCO LIBERAR --- */}
         {showRankTab && (
           <div className="mb-8 bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 p-6 rounded-3xl relative overflow-hidden group shadow-2xl animate-in zoom-in duration-500">
              <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy size={80} className="text-amber-500"/></div>
@@ -185,13 +182,11 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "players" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Jogadores</button>
           <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Saques</button>
           
-          {/* --- ABA RANKING SÓ APARECE SE O BANCO LIBERAR --- */}
           {showRankTab && (
             <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-amber-500/20 text-amber-500 shadow-lg shadow-amber-500/10" : "text-white/30"}`}>Ranking</button>
           )}
         </div>
 
-        {/* CONTEÚDOS DAS ABAS */}
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
@@ -243,7 +238,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ABA RANKING SEGURO */}
         {showRankTab && activeTab === "ranking" && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="text-center py-6">
