@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, Mail, KeyRound } from "lucide-react";
 import confetti from "canvas-confetti";
-import { MobileShell } from "@/components/MobileShell";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { weightedRandomIndex } from "@/src/lib/weightedRandom";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -241,49 +240,51 @@ export default function GamePage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
+    <div className="min-h-[100dvh] bg-black flex flex-col items-center justify-center text-white gap-4">
       <Loader2 className="animate-spin text-[#FF1493]" size={40} />
       <p className="uppercase font-black tracking-widest text-[10px]">Carregando Roleta Sexy...</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen font-sans text-white bg-black overflow-hidden flex items-center justify-center">
-      <MobileShell>
-        <div className="absolute inset-0 z-0 overflow-hidden rounded-[inherit]">
+    <div className="min-h-[100dvh] font-sans text-white bg-[#0a0a0a] flex items-center justify-center overflow-hidden sm:p-4">
+      <div className="relative w-full h-[100dvh] sm:h-[95vh] max-w-[430px] mx-auto bg-black flex flex-col overflow-hidden sm:rounded-[2.5rem] sm:border sm:border-white/10 shadow-2xl">
+        
+        {/* FUNDO */}
+        <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat" style={ bgUrl ? { backgroundImage: `url(${bgUrl})` } : { backgroundColor: "#120008" } } />
           {bgUrl && <div className="absolute inset-0 bg-black/55" />}
         </div>
 
-        <div className="relative z-10 flex h-full w-full flex-col justify-between pointer-events-auto">
-          {/* HEADER REAJUSTADO */}
-          <div className="relative pt-4 px-3 sm:px-4 w-full">
+        <div className="relative z-10 flex h-full w-full flex-col justify-between">
+          {/* HEADER */}
+          <div className="relative pt-6 px-4 w-full shrink-0">
             <div className="flex justify-end mb-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2 sm:px-3 py-1 text-[8px] sm:text-[9px] uppercase font-black text-white/90 shadow-md">
+              <span className="inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-[9px] uppercase font-black text-white/90 shadow-md">
                 {player ? `Logado: ${player.name.split(" ")[0]}` : "Online"} <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               </span>
             </div>
             <div className="flex items-center justify-between mb-4 w-full">
-              <h1 className="text-xl sm:text-2xl italic font-serif text-[#FFD700] drop-shadow-[0_0_8px_rgba(255,215,0,0.8)] leading-tight tracking-wide flex-1 pr-2">
-                Roleta Sexy<br/><span className="text-[10px] sm:text-[14px] text-white/90 uppercase tracking-[0.2em] not-italic font-sans">da {modelName}</span>
+              <h1 className="text-2xl italic font-serif text-[#FFD700] drop-shadow-[0_0_8px_rgba(255,215,0,0.8)] leading-tight tracking-wide flex-1 pr-2">
+                Roleta Sexy<br/><span className="text-[12px] text-white/90 uppercase tracking-[0.2em] not-italic font-sans">da {modelName}</span>
               </h1>
-              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                <button onClick={() => setSoundEnabled(!soundEnabled)} className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-black/60 border border-[#FFD700]/50 text-[#FFD700] transition-all active:scale-90">{soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
-                <button onClick={() => player ? setShowProfile(true) : setShowAuthModal(true)} className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-black/60 border border-[#FFD700]/50 text-[#FFD700] transition-all active:scale-90"><User size={18} /></button>
-                <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-black/60 border border-[#FFD700]/50 text-[#FFD700] transition-all active:scale-90"><ShoppingCart size={18} /></button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => setSoundEnabled(!soundEnabled)} className="h-10 w-10 flex items-center justify-center rounded-full bg-black/60 border border-[#FFD700]/50 text-[#FFD700] transition-all active:scale-90">{soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
+                <button onClick={() => player ? setShowProfile(true) : setShowAuthModal(true)} className="h-10 w-10 flex items-center justify-center rounded-full bg-black/60 border border-[#FFD700]/50 text-[#FFD700] transition-all active:scale-90"><User size={18} /></button>
+                <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="h-10 w-10 flex items-center justify-center rounded-full bg-black/60 border border-[#FFD700]/50 text-[#FFD700] transition-all active:scale-90"><ShoppingCart size={18} /></button>
               </div>
             </div>
-            <div className="relative w-full h-8 bg-black/40 border-y border-[#FFD700]/30 overflow-hidden backdrop-blur-sm">
+            <div className="relative w-full h-8 bg-black/50 border-y border-[#FFD700]/30 overflow-hidden backdrop-blur-sm">
               <div className="flex whitespace-nowrap animate-marquee items-center h-full">
                 {winnerFeed.concat(winnerFeed).map((w, i) => (<span key={i} className="mx-12 text-[10px] uppercase font-black tracking-widest flex items-center gap-2"><Sparkles size={11} className="text-[#FFD700] animate-pulse" /><span className="text-white/80">{w.name}</span><span className="text-[#FF1493]">ganhou {w.prize}</span></span>))}
               </div>
             </div>
           </div>
 
-          {/* ROLETA CENTRALIZADA E COM MAIS ESPAÇO */}
+          {/* ROLETA */}
           <div className="relative flex flex-1 flex-col items-center justify-center w-full min-h-[350px]">
             {prizes.length > 0 ? (
-              <div className="transform scale-[0.95] sm:scale-100 flex items-center justify-center w-full">
+              <div className="transform scale-[0.95] flex items-center justify-center w-full">
                 <RouletteWheel segments={segments} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(false)} durationMs={SPIN_DURATION} />
               </div>
             ) : (
@@ -293,26 +294,26 @@ export default function GamePage() {
             )}
           </div>
 
-          {/* CONTROLES INFERIORES REAJUSTADOS */}
-          <div className="relative pb-6 pt-2 px-3 sm:px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/80 to-transparent">
-            <div className="grid grid-cols-[1fr_1.4fr_1fr] items-center justify-center gap-2 sm:gap-3 w-full">
-              <div className="rounded-2xl bg-black/70 p-2 sm:p-4 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center">
-                <span className="text-[8px] sm:text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Saldo</span>
-                <span className="text-xs sm:text-sm font-black text-white">{player ? player.credits : 0} CR</span>
+          {/* CONTROLES INFERIORES */}
+          <div className="relative pb-8 pt-4 px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent">
+            <div className="grid grid-cols-[1fr_1.4fr_1fr] items-center justify-center gap-3 w-full">
+              <div className="rounded-2xl bg-black/80 p-3 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center">
+                <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Saldo</span>
+                <span className="text-sm font-black text-white">{player ? player.credits : 0} CR</span>
               </div>
-              <button onClick={() => runSpin(false)} disabled={isSpinning || prizes.length === 0} className="h-14 sm:h-16 w-full rounded-2xl bg-gradient-to-b from-[#FF1493] to-[#8B0045] text-base sm:text-lg font-black uppercase tracking-tighter text-white shadow-xl shadow-[#FF1493]/30 border border-[#FF1493]/50 disabled:opacity-50 transition-all active:scale-95">Girar</button>
-              <div className="rounded-2xl bg-black/70 p-2 sm:p-4 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center">
-                <span className="text-[8px] sm:text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Custo</span>
-                <span className="text-xs sm:text-sm font-black text-[#FFD700]">{spinCost} CR</span>
+              <button onClick={() => runSpin(false)} disabled={isSpinning || prizes.length === 0} className="h-16 w-full rounded-2xl bg-gradient-to-b from-[#FF1493] to-[#8B0045] text-lg font-black uppercase tracking-tighter text-white shadow-xl shadow-[#FF1493]/30 border border-[#FF1493]/50 disabled:opacity-50 transition-all active:scale-95">Girar</button>
+              <div className="rounded-2xl bg-black/80 p-3 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center">
+                <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Custo</span>
+                <span className="text-sm font-black text-[#FFD700]">{spinCost} CR</span>
               </div>
             </div>
-            <div className="mt-3 sm:mt-4 flex gap-2 sm:gap-3 w-full">
-              <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="flex-1 py-3 sm:py-4 rounded-xl border border-[#FFD700]/30 bg-black/60 text-[#FFD700] text-[9px] sm:text-[10px] font-black uppercase shadow-lg transition-all active:scale-95">Depositar</button>
-              <button onClick={() => { setAutoSpin(!autoSpin); autoSpinRef.current = !autoSpin; }} className={`flex-1 py-3 sm:py-4 rounded-xl text-[9px] sm:text-[10px] font-black uppercase transition-all active:scale-95 ${ autoSpin ? "bg-[#FF1493] text-white shadow-lg shadow-[#FF1493]/30" : "bg-black/60 border border-white/20 text-white" }`}>{autoSpin ? "Parar Auto" : "Auto Giro"}</button>
+            <div className="mt-4 flex gap-3 w-full">
+              <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="flex-1 py-4 rounded-xl border border-[#FFD700]/30 bg-black/70 text-[#FFD700] text-[10px] font-black uppercase shadow-lg transition-all active:scale-95">Depositar</button>
+              <button onClick={() => { setAutoSpin(!autoSpin); autoSpinRef.current = !autoSpin; }} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${ autoSpin ? "bg-[#FF1493] text-white shadow-lg shadow-[#FF1493]/30" : "bg-black/70 border border-white/20 text-white" }`}>{autoSpin ? "Parar Auto" : "Auto Giro"}</button>
             </div>
           </div>
         </div>
-      </MobileShell>
+      </div>
 
       <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 90s linear infinite; width: fit-content; } `}</style>
 
