@@ -136,12 +136,25 @@ export default function GamePage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
-    if (regPass !== regConfirm) return setAuthError("Senhas diferentes.");
+    if (regPass !== regConfirm) return setAuthError("As senhas não coincidem.");
     setAuthLoading(true);
     try {
+      const zapClean = regZap.replace(/\D/g, "");
+      // Verificar duplicidade
+      const checkRes = await fetch(
+        `${supabaseUrl}/rest/v1/Players?or=(name.eq.${encodeURIComponent(regName)},whatsapp.eq.${zapClean})&model_id=eq.${modelId}&select=id`,
+        { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }
+      );
+      const checkData = await checkRes.json();
+
+      if (checkData && checkData.length > 0) {
+        setAuthLoading(false);
+        return setAuthError("Este apelido ou WhatsApp já estão em uso nesta roleta.");
+      }
+
       const res = await fetch(`${supabaseUrl}/rest/v1/Players`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ name: regName, whatsapp: regZap.replace(/\D/g, ""), email: regEmail.trim(), password: regPass, credits: 0, model_id: modelId }),
+        body: JSON.stringify({ name: regName, whatsapp: zapClean, email: regEmail.trim(), password: regPass, credits: 0, model_id: modelId }),
       });
       const data = await res.json();
       if (res.ok && data[0]) { 
@@ -149,8 +162,10 @@ export default function GamePage() {
         localStorage.setItem(`player_${slug}`, data[0].name); 
         setShowAuthModal(false); 
       } else {
-        setAuthError("Este apelido já existe.");
+        setAuthError("Erro ao criar conta. Tente outro apelido.");
       }
+    } catch(err) {
+      setAuthError("Falha na conexão. Tente novamente.");
     } finally { setAuthLoading(false); }
   };
 
@@ -256,7 +271,7 @@ export default function GamePage() {
           {bgUrl && <div className="absolute inset-0 bg-black/55" />}
         </div>
 
-        <div className="relative z-10 flex h-full w-full flex-col justify-between">
+        <div className="relative z-10 flex h-full w-full flex-col justify-between pointer-events-auto">
           {/* HEADER */}
           <div className="relative pt-6 px-4 w-full shrink-0">
             <div className="flex justify-end mb-2">
