@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Tabela de Administradores (Para você acessar o painel depois)
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// 2. Tabela de Prêmios (Vai substituir o seu prizes.ts atual)
+model Prize {
+  id         String   @id @default(uuid())
+  name       String
+  shortLabel String
+  type       String
+  color      String
+  weight     Int      // A probabilidade de cair
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// 3. Histórico de Giros (Para você auditar quem ganhou o quê)
+model SpinHistory {
+  id        String   @id @default(uuid())
+  sessionId String?  // ID do jogador (quando tivermos login/sessão)
+  prizeId   String   // Qual prêmio ele tirou
+  type      String   // "manual" ou "auto"
+  createdAt DateTime @default(now())
+}
+
+// 4. Configurações Gerais da Plataforma (Textos, fundo, preços)
+model Config {
+  id               String   @id @default(uuid())
+  bgUrl            String   // Imagem de fundo
+  spinCost         Float    // Custo do giro (ex: 1.00)
+  marqueeTexts     String   // Frases que passam na faixa (salvo como JSON)
+  livePopupNames   String   // Nomes fakes para o popup (salvo como JSON)
+  updatedAt        DateTime @updatedAt
+}

@@ -65,4 +65,3 @@ export const PRIZES: Prize[] = [
     type: "rare",
   },
 ];
-

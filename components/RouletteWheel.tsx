@@ -1,28 +1,17 @@
 "use client";
 
 type Segment = {
-  id?: number;
-  label?: string;
-  shortLabel?: string;
-  color?: string;
+  label: string;
+  color: string;
 };
 
 type RouletteWheelProps = {
-  segments?: Segment[];
-  rotation?: number;
-  spinning?: boolean;
+  segments: Segment[];
+  rotation: number;
+  spinning: boolean;
+  onClick?: () => void;
+  durationMs?: number;
 };
-
-const fallbackSegments: Segment[] = [
-  { shortLabel: "Grátis" },
-  { shortLabel: "Cupom" },
-  { shortLabel: "Vídeo" },
-  { shortLabel: "VIP" },
-  { shortLabel: "Saldo" },
-  { shortLabel: "Raro" },
-  { shortLabel: "Bônus" },
-  { shortLabel: "Extra" },
-];
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const angleRad = ((angleDeg - 90) * Math.PI) / 180;
@@ -100,196 +89,354 @@ function describeDonutSlice(
 }
 
 export function RouletteWheel({
-  segments = fallbackSegments,
-  rotation = 0,
-  spinning = false,
+  segments,
+  rotation,
+  spinning,
+  onClick,
+  durationMs = 4000,
 }: RouletteWheelProps) {
-  const safeSegments =
-    segments.length >= 6
-      ? segments.map((segment, index) => ({
-          ...segment,
-          shortLabel:
-            segment.shortLabel || segment.label || `Item ${index + 1}`,
-        }))
-      : fallbackSegments;
-
-  const count = safeSegments.length;
+  const count = segments.length;
   const sliceAngle = 360 / count;
 
-  const size = 320;
+  const size = 340;
   const center = size / 2;
-  const outerR = 142;
-  const innerR = 72;
-  const textR = 108;
+  const outerR = 146;
+  const innerR = 76;
+  const textR = 111;
 
   const colors = [
-    { base: "#5e0909", glow: "#ff4040" },
-    { base: "#7a160f", glow: "#ff7a30" },
-    { base: "#4b0808", glow: "#ff4d4d" },
-    { base: "#6b120d", glow: "#ff9b35" },
-    { base: "#3d0606", glow: "#ff5959" },
-    { base: "#70120f", glow: "#ff7f50" },
-    { base: "#4b0909", glow: "#ff4040" },
-    { base: "#65100d", glow: "#ffb347" },
+    { base: "#5a0808", glow: "#ff4040" },
+    { base: "#73120d", glow: "#ff7a30" },
+    { base: "#4a0707", glow: "#ff4d4d" },
+    { base: "#64100c", glow: "#ff9b35" },
+    { base: "#3d0606", glow: "#ff5e5e" },
+    { base: "#6f120f", glow: "#ff8350" },
+    { base: "#500808", glow: "#ff4747" },
+    { base: "#5d0e0b", glow: "#ffb347" },
   ];
 
   return (
-    <div className="relative mx-auto flex h-[340px] w-[340px] items-center justify-center">
-      {/* glow externo */}
-      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,60,60,0.18)_0%,rgba(255,60,60,0.08)_35%,transparent_70%)] blur-xl" />
+    <>
+      <style jsx>{`
+        @keyframes sweepLight {
+          0% {
+            transform: translate(-50%, -50%) rotate(0deg);
+            opacity: 0.22;
+          }
+          50% {
+            opacity: 0.55;
+          }
+          100% {
+            transform: translate(-50%, -50%) rotate(360deg);
+            opacity: 0.22;
+          }
+        }
 
-      {/* ponteiro */}
-      <div className="absolute top-[0px] z-30 flex flex-col items-center">
-        <div className="h-4 w-4 rounded-full border border-[#ffd27a] bg-gradient-to-b from-[#ffe7a8] to-[#d49015] shadow-[0_0_16px_rgba(255,196,77,0.75)]" />
-        <div className="-mt-1 h-0 w-0 border-l-[12px] border-r-[12px] border-t-[22px] border-l-transparent border-r-transparent border-t-[#f0b93a] drop-shadow-[0_4px_12px_rgba(255,196,77,0.65)]" />
-      </div>
+        @keyframes centerPulse {
+          0% {
+            transform: translate(-50%, -50%) scale(0.96);
+            opacity: 0.5;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.08);
+            opacity: 0.95;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(0.96);
+            opacity: 0.5;
+          }
+        }
+      `}</style>
 
-      {/* roleta */}
-      <div
-        className="relative z-10 h-[320px] w-[320px]"
-        style={{
-          transform: `rotate(${rotation}deg)`,
-          transition: spinning
-            ? "transform 4s cubic-bezier(0.18, 0.8, 0.2, 1)"
-            : "none",
-        }}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={spinning}
+        className="relative mx-auto flex h-[350px] w-[350px] items-center justify-center rounded-full cursor-pointer disabled:cursor-not-allowed"
+        aria-label="Girar roleta"
       >
-        <svg
-          viewBox={`0 0 ${size} ${size}`}
-          className="h-full w-full drop-shadow-[0_18px_30px_rgba(0,0,0,0.45)]"
+        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,210,110,0.18)_0%,rgba(255,120,40,0.10)_28%,rgba(255,40,40,0.08)_48%,transparent_74%)] blur-2xl" />
+
+        <div className="absolute top-[2px] z-40 flex flex-col items-center">
+          <div className="h-4 w-4 rounded-full border border-[#ffe39c] bg-gradient-to-b from-[#fff4cc] to-[#d69a17] shadow-[0_0_16px_rgba(255,205,92,0.95)]" />
+          <div className="-mt-1 h-0 w-0 border-l-[13px] border-r-[13px] border-t-[24px] border-l-transparent border-r-transparent border-t-[#f2bf46] drop-shadow-[0_5px_14px_rgba(255,196,77,0.9)]" />
+        </div>
+
+        <div
+          className="relative z-10 h-[340px] w-[340px]"
+          style={{
+            transform: `rotate(${rotation}deg)`,
+            transition: spinning
+              ? `transform ${durationMs}ms cubic-bezier(0.18, 0.8, 0.2, 1)`
+              : "none",
+          }}
         >
-          <defs>
-            <radialGradient id="outerGold" cx="50%" cy="35%" r="75%">
-              <stop offset="0%" stopColor="#fff0b8" />
-              <stop offset="35%" stopColor="#f4c85d" />
-              <stop offset="70%" stopColor="#b06e09" />
-              <stop offset="100%" stopColor="#4d2600" />
-            </radialGradient>
-
-            <radialGradient id="innerCore" cx="40%" cy="30%" r="80%">
-              <stop offset="0%" stopColor="#6c1730" />
-              <stop offset="38%" stopColor="#2a0c18" />
-              <stop offset="72%" stopColor="#0b0608" />
-              <stop offset="100%" stopColor="#000000" />
-            </radialGradient>
-
-            <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-
-            <filter id="labelShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.75" />
-            </filter>
-          </defs>
-
-          {/* aro externo dourado */}
-          <circle cx={center} cy={center} r={151} fill="url(#outerGold)" />
-          <circle cx={center} cy={center} r={145} fill="#21070a" />
-
-          {/* fatias */}
-          {safeSegments.map((segment, index) => {
-            const startAngle = index * sliceAngle;
-            const endAngle = startAngle + sliceAngle;
-            const midAngle = startAngle + sliceAngle / 2;
-            const color = colors[index % colors.length];
-
-            const textPoint = polarToCartesian(center, center, textR, midAngle);
-            const rotateText = midAngle > 90 && midAngle < 270 ? midAngle + 180 : midAngle;
-
-            return (
-              <g key={`slice-${index}`}>
-                {/* base da fatia */}
-                <path
-                  d={describeDonutSlice(
-                    center,
-                    center,
-                    outerR,
-                    innerR,
-                    startAngle,
-                    endAngle
-                  )}
-                  fill={color.base}
-                  stroke="#d39a2e"
-                  strokeWidth="2"
-                />
-
-                {/* brilho interno sutil */}
-                <path
-                  d={describeDonutSlice(
-                    center,
-                    center,
-                    outerR - 6,
-                    innerR + 8,
-                    startAngle + 1.2,
-                    endAngle - 1.2
-                  )}
-                  fill={color.glow}
-                  opacity="0.14"
-                  filter="url(#softGlow)"
-                />
-
-                {/* divisor dourado */}
-                <path
-                  d={describeArc(center, center, outerR, startAngle, startAngle)}
-                  stroke="#f2c55a"
-                  strokeWidth="1.6"
-                  opacity="0.9"
-                />
-
-                {/* label dentro da fatia */}
-                <text
-                  x={textPoint.x}
-                  y={textPoint.y}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill="#ffe7b0"
-                  fontSize="11"
-                  fontWeight="700"
-                  letterSpacing="0.5"
-                  filter="url(#labelShadow)"
-                  transform={`rotate(${rotateText} ${textPoint.x} ${textPoint.y})`}
-                >
-                  {String(segment.shortLabel).slice(0, 8).toUpperCase()}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* círculo interno dourado */}
-          <circle
-            cx={center}
-            cy={center}
-            r={innerR + 8}
-            fill="none"
-            stroke="#f0bf4d"
-            strokeWidth="6"
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[315px] w-[315px] rounded-full"
+            style={{
+              background:
+                "conic-gradient(from 0deg, rgba(255,255,255,0) 0deg, rgba(255,245,190,0.00) 12deg, rgba(255,240,170,0.08) 20deg, rgba(255,215,110,0.16) 28deg, rgba(255,255,255,0.03) 38deg, rgba(255,255,255,0) 62deg, rgba(255,255,255,0) 360deg)",
+              mixBlendMode: "screen",
+              filter: "blur(7px)",
+              animation: spinning ? "sweepLight 1.8s linear infinite" : "none",
+              transform: "translate(-50%, -50%)",
+            }}
           />
 
-          {/* miolo */}
-          <circle
-            cx={center}
-            cy={center}
-            r={innerR}
-            fill="url(#innerCore)"
-            stroke="#0a0a0a"
-            strokeWidth="3"
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[88px] w-[88px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(255,248,220,0.60) 0%, rgba(255,220,120,0.20) 35%, rgba(255,190,90,0.10) 55%, transparent 75%)",
+              filter: "blur(10px)",
+              animation: spinning
+                ? "centerPulse 1.2s ease-in-out infinite"
+                : "none",
+              transform: "translate(-50%, -50%)",
+            }}
           />
 
-          {/* centro */}
-          <circle
-            cx={center}
-            cy={center}
-            r="13"
-            fill="url(#outerGold)"
-            stroke="#fff1b8"
-            strokeWidth="1.5"
-          />
-        </svg>
-      </div>
-    </div>
+          <svg
+            viewBox={`0 0 ${size} ${size}`}
+            className="relative z-10 h-full w-full drop-shadow-[0_22px_34px_rgba(0,0,0,0.5)]"
+          >
+            <defs>
+              <radialGradient id="outerGold" cx="50%" cy="35%" r="78%">
+                <stop offset="0%" stopColor="#fff4c6" />
+                <stop offset="18%" stopColor="#ffe08a" />
+                <stop offset="42%" stopColor="#f4c85d" />
+                <stop offset="72%" stopColor="#b06e09" />
+                <stop offset="100%" stopColor="#4d2600" />
+              </radialGradient>
+
+              <linearGradient
+                id="goldStroke"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="100%"
+              >
+                <stop offset="0%" stopColor="#fff1ba" />
+                <stop offset="35%" stopColor="#f2c65b" />
+                <stop offset="65%" stopColor="#d18b13" />
+                <stop offset="100%" stopColor="#6e3b00" />
+              </linearGradient>
+
+              <radialGradient id="innerCore" cx="40%" cy="30%" r="80%">
+                <stop offset="0%" stopColor="#4a0717" />
+                <stop offset="22%" stopColor="#2b0710" />
+                <stop offset="50%" stopColor="#15060b" />
+                <stop offset="78%" stopColor="#050505" />
+                <stop offset="100%" stopColor="#000000" />
+              </radialGradient>
+
+              <radialGradient id="centerOrb" cx="35%" cy="30%" r="80%">
+                <stop offset="0%" stopColor="#fff8da" />
+                <stop offset="30%" stopColor="#ffe182" />
+                <stop offset="70%" stopColor="#d79a18" />
+                <stop offset="100%" stopColor="#7a4300" />
+              </radialGradient>
+
+              <filter
+                id="softGlow"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+
+              <filter
+                id="goldGlow"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feDropShadow
+                  dx="0"
+                  dy="0"
+                  stdDeviation="4"
+                  floodColor="#ffd36a"
+                  floodOpacity="0.65"
+                />
+              </filter>
+            </defs>
+
+            <circle
+              cx={center}
+              cy={center}
+              r={158}
+              fill="url(#outerGold)"
+              filter="url(#goldGlow)"
+            />
+            <circle cx={center} cy={center} r={152} fill="#2a0908" />
+            <circle
+              cx={center}
+              cy={center}
+              r={149}
+              fill="none"
+              stroke="url(#goldStroke)"
+              strokeWidth="3"
+              opacity="0.9"
+            />
+            <circle
+              cx={center}
+              cy={center}
+              r={146}
+              fill="none"
+              stroke="#ffe39c"
+              strokeWidth="1.6"
+              opacity="0.45"
+            />
+
+            <g transform={`rotate(${-sliceAngle / 2} ${center} ${center})`}>
+              {segments.map((segment, index) => {
+                const startAngle = index * sliceAngle;
+                const endAngle = startAngle + sliceAngle;
+                const midAngle = startAngle + sliceAngle / 2;
+                const color = colors[index % colors.length];
+
+                const textPoint = polarToCartesian(
+                  center,
+                  center,
+                  textR,
+                  midAngle
+                );
+                const rotateText =
+                  midAngle > 90 && midAngle < 270 ? midAngle + 180 : midAngle;
+
+                return (
+                  <g key={`slice-${index}`}>
+                    <path
+                      d={describeDonutSlice(
+                        center,
+                        center,
+                        outerR,
+                        innerR,
+                        startAngle,
+                        endAngle
+                      )}
+                      fill={color.base}
+                      stroke="#d9a33b"
+                      strokeWidth="2.2"
+                    />
+
+                    <path
+                      d={describeDonutSlice(
+                        center,
+                        center,
+                        outerR - 4,
+                        innerR + 9,
+                        startAngle + 1,
+                        endAngle - 1
+                      )}
+                      fill={color.glow}
+                      opacity="0.09"
+                      filter="url(#softGlow)"
+                    />
+
+                    <path
+                      d={describeDonutSlice(
+                        center,
+                        center,
+                        outerR - 9,
+                        innerR + 24,
+                        startAngle + 4,
+                        startAngle + sliceAngle * 0.58
+                      )}
+                      fill="#fff4d4"
+                      opacity="0.028"
+                    />
+
+                    <path
+                      d={describeArc(
+                        center,
+                        center,
+                        outerR,
+                        startAngle,
+                        startAngle
+                      )}
+                      stroke="#f3c55f"
+                      strokeWidth="1.6"
+                      opacity="0.9"
+                    />
+
+                    <text
+                      x={textPoint.x}
+                      y={textPoint.y}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="#fff6dc"
+                      fontSize="12"
+                      fontWeight="800"
+                      letterSpacing="0.6"
+                      stroke="#3b0a0a"
+                      strokeWidth="1.2"
+                      paintOrder="stroke fill"
+                      transform={`rotate(${rotateText} ${textPoint.x} ${textPoint.y})`}
+                    >
+                      {String(segment.label).slice(0, 8).toUpperCase()}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+
+            <circle
+              cx={center}
+              cy={center}
+              r={innerR + 9}
+              fill="none"
+              stroke="url(#goldStroke)"
+              strokeWidth="7"
+              filter="url(#goldGlow)"
+            />
+
+            <circle
+              cx={center}
+              cy={center}
+              r={innerR + 1}
+              fill="none"
+              stroke="#fff0b2"
+              strokeWidth="1.5"
+              opacity="0.4"
+            />
+
+            <circle
+              cx={center}
+              cy={center}
+              r={innerR}
+              fill="url(#innerCore)"
+              stroke="#0a0a0a"
+              strokeWidth="3"
+            />
+
+            <circle
+              cx={center}
+              cy={center}
+              r="14"
+              fill="url(#centerOrb)"
+              stroke="#fff1b8"
+              strokeWidth="1.8"
+              filter="url(#goldGlow)"
+            />
+
+            <circle
+              cx={center}
+              cy={center}
+              r="5.5"
+              fill="#fff7d6"
+              opacity="0.8"
+            />
+          </svg>
+        </div>
+      </button>
+    </>
   );
 }
