@@ -411,11 +411,11 @@ export default function GamePage() {
             
             {!depositOption ? (
               <div className="space-y-4">
-                {[
-                  { cr: 15, rs: 10, opt: 10 },
-                  { cr: 35, rs: 20, opt: 20, bonus: "+5 BÔNUS" },
-                  { cr: 100, rs: 50, opt: 50, bonus: "+20 BÔNUS" }
-                ].map((p) => (
+               {[
+  { cr: 15, rs: 10, opt: 10, bonus: "+5 BÔNUS" },
+  { cr: 25, rs: 20, opt: 20, bonus: "+5 BÔNUS" },
+  { cr: 60, rs: 50, opt: 50, bonus: "+10 BÔNUS" }
+].map((p) => (
                   <button key={p.opt} onClick={() => setDepositOption(p.opt as any)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-[#FFD700]/30 transition-all active:scale-95 relative overflow-hidden">
                     {p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}
                     <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div>
