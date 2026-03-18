@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar } from "lucide-react";
 import { PlayersManager } from "./players";
 
 function DashboardContent() {
@@ -20,7 +20,7 @@ function DashboardContent() {
   const [metaValue, setMetaValue] = useState(0);
   const [metaPrize, setMetaPrize] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"prizes" | "players" | "history" | "ranking" | "finance">("finance");
+  const [activeTab, setActiveTab] = useState<"finance" | "prizes" | "players" | "history" | "ranking">("finance");
   const [prizes, setPrizes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [allModels, setAllModels] = useState<any[]>([]);
@@ -31,6 +31,7 @@ function DashboardContent() {
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [lastWithdrawal, setLastWithdrawal] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
 
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -38,7 +39,6 @@ function DashboardContent() {
   const [uploading, setUploading] = useState(false);
 
   const [modelName, setModelName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
   const [pix10, setPix10] = useState("");
   const [pix20, setPix20] = useState("");
@@ -63,19 +63,26 @@ function DashboardContent() {
       const dataGlob = await resGlob.json();
       if (Array.isArray(dataGlob) && dataGlob[0]) {
         setGlobalAnnouncement(dataGlob[0].announcement_msg);
-        const isRankVisible = dataGlob[0].ranking_visible === true || dataGlob[0].ranking_visible === "true";
-        setShowRankTab(isRankVisible);
-        if (!isRankVisible && activeTab === "ranking") setActiveTab("prizes");
+        setShowRankTab(dataGlob[0].ranking_visible === true || dataGlob[0].ranking_visible === "true");
         setMetaValue(dataGlob[0].goal_amount);
         setMetaPrize(dataGlob[0].goal_reward);
       }
 
-      // Carregar Saldo da Modelo
       const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal`, { headers, cache: 'no-store' });
       const dataModel = await resModel.json();
       if (dataModel && dataModel[0]) {
         setModelBalance(dataModel[0].balance || 0);
         setLastWithdrawal(dataModel[0].last_withdrawal);
+      }
+
+      // Calcula o acumulado dos últimos 6 meses (70% dela)
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const resTrans = await fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers, cache: 'no-store' });
+      const dataTrans = await resTrans.json();
+      if (Array.isArray(dataTrans)) {
+        const total = dataTrans.reduce((acc, curr) => acc + (Number(curr.model_cut) || 0), 0);
+        setAccumulatedEarnings(total);
       }
       
       const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
@@ -84,7 +91,7 @@ function DashboardContent() {
       
       const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
       const dataConfig = await resConfig.json();
-      if (Array.isArray(dataConfig) && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setWhatsapp(dataConfig[0].whatsapp || ""); setSpinCost(dataConfig[0].spin_cost || 2); setPix10(dataConfig[0].pix_10 || ""); setPix20(dataConfig[0].pix_20 || ""); setPix50(dataConfig[0].pix_50 || ""); }
+      if (Array.isArray(dataConfig) && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setSpinCost(dataConfig[0].spin_cost || 2); setPix10(dataConfig[0].pix_10 || ""); setPix20(dataConfig[0].pix_20 || ""); setPix50(dataConfig[0].pix_50 || ""); }
       
       const resHistory = await fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
       const dataHistory = await resHistory.json();
@@ -104,20 +111,11 @@ function DashboardContent() {
 
   const totalChance = useMemo(() => prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0), [prizes]);
   
-  const modelRanking = useMemo(() => {
-    if (!Array.isArray(allModels)) return [];
-    const counts: any = {};
-    if (Array.isArray(history)) {
-      history.forEach(h => { counts[h.model_id] = (counts[h.model_id] || 0) + 1; });
-    }
-    return allModels.map(m => ({ ...m, score: counts[m.id] || 0 })).sort((a, b) => b.score - a.score);
-  }, [allModels, history]);
-
   const handleLogout = () => { localStorage.clear(); router.push('/admin'); };
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
-    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName, whatsapp: whatsapp, spin_cost: spinCost, pix_10: pix10, pix_20: pix20, pix_50: pix50 }) });
+    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName, spin_cost: spinCost, pix_10: pix10, pix_20: pix20, pix_50: pix50 }) });
     setSavingSettings(false); alert("Painel Atualizado!");
   };
 
@@ -144,17 +142,13 @@ function DashboardContent() {
     setEditingPrize(null); loadData();
   };
 
-  // Lógica de Saque
   const handleWithdraw = async () => {
     if (modelBalance <= 0) return alert("Você não possui saldo disponível para saque no momento.");
-    
-    // Verifica se já sacou hoje
     if (lastWithdrawal) {
       const lastDate = new Date(lastWithdrawal).toDateString();
       const today = new Date().toDateString();
       if (lastDate === today) return alert("Limite atingido! Você só pode solicitar 1 saque por dia.");
     }
-
     const confirm = window.confirm(`Deseja solicitar o saque de ${modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}? O valor será enviado via PIX em até 1 hora.`);
     if (!confirm) return;
 
@@ -163,13 +157,11 @@ function DashboardContent() {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
       const now = new Date().toISOString();
 
-      // 1. Cria o pedido na tabela Withdrawals para o Master ver
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals`, {
         method: "POST", headers,
         body: JSON.stringify({ model_id: modelId, amount: modelBalance })
       });
 
-      // 2. Zera o saldo e atualiza a data do último saque
       await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, {
         method: "PATCH", headers,
         body: JSON.stringify({ balance: 0, last_withdrawal: now })
@@ -178,11 +170,7 @@ function DashboardContent() {
       setModelBalance(0);
       setLastWithdrawal(now);
       alert("Saque solicitado com sucesso! A plataforma enviará o PIX em até 1 hora.");
-    } catch (err) {
-      alert("Erro ao solicitar saque. Tente novamente.");
-    } finally {
-      setIsWithdrawing(false);
-    }
+    } catch (err) { alert("Erro ao solicitar saque. Tente novamente."); } finally { setIsWithdrawing(false); }
   };
 
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
@@ -190,7 +178,6 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans">
       <div className="max-w-5xl mx-auto">
-        
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
             <button onClick={() => router.push('/admin/super')} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 hover:text-white bg-white/5 px-4 py-2 rounded-xl transition-all"><ArrowLeft size={14}/> Voltar Master</button>
@@ -212,12 +199,6 @@ function DashboardContent() {
           <button onClick={() => { navigator.clipboard.writeText(modelUrl); alert("Copiado!"); }} className="w-full sm:w-auto px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:bg-[#FFD700] hover:text-black transition-all">Copiar Link</button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-8">
-          <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center"><p className="text-[8px] font-black uppercase text-white/30 mb-1">Pendentes</p><h2 className="text-xl font-black text-amber-400">{history.filter(h => h.model_id === modelId && !h.delivered).length}</h2></div>
-          <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center"><p className="text-[8px] font-black uppercase text-white/30 mb-1">Clientes</p><h2 className="text-xl font-black text-white">{playersCount}</h2></div>
-          <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center"><p className="text-[8px] font-black uppercase text-white/30 mb-1">Giros</p><h2 className="text-xl font-black text-[#FFD700]">{history.filter(h => h.model_id === modelId).length}</h2></div>
-        </div>
-
         <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-2xl border border-white/5 overflow-x-auto">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "finance" ? "bg-emerald-500/20 text-emerald-400 shadow-lg shadow-emerald-500/10 border border-emerald-500/30" : "text-white/30"}`}><Wallet size={12} className="inline mr-1" /> Financeiro</button>
           <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "prizes" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Roleta</button>
@@ -225,52 +206,56 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Entregas</button>
         </div>
 
-        {/* ABA FINANCEIRA (NOVA) */}
         {activeTab === "finance" && (
           <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
-              <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (Seus 70%)</h2>
-              <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Valor livre de taxas, pronto para saque direto na sua conta.</p>
-              
-              <div className="text-5xl font-black text-white mb-8 tracking-tighter">
-                {modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Saldo Disponível */}
+              <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
+                <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (Seus 70%)</h2>
+                <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Pronto para saque na sua conta.</p>
+                
+                <div className="text-5xl font-black text-white mb-8 tracking-tighter">
+                  {modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl mb-6">
+                  <p className="text-[10px] text-emerald-400/80 font-bold uppercase text-center leading-relaxed tracking-widest">⚠️ 1 Saque por dia. PIX em até 1 hora.</p>
+                </div>
+
+                <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance <= 0} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">
+                  {isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}
+                </button>
               </div>
 
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl mb-6 max-w-sm">
-                <p className="text-[10px] text-emerald-400/80 font-bold uppercase text-center leading-relaxed tracking-widest">
-                  ⚠️ Regras de Saque:<br/> 1 Saque por dia. O PIX será enviado em até 1 hora após a solicitação.
-                </p>
+              {/* Acumulado (Últimos 6 Meses) */}
+              <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col justify-center">
+                <div className="absolute top-0 right-0 p-8 opacity-5"><Calendar size={120} className="text-[#FFD700]" /></div>
+                <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Lucro Acumulado</h2>
+                <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Total de comissões ganhas nos últimos 6 meses.</p>
+                <div className="text-5xl font-black text-white tracking-tighter">
+                  {accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
               </div>
-
-              <button 
-                onClick={handleWithdraw} 
-                disabled={isWithdrawing || modelBalance <= 0}
-                className="w-full max-w-sm bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl shadow-emerald-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
-              >
-                {isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}
-              </button>
             </div>
           </div>
         )}
 
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
-            {/* ... Todo o conteúdo da aba Roleta continuou igualzinho ... */}
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
               <div className="w-full sm:w-40 h-24 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative shrink-0">{(previewUrl || currentBg) ? <img src={(previewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}</div>
               <div className="flex-1 text-center sm:text-left"><p className="text-[10px] font-black uppercase text-white/40 mb-3 tracking-widest">Fundo (Máx 2MB | JPEG)</p><label className="bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">Trocar Foto <input type="file" accept="image/jpeg" onChange={handleFileChange} className="hidden" /></label>{selectedFile && <button onClick={handleSaveImage} className="bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase ml-2">Salvar</button>}</div>
             </div>
 
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-left shadow-xl">
-              <h2 className="text-xs font-black uppercase mb-6 flex items-center gap-2 text-[#FF1493] tracking-widest"><DollarSign size={14} /> Dados Financeiros</h2>
+              <h2 className="text-xs font-black uppercase mb-6 flex items-center gap-2 text-[#FF1493] tracking-widest"><DollarSign size={14} /> Dados do Sistema</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">Nome na Roleta</label><input type="text" value={modelName} onChange={e => setModelName(e.target.value)} className="bg-transparent text-lg font-black outline-none text-[#FFD700] w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">WhatsApp</label><input type="text" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="bg-transparent text-lg font-black outline-none text-white w-full" /></div>
                 <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">Custo Giro</label><input type="number" value={spinCost} onChange={e => setSpinCost(Number(e.target.value))} className="bg-transparent text-lg font-black outline-none text-white w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 10</label><input type="text" value={pix10} onChange={e => setPix10(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 20</label><input type="text" value={pix20} onChange={e => setPix20(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 50</label><input type="text" value={pix50} onChange={e => setPix50(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
+                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 10 (Sua Chave)</label><input type="text" value={pix10} onChange={e => setPix10(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
+                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 20 (Sua Chave)</label><input type="text" value={pix20} onChange={e => setPix20(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
+                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 50 (Sua Chave)</label><input type="text" value={pix50} onChange={e => setPix50(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
               </div>
               <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase shadow-xl hover:scale-[1.01] transition-all">SALVAR TUDO</button>
             </div>
