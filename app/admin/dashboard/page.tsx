@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar } from "lucide-react";
 import { PlayersManager } from "./players";
 
 function DashboardContent() {
@@ -27,12 +27,11 @@ function DashboardContent() {
   const [playersCount, setPlayersCount] = useState(0);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
 
-  // Finanças & Notificações
+  // Finanças
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [lastWithdrawal, setLastWithdrawal] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
-  const [notifications, setNotifications] = useState<any[]>([]);
 
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -75,11 +74,6 @@ function DashboardContent() {
         setModelBalance(dataModel[0].balance || 0);
         setLastWithdrawal(dataModel[0].last_withdrawal);
       }
-
-      // Busca notificações de saques pagos e não lidos
-      const resNotif = await fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' });
-      const dataNotif = await resNotif.json();
-      if (Array.isArray(dataNotif)) setNotifications(dataNotif);
 
       // Calcula o acumulado dos últimos 6 meses (70% dela)
       const sixMonthsAgo = new Date();
@@ -179,17 +173,6 @@ function DashboardContent() {
     } catch (err) { alert("Erro ao solicitar saque. Tente novamente."); } finally { setIsWithdrawing(false); }
   };
 
-  const markAsRead = async (notifId: string) => {
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${notifId}`, { 
-        method: "PATCH", 
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-        body: JSON.stringify({ is_read: true }) 
-      });
-      setNotifications(prev => prev.filter(n => n.id !== notifId));
-    } catch (err) { console.error(err); }
-  };
-
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
   return (
@@ -201,25 +184,8 @@ function DashboardContent() {
           ) : (
             <button onClick={handleLogout} className="flex items-center gap-2 text-[10px] font-black uppercase text-red-500/50 hover:text-red-500 bg-red-500/5 px-4 py-2 rounded-xl transition-all"><LogOut size={14}/> Sair</button>
           )}
-          <div className="text-right">
-            <h1 className="text-2xl font-black uppercase tracking-tighter text-[#FF1493]">Painel VIP</h1>
-            <p className="text-[#FFD700] text-[9px] font-bold uppercase tracking-[0.2em]">{modelName || "Modelo"}</p>
-          </div>
+          <div className="text-right"><h1 className="text-2xl font-black uppercase tracking-tighter text-[#FF1493]">Painel VIP</h1><p className="text-[#FFD700] text-[9px] font-bold uppercase tracking-[0.2em]">{modelName || "Modelo"}</p></div>
         </div>
-
-        {/* NOTIFICAÇÕES DE SAQUE PAGO */}
-        {notifications.map(notif => (
-          <div key={notif.id} className="mb-6 bg-emerald-500/10 border border-emerald-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-[0_0_25px_rgba(16,185,129,0.15)] animate-in zoom-in duration-300">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-emerald-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-lg"><CheckCircle2 size={24}/></div>
-              <div>
-                <p className="text-[12px] font-black uppercase text-emerald-500 tracking-widest flex items-center gap-2"><Bell size={14} className="animate-pulse"/> Pagamento Concluído!</p>
-                <p className="text-[10px] font-bold text-white/50 uppercase mt-1">Seu saque de <strong className="text-white">R$ {Number(notif.amount).toFixed(2)}</strong> já foi enviado via PIX.</p>
-              </div>
-            </div>
-            <button onClick={() => markAsRead(notif.id)} className="w-full sm:w-auto bg-white/5 hover:bg-emerald-500 hover:text-black text-white/50 px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all">OK, ENTENDI</button>
-          </div>
-        ))}
 
         {globalAnnouncement && (
           <div className="mb-6 bg-[#FF1493]/10 border border-[#FF1493]/20 p-4 rounded-2xl flex items-center gap-4">
@@ -243,6 +209,7 @@ function DashboardContent() {
         {activeTab === "finance" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Saldo Disponível */}
               <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (Seus 70%)</h2>
@@ -261,6 +228,7 @@ function DashboardContent() {
                 </button>
               </div>
 
+              {/* Acumulado (Últimos 6 Meses) */}
               <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col justify-center">
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Calendar size={120} className="text-[#FFD700]" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Lucro Acumulado</h2>
@@ -349,3 +317,4 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
+
