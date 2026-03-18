@@ -1,81 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { X, Trophy, Frown, Sparkles } from "lucide-react";
-import * as Dialog from "@radix-ui/react-dialog";
+import { X, Gift } from "lucide-react";
 
-type PrizeModalProps = {
+interface PrizeModalProps {
   open: boolean;
+  prize: any;
   onClose: () => void;
-  prize: any | null;
-};
+}
 
-export function PrizeModal({ open, onClose, prize }: PrizeModalProps) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  if (!mounted || !prize) return null;
-
-  const prizeName = prize.name || prize.shortLabel || "";
-  // À prova de falhas: se tiver a palavra "TENTE", ele ativa a carinha triste
-  const isRetry = prizeName.toUpperCase().includes("TENTE");
+export function PrizeModal({ open, prize, onClose }: PrizeModalProps) {
+  if (!open || !prize) return null;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(val) => !val && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl animate-in fade-in duration-400" />
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="bg-[#1a000d] border border-[#FF1493]/30 p-8 rounded-[3rem] max-w-sm w-full relative shadow-2xl shadow-[#FF1493]/20 flex flex-col items-center text-center animate-in zoom-in-95 duration-500">
+        <button
+          onClick={onClose}
+          className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors"
+        >
+          <X size={24} />
+        </button>
         
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[2.5rem] bg-[#0f0f0f] border border-white/10 p-10 text-center shadow-2xl animate-in zoom-in-95 duration-400 focus:outline-none">
-          
-          <Dialog.Close className="absolute right-6 top-6 text-white/30 hover:text-white transition-colors active:scale-90">
-            <X size={22} />
-          </Dialog.Close>
+        <div className="h-24 w-24 bg-[#FF1493]/10 rounded-full flex items-center justify-center mb-6 border border-[#FF1493]/30 shadow-lg mx-auto">
+          <Gift className="text-[#FF1493]" size={48} />
+        </div>
 
-          {isRetry ? (
-            <>
-              <div className="mx-auto mb-5 h-20 w-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]">
-                <Frown size={40} className="text-white/30" />
-              </div>
-              <Dialog.Title className="text-xl font-black uppercase text-white tracking-tighter italic mb-1">
-                Puxa Vida!
-              </Dialog.Title>
-              <Dialog.Description className="text-[11px] font-medium uppercase text-white/40 tracking-widest leading-relaxed mb-10 max-w-[280px] mx-auto">
-                Que pena amor, mas tente novamente e boa sorte na próxima.
-              </Dialog.Description>
-            </>
-          ) : (
-            <>
-              <div className="mx-auto mb-5 h-20 w-20 rounded-full bg-[#FFD700]/10 flex items-center justify-center border border-[#FFD700]/20 shadow-[0_0_30px_rgba(255,215,0,0.15)]">
-                <Trophy size={40} className="text-[#FFD700]" />
-              </div>
-              <Dialog.Title className="text-xl font-black uppercase text-white tracking-tighter italic mb-1">
-                Você Ganhou!
-              </Dialog.Title>
-              <Dialog.Description className="text-[11px] font-medium uppercase text-white/40 tracking-widest leading-relaxed mb-10 max-w-[280px] mx-auto">
-                Boa, anjo! Você tirou a sorte grande e garantiu este prêmio especial da roleta.
-              </Dialog.Description>
-            </>
-          )}
+        <h2 className="text-3xl font-black uppercase text-white mb-2 tracking-tighter">Você Ganhou!</h2>
+        <p className="text-[10px] uppercase font-black tracking-widest text-[#FFD700] mb-6">
+          Tire um print desta tela
+        </p>
 
-          <div className="relative mb-8 rounded-2xl bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] p-6 shadow-inner ring-1 ring-white/10 overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#FFD700]/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-            
-            <span className="text-[9px] font-black uppercase text-[#FFD700] tracking-[0.2em] mb-1 block flex items-center gap-1.5 justify-center opacity-80">
-              <Sparkles size={11} className="text-[#FFD700]" /> {isRetry ? "Tente mais uma vez" : "Prêmio Confirmado"}
-            </span>
-            <span className="text-xl font-black uppercase text-white tracking-tighter">
-              {prizeName}
-            </span>
-          </div>
+        <div className="bg-black/50 border border-white/10 w-full py-6 rounded-2xl mb-6">
+          <span className="text-2xl font-black uppercase text-[#FF1493]">
+            {prize.name}
+          </span>
+        </div>
 
-          <button 
-            onClick={onClose} 
-            className="w-full h-14 rounded-2xl bg-gradient-to-b from-[#FFD700] via-[#c99f24] to-[#7a5c00] text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-[#FFD700]/10 transition-all active:scale-95 hover:brightness-110"
-          >
-            Fechar
-          </button>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        <button
+          onClick={onClose}
+          className="w-full bg-gradient-to-r from-[#FF1493] to-[#9c0a58] text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl hover:scale-[1.02] active:scale-95 transition-all"
+        >
+          Resgatar
+        </button>
+      </div>
+    </div>
   );
 }
