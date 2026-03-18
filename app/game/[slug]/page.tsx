@@ -245,29 +245,17 @@ export default function GamePage() {
       setIsSpinning(false); 
       setSelectedPrize(wonPrize); 
       setModalOpen(true);
-
-      // Verificação à prova de falhas: se tiver "TENTE" no nome, não salva
-      const isRetry = wonPrize.name?.toUpperCase().includes("TENTE");
-
-      if (!isRetry) {
-        setAccumulatedPrizes((prev) => [...prev, wonPrize]);
-        
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory`, { 
-          method: "POST", 
-          headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-          body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: false, model_id: modelId }) 
-        }).catch(() => {});
-
-        confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 }, colors: ["#FF1493", "#FFD700", "#ffffff"] });
-      }
+      setAccumulatedPrizes((prev) => [...prev, wonPrize]);
+      
+      fetch(`${supabaseUrl}/rest/v1/SpinHistory`, { 
+        method: "POST", 
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+        body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: false, model_id: modelId }) 
+      }).catch(() => {});
 
       if (spinAudioRef.current) spinAudioRef.current.pause();
-      // Gemido apenas se for vitória!
-      if (winAudioRef.current && soundEnabled && !isRetry) { 
-        winAudioRef.current.currentTime = 0.6; 
-        winAudioRef.current.play().catch(() => {}); 
-      }
-    
+      if (winAudioRef.current && soundEnabled) { winAudioRef.current.currentTime = 0.6; winAudioRef.current.play().catch(() => {}); }
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 }, colors: ["#FF1493", "#FFD700", "#ffffff"] });
     }, SPIN_DURATION + 100);
   };
 
@@ -439,7 +427,7 @@ export default function GamePage() {
                   <div className="bg-[#0a0a0a] p-4 rounded-xl text-[9px] break-all font-mono text-[#FFD700] mb-4 border border-white/5 max-h-24 overflow-y-auto">{pixKeys[depositOption]}</div>
                   <button onClick={() => { navigator.clipboard.writeText(pixKeys[depositOption]); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase text-[#FF1493] hover:text-white transition-all">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Código Copiado!" : "Copiar Chave Pix"}</button>
                 </div>
-                <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent(`Oi amor! Sou o ${player?.name} e acabei de pagar R$ ${depositOption} via PIX. Pode liberar meu saldo?`)}`} className="w-full bg-[#FF1493] py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl shadow-[#FF1493]/20 transition-all active:scale-95">Já Paguei! Enviar Comprovante</button>
+                <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player?.name}. Acabei de pagar R$ ${depositOption} via PIX para jogar na roleta da modelo ${modelName}. Pode liberar meus créditos?`)}`} className="w-full bg-[#FF1493] py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl shadow-[#FF1493]/20 transition-all active:scale-95">Já Paguei! Enviar Comprovante</button>
                 <button onClick={() => setDepositOption(null)} className="mt-6 text-[10px] text-white/20 uppercase font-black tracking-widest">Voltar para pacotes</button>
               </div>
             )}
@@ -472,7 +460,7 @@ export default function GamePage() {
               </div>
             </div>
 
-            <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent(`Oi gata! Sou o ${player.name} e ganhei prêmios na sua roleta:\n${accumulatedPrizes.map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Prêmios no Whats</button>
+            <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e ganhei os seguintes prêmios:\n${accumulatedPrizes.map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Prêmios no Whats</button>
             <button onClick={() => { localStorage.removeItem(`player_${slug}`); window.location.reload(); }} className="text-white/20 hover:text-red-500 text-[9px] font-black uppercase transition-all tracking-widest active:scale-95">Sair da Conta</button>
           </div>
         </div>
