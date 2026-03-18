@@ -138,35 +138,43 @@ export default function GamePage() {
     setAuthError("");
     if (regPass !== regConfirm) return setAuthError("As senhas não coincidem.");
     setAuthLoading(true);
+    
     try {
       const zapClean = regZap.replace(/\D/g, "");
-      // Verificar duplicidade
-      const checkRes = await fetch(
-        `${supabaseUrl}/rest/v1/Players?or=(name.eq.${encodeURIComponent(regName)},whatsapp.eq.${zapClean})&model_id=eq.${modelId}&select=id`,
-        { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }
-      );
-      const checkData = await checkRes.json();
-
-      if (checkData && checkData.length > 0) {
-        setAuthLoading(false);
-        return setAuthError("Este apelido ou WhatsApp já estão em uso nesta roleta.");
-      }
-
+      
+      // Envio simplificado para evitar erro 400
       const res = await fetch(`${supabaseUrl}/rest/v1/Players`, {
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ name: regName, whatsapp: zapClean, email: regEmail.trim(), password: regPass, credits: 0, model_id: modelId }),
+        method: "POST",
+        headers: {
+          apikey: supabaseKey!,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          name: regName,
+          whatsapp: zapClean,
+          password: regPass,
+          model_id: modelId,
+          credits: 0
+        }),
       });
+
       const data = await res.json();
-      if (res.ok && data[0]) { 
+
+      if (res.ok && data && data[0]) { 
         setPlayer(data[0]); 
         localStorage.setItem(`player_${slug}`, data[0].name); 
         setShowAuthModal(false); 
       } else {
-        setAuthError("Erro ao criar conta. Tente outro apelido.");
+        // Se der erro 400 ou duplicidade
+        setAuthError("Erro: Apelido ou WhatsApp já em uso.");
       }
-    } catch(err) {
-      setAuthError("Falha na conexão. Tente novamente.");
-    } finally { setAuthLoading(false); }
+    } catch (err) {
+      setAuthError("Erro de conexão com o servidor.");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -377,7 +385,7 @@ export default function GamePage() {
                 <input type="tel" placeholder="SEU WHATSAPP" required value={regZap} onChange={(e) => setRegZap(formatPhone(e.target.value))} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
-                  <input type="email" placeholder="EMAIL DE CONTATO" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
+                  <input type="email" placeholder="EMAIL DE CONTATO" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 </div>
                 <div className="relative">
                   <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
