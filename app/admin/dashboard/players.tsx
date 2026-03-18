@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, User, MessageCircle, Key, Loader2, Mail, UserMinus, RotateCcw, Check, UserPlus, X, Wallet, DollarSign } from "lucide-react";
+import { Search, User, MessageCircle, Key, Loader2, UserMinus, RotateCcw, Check, UserPlus, X, Wallet, DollarSign, EyeOff, Eye } from "lucide-react";
+
+const formatPhone = (val: string) => {
+  let v = val.replace(/\D/g, "");
+  if (v.length > 11) v = v.slice(0, 11);
+  if (v.length > 2 && v.length <= 7) return `(${v.slice(0, 2)}) ${v.slice(2)}`;
+  if (v.length > 7) return `(${v.slice(0, 2)}) ${v.slice(2, 5)}-${v.slice(5)}`;
+  return v;
+};
 
 export function PlayersManager({ modelId }: { modelId: string | null }) {
   const [players, setPlayers] = useState<any[]>([]);
@@ -13,7 +21,8 @@ export function PlayersManager({ modelId }: { modelId: string | null }) {
   const [manualCredit, setManualCredit] = useState<{ [key: string]: string }>({});
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newPlayer, setNewPlayer] = useState({ name: "", whatsapp: "", email: "", password: "", credits: 0 });
+  const [showPass, setShowPass] = useState(false);
+  const [newPlayer, setNewPlayer] = useState({ name: "", whatsapp: "", password: "", credits: 0 });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -33,19 +42,26 @@ export function PlayersManager({ modelId }: { modelId: string | null }) {
   useEffect(() => { fetchPlayers(); }, [modelId]);
 
   const createPlayer = async () => {
-    if (!newPlayer.name || !newPlayer.password) return alert("Nome e Senha são obrigatórios!");
+    if (!newPlayer.name || !newPlayer.password || !newPlayer.whatsapp) return alert("Preencha todos os campos!");
     setLoading(true);
     try {
+      const zapClean = newPlayer.whatsapp.replace(/\D/g, "");
       const res = await fetch(`${supabaseUrl}/rest/v1/Players`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ ...newPlayer, model_id: modelId }),
+        body: JSON.stringify({ 
+          name: newPlayer.name, 
+          whatsapp: zapClean, 
+          password: newPlayer.password, 
+          credits: newPlayer.credits, 
+          model_id: modelId 
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         setPlayers([...players, data[0]]);
         setIsModalOpen(false);
-        setNewPlayer({ name: "", whatsapp: "", email: "", password: "", credits: 0 });
-      } else { alert("Erro ao criar jogador. Verifique se o nome já existe."); }
+        setNewPlayer({ name: "", whatsapp: "", password: "", credits: 0 });
+      } else { alert("Erro ao criar jogador. Verifique se o Apelido já existe nesta roleta."); }
     } finally { setLoading(false); }
   };
 
@@ -84,7 +100,6 @@ export function PlayersManager({ modelId }: { modelId: string | null }) {
           body: JSON.stringify({ balance: currentBalance + modelShare }),
         });
 
-        // Grava no Livro Caixa (Transactions)
         await fetch(`${supabaseUrl}/rest/v1/Transactions`, {
           method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model_id: modelId, player_name: playerName, real_amount: realAmount, model_cut: modelShare, platform_cut: platformShare }),
@@ -112,7 +127,7 @@ export function PlayersManager({ modelId }: { modelId: string | null }) {
 
   const filtered = players.filter((p) => {
     const term = searchTerm.toLowerCase();
-    return p.email?.toLowerCase().includes(term) || p.whatsapp?.includes(term) || p.name?.toLowerCase().includes(term);
+    return p.whatsapp?.includes(term) || p.name?.toLowerCase().includes(term);
   });
 
   return (
@@ -131,7 +146,7 @@ export function PlayersManager({ modelId }: { modelId: string | null }) {
         <div className="flex flex-col items-center justify-center py-20 text-white/20 uppercase font-black text-[10px] tracking-widest"><Loader2 className="animate-spin text-[#FF1493] mb-4" size={32} />Sincronizando...</div>
       ) : (
         <div className="grid gap-4">
-          {filtered.length === 0 && !loading && <div className="text-center py-10 text-white/30 text-xs font-black uppercase">Nenhum cliente cadastrado nesta roleta ainda.</div>}
+          {filtered.length === 0 && !loading && <div className="text-center py-10 text-white/30 text-xs font-black uppercase">Nenhum cliente cadastrado nesta roleta.</div>}
           {filtered.map((p, index) => (
             <div key={p.name || index} className="bg-[#121212] border border-white/5 p-6 rounded-[2.5rem] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 shadow-xl hover:border-white/10 transition-all">
               <div className="flex items-start justify-between w-full lg:w-auto lg:flex-1">
@@ -182,9 +197,14 @@ export function PlayersManager({ modelId }: { modelId: string | null }) {
             <button onClick={() => setIsModalOpen(false)} className="absolute top-6 right-6 text-white/20 hover:text-white"><X size={24} /></button>
             <h2 className="text-xl font-black uppercase tracking-tighter mb-6 text-[#FF1493]">Cadastrar Jogador VIP</h2>
             <div className="space-y-4">
-              <input placeholder="APELIDO (Único)" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-[#FF1493]" value={newPlayer.name} onChange={(e) => setNewPlayer({ ...newPlayer, name: e.target.value })}/>
-              <input placeholder="WHATSAPP" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-[#FF1493]" value={newPlayer.whatsapp} onChange={(e) => setNewPlayer({ ...newPlayer, whatsapp: e.target.value })}/>
-              <input placeholder="SENHA" type="text" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-[#FF1493]" value={newPlayer.password} onChange={(e) => setNewPlayer({ ...newPlayer, password: e.target.value })}/>
+              <input placeholder="APELIDO (Único)" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-[#FF1493] text-white" value={newPlayer.name} onChange={(e) => setNewPlayer({ ...newPlayer, name: e.target.value })}/>
+              <input placeholder="WHATSAPP" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-[#FF1493] text-white" value={newPlayer.whatsapp} onChange={(e) => setNewPlayer({ ...newPlayer, whatsapp: formatPhone(e.target.value) })}/>
+              
+              <div className="relative">
+                <input placeholder="SENHA" type={showPass ? "text" : "password"} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 pr-12 text-sm outline-none focus:border-[#FF1493] text-white" value={newPlayer.password} onChange={(e) => setNewPlayer({ ...newPlayer, password: e.target.value })}/>
+                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-[#FF1493]">{showPass ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+              </div>
+
               <button onClick={createPlayer} className="w-full bg-[#FF1493] hover:opacity-90 text-white font-black uppercase py-4 rounded-xl mt-4 shadow-[0_0_15px_rgba(255,20,147,0.4)] transition-all">Salvar Jogador</button>
             </div>
           </div>
