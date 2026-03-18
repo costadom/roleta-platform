@@ -98,11 +98,11 @@ export function RouletteWheel({
   const count = segments.length;
   const sliceAngle = 360 / count;
 
-  const size = 340;
+  const size = 320; // Reduzido um pouco para encaixar melhor no mobile
   const center = size / 2;
-  const outerR = 146;
-  const innerR = 76;
-  const textR = 111;
+  const outerR = 136;
+  const innerR = 70;
+  const textR = 104; // Ajuste no raio do texto para acompanhar o novo tamanho
 
   const colors = [
     { base: "#5a0808", glow: "#ff4040" },
@@ -152,7 +152,7 @@ export function RouletteWheel({
         type="button"
         onClick={onClick}
         disabled={spinning}
-        className="relative mx-auto flex h-[350px] w-[350px] items-center justify-center rounded-full cursor-pointer disabled:cursor-not-allowed"
+        className="relative mx-auto flex h-[330px] w-[330px] items-center justify-center rounded-full cursor-pointer disabled:cursor-not-allowed"
         aria-label="Girar roleta"
       >
         <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,210,110,0.18)_0%,rgba(255,120,40,0.10)_28%,rgba(255,40,40,0.08)_48%,transparent_74%)] blur-2xl" />
@@ -163,7 +163,7 @@ export function RouletteWheel({
         </div>
 
         <div
-          className="relative z-10 h-[340px] w-[340px]"
+          className="relative z-10 h-[320px] w-[320px]"
           style={{
             transform: `rotate(${rotation}deg)`,
             transition: spinning
@@ -172,7 +172,7 @@ export function RouletteWheel({
           }}
         >
           <div
-            className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[315px] w-[315px] rounded-full"
+            className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[295px] w-[295px] rounded-full"
             style={{
               background:
                 "conic-gradient(from 0deg, rgba(255,255,255,0) 0deg, rgba(255,245,190,0.00) 12deg, rgba(255,240,170,0.08) 20deg, rgba(255,215,110,0.16) 28deg, rgba(255,255,255,0.03) 38deg, rgba(255,255,255,0) 62deg, rgba(255,255,255,0) 360deg)",
@@ -184,7 +184,7 @@ export function RouletteWheel({
           />
 
           <div
-            className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[88px] w-[88px] rounded-full"
+            className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[80px] w-[80px] rounded-full"
             style={{
               background:
                 "radial-gradient(circle, rgba(255,248,220,0.60) 0%, rgba(255,220,120,0.20) 35%, rgba(255,190,90,0.10) 55%, transparent 75%)",
@@ -271,15 +271,15 @@ export function RouletteWheel({
             <circle
               cx={center}
               cy={center}
-              r={158}
+              r={148}
               fill="url(#outerGold)"
               filter="url(#goldGlow)"
             />
-            <circle cx={center} cy={center} r={152} fill="#2a0908" />
+            <circle cx={center} cy={center} r={142} fill="#2a0908" />
             <circle
               cx={center}
               cy={center}
-              r={149}
+              r={139}
               fill="none"
               stroke="url(#goldStroke)"
               strokeWidth="3"
@@ -288,7 +288,7 @@ export function RouletteWheel({
             <circle
               cx={center}
               cy={center}
-              r={146}
+              r={136}
               fill="none"
               stroke="#ffe39c"
               strokeWidth="1.6"
@@ -373,15 +373,15 @@ export function RouletteWheel({
                       textAnchor="middle"
                       dominantBaseline="middle"
                       fill="#fff6dc"
-                      fontSize="12"
+                      fontSize="9"
                       fontWeight="800"
-                      letterSpacing="0.6"
+                      letterSpacing="0.4"
                       stroke="#3b0a0a"
-                      strokeWidth="1.2"
+                      strokeWidth="1"
                       paintOrder="stroke fill"
                       transform={`rotate(${rotateText} ${textPoint.x} ${textPoint.y})`}
                     >
-                      {String(segment.label).slice(0, 8).toUpperCase()}
+                      {String(segment.label).slice(0, 10).toUpperCase()}
                     </text>
                   </g>
                 );
@@ -420,7 +420,7 @@ export function RouletteWheel({
             <circle
               cx={center}
               cy={center}
-              r="14"
+              r="12"
               fill="url(#centerOrb)"
               stroke="#fff1b8"
               strokeWidth="1.8"
@@ -430,7 +430,7 @@ export function RouletteWheel({
             <circle
               cx={center}
               cy={center}
-              r="5.5"
+              r="4.5"
               fill="#fff7d6"
               opacity="0.8"
             />
