@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, Mail, KeyRound } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, KeyRound } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { weightedRandomIndex } from "@/src/lib/weightedRandom";
 import { PrizeModal } from "@/components/PrizeModal";
 
 const SPIN_DURATION = 4000;
+const CENTRAL_WHATSAPP = "5515996587248"; // Número Oficial da Savanah Labz
 
 const formatPhone = (val: string) => {
   let v = val.replace(/\D/g, "");
@@ -31,7 +32,6 @@ export default function GamePage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [modelId, setModelId] = useState<string | null>(null);
   const [modelName, setModelName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
   const [spinCost, setSpinCost] = useState(2);
   const [pixKeys, setPixKeys] = useState<Record<number, string>>({ 10: "", 20: "", 50: "" });
 
@@ -47,7 +47,6 @@ export default function GamePage() {
 
   const [regName, setRegName] = useState("");
   const [regZap, setRegZap] = useState("");
-  const [regEmail, setRegEmail] = useState("");
   const [regPass, setRegPass] = useState("");
   const [regConfirm, setRegConfirm] = useState("");
   const [logUser, setLogUser] = useState("");
@@ -90,7 +89,6 @@ export default function GamePage() {
         if (dataConfig[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
-          setWhatsapp(dataConfig[0].whatsapp || "");
           setSpinCost(dataConfig[0].spin_cost || 2);
           setPixKeys({ 10: dataConfig[0].pix_10 || "", 20: dataConfig[0].pix_20 || "", 50: dataConfig[0].pix_50 || "" });
         }
@@ -165,7 +163,7 @@ export default function GamePage() {
         localStorage.setItem(`player_${slug}`, data[0].name); 
         setShowAuthModal(false); 
       } else {
-        setAuthError("Erro: Apelido ou WhatsApp já em uso.");
+        setAuthError("Erro: Apelido já em uso. Escolha outro.");
       }
     } catch (err) {
       setAuthError("Erro de conexão com o servidor.");
@@ -193,8 +191,7 @@ export default function GamePage() {
   };
 
   const handleForgotPassword = () => {
-    if (!whatsapp) return;
-    window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent("Oi amor! Esqueci minha senha na sua roleta sexy, pode me ajudar?")}`;
+    window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Esqueci minha senha na roleta da modelo ${modelName}, pode me ajudar?`)}`;
   };
 
   const deductCredits = async () => {
@@ -255,7 +252,7 @@ export default function GamePage() {
 
       if (spinAudioRef.current) spinAudioRef.current.pause();
       if (winAudioRef.current && soundEnabled) { winAudioRef.current.currentTime = 0.6; winAudioRef.current.play().catch(() => {}); }
-      confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 }, colors: ["#FF1493", "#FFD700", "#ffffff"] });
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 }, colors: ["#FFD700", "#FF1493", "#ffffff"] });
     }, SPIN_DURATION + 100);
   };
 
@@ -379,11 +376,7 @@ export default function GamePage() {
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
                   <input type="text" placeholder="APELIDO (SIGILO TOTAL)" required value={regName} onChange={(e) => setRegName(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 </div>
-                <input type="tel" placeholder="SEU WHATSAPP" required value={regZap} onChange={(e) => setRegZap(formatPhone(e.target.value))} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
-                  <input type="email" placeholder="EMAIL DE CONTATO" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
-                </div>
+                <input type="tel" placeholder="WHATSAPP (XX) XXXXX-XXXX" required value={regZap} onChange={(e) => setRegZap(formatPhone(e.target.value))} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 <div className="relative">
                   <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
                   <input type={showPass ? "text" : "password"} placeholder="CRIAR SENHA" required value={regPass} onChange={(e) => setRegPass(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
@@ -427,7 +420,7 @@ export default function GamePage() {
                   <div className="bg-[#0a0a0a] p-4 rounded-xl text-[9px] break-all font-mono text-[#FFD700] mb-4 border border-white/5 max-h-24 overflow-y-auto">{pixKeys[depositOption]}</div>
                   <button onClick={() => { navigator.clipboard.writeText(pixKeys[depositOption]); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase text-[#FF1493] hover:text-white transition-all">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Código Copiado!" : "Copiar Chave Pix"}</button>
                 </div>
-                <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player?.name}. Acabei de pagar R$ ${depositOption} via PIX para jogar na roleta da modelo ${modelName}. Pode liberar meus créditos?`)}`} className="w-full bg-[#FF1493] py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl shadow-[#FF1493]/20 transition-all active:scale-95">Já Paguei! Enviar Comprovante</button>
+                <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player?.name}. Acabei de pagar R$ ${depositOption} via PIX para jogar na roleta da modelo ${modelName}. Pode liberar meus créditos?`)}`} className="w-full bg-[#FF1493] py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl shadow-[#FF1493]/20 transition-all active:scale-95">Já Paguei! Enviar Comprovante</button>
                 <button onClick={() => setDepositOption(null)} className="mt-6 text-[10px] text-white/20 uppercase font-black tracking-widest">Voltar para pacotes</button>
               </div>
             )}
@@ -460,7 +453,7 @@ export default function GamePage() {
               </div>
             </div>
 
-            <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${whatsapp}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e ganhei os seguintes prêmios:\n${accumulatedPrizes.map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Prêmios no Whats</button>
+            <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e ganhei os seguintes prêmios:\n${accumulatedPrizes.map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Prêmios no Whats</button>
             <button onClick={() => { localStorage.removeItem(`player_${slug}`); window.location.reload(); }} className="text-white/20 hover:text-red-500 text-[9px] font-black uppercase transition-all tracking-widest active:scale-95">Sair da Conta</button>
           </div>
         </div>
