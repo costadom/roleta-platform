@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, Mail, KeyRound } from "lucide-react";
 import confetti from "canvas-confetti";
-import { MobileShell } from "@/components/MobileShell";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { weightedRandomIndex } from "@/src/lib/weightedRandom";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -139,35 +138,40 @@ export default function GamePage() {
     setAuthError("");
     if (regPass !== regConfirm) return setAuthError("As senhas não coincidem.");
     setAuthLoading(true);
+    
     try {
       const zapClean = regZap.replace(/\D/g, "");
-      // Verificar duplicidade
-      const checkRes = await fetch(
-        `${supabaseUrl}/rest/v1/Players?or=(name.eq.${encodeURIComponent(regName)},whatsapp.eq.${zapClean})&model_id=eq.${modelId}&select=id`,
-        { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }
-      );
-      const checkData = await checkRes.json();
-
-      if (checkData && checkData.length > 0) {
-        setAuthLoading(false);
-        return setAuthError("Este apelido ou WhatsApp já estão em uso nesta roleta.");
-      }
-
       const res = await fetch(`${supabaseUrl}/rest/v1/Players`, {
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ name: regName, whatsapp: zapClean, email: regEmail.trim(), password: regPass, credits: 0, model_id: modelId }),
+        method: "POST",
+        headers: {
+          apikey: supabaseKey!,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          name: regName,
+          whatsapp: zapClean,
+          password: regPass,
+          model_id: modelId,
+          credits: 0
+        }),
       });
+
       const data = await res.json();
-      if (res.ok && data[0]) { 
+
+      if (res.ok && data && data[0]) { 
         setPlayer(data[0]); 
         localStorage.setItem(`player_${slug}`, data[0].name); 
         setShowAuthModal(false); 
       } else {
-        setAuthError("Erro ao criar conta. Tente outro apelido.");
+        setAuthError("Erro: Apelido ou WhatsApp já em uso.");
       }
-    } catch(err) {
-      setAuthError("Falha na conexão. Tente novamente.");
-    } finally { setAuthLoading(false); }
+    } catch (err) {
+      setAuthError("Erro de conexão com o servidor.");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -242,11 +246,10 @@ export default function GamePage() {
       setSelectedPrize(wonPrize); 
       setModalOpen(true);
 
-      // Verificação de segurança para não processar nada do prêmio
-      const isRetry = wonPrize.name?.trim().toUpperCase() === "TENTE OUTRA VEZ";
+      // Verificação à prova de falhas: se tiver "TENTE" no nome, não salva
+      const isRetry = wonPrize.name?.toUpperCase().includes("TENTE");
 
       if (!isRetry) {
-        // LÓGICA DE VITÓRIA (Gravar no banco e adicionar ao perfil local)
         setAccumulatedPrizes((prev) => [...prev, wonPrize]);
         
         fetch(`${supabaseUrl}/rest/v1/SpinHistory`, { 
@@ -256,14 +259,14 @@ export default function GamePage() {
         }).catch(() => {});
 
         confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 }, colors: ["#FF1493", "#FFD700", "#ffffff"] });
-      } else {
-        // LÓGICA DE DERROTA (Apenas resetar o estado sem fazer nada)
-        // Não jogamos confetes.
-        // O modal PrizeModal cuidará de exibir a carinha triste e a mensagem.
       }
 
       if (spinAudioRef.current) spinAudioRef.current.pause();
-      if (winAudioRef.current && soundEnabled) { winAudioRef.current.currentTime = 0.6; winAudioRef.current.play().catch(() => {}); }
+      // Gemido apenas se for vitória!
+      if (winAudioRef.current && soundEnabled && !isRetry) { 
+        winAudioRef.current.currentTime = 0.6; 
+        winAudioRef.current.play().catch(() => {}); 
+      }
     
     }, SPIN_DURATION + 100);
   };
@@ -337,7 +340,7 @@ export default function GamePage() {
               </div>
             </div>
             <div className="mt-4 flex gap-3 w-full">
-              <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="flex-1 py-4 rounded-xl border border-[#FFD700]/30 bg-black/60 text-[#FFD700] text-[10px] font-black uppercase shadow-lg transition-all active:scale-95">Depositar</button>
+              <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="flex-1 py-4 rounded-xl border border-[#FFD700]/30 bg-black/70 text-[#FFD700] text-[10px] font-black uppercase shadow-lg transition-all active:scale-95">Depositar</button>
               <button onClick={() => { setAutoSpin(!autoSpin); autoSpinRef.current = !autoSpin; }} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${ autoSpin ? "bg-[#FF1493] text-white shadow-lg shadow-[#FF1493]/30" : "bg-black/70 border border-white/20 text-white" }`}>{autoSpin ? "Parar Auto" : "Auto Giro"}</button>
             </div>
           </div>
@@ -391,18 +394,12 @@ export default function GamePage() {
                 <input type="tel" placeholder="SEU WHATSAPP" required value={regZap} onChange={(e) => setRegZap(formatPhone(e.target.value))} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
-                  <input type="email" placeholder="EMAIL DE CONTATO" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
+                  <input type="email" placeholder="EMAIL DE CONTATO" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 </div>
                 <div className="relative">
                   <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={16}/>
                   <input type={showPass ? "text" : "password"} placeholder="CRIAR SENHA" required value={regPass} onChange={(e) => setRegPass(e.target.value)} className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
-                  <button type="button" onClick={() => {
-                    const passRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/;
-                    if(!passRegex.test(regPass)) {
-                        return setAuthError("A senha deve conter no mínimo 8 caracteres, incluindo uma letra, um número e um caractere especial.");
-                    }
-                    setShowPass(!showPass)
-                    }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-[#FF1493]">{showPass ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-[#FF1493]">{showPass ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
                 </div>
                 <input type="password" placeholder="CONFIRMAR SENHA" required value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" />
                 <button type="submit" disabled={authLoading} className="w-full bg-[#FF1493] text-white font-black uppercase py-5 rounded-2xl shadow-xl shadow-[#FF1493]/20 transition-all active:scale-95 mt-2">{authLoading ? "Criando..." : "Cadastrar e Jogar"}</button>
@@ -424,9 +421,9 @@ export default function GamePage() {
             {!depositOption ? (
               <div className="space-y-4">
                 {[
-                  { cr: 15, rs: 10, opt: 10 },
-                  { cr: 35, rs: 20, opt: 20, bonus: "+5 BÔNUS" },
-                  { cr: 100, rs: 50, opt: 50, bonus: "+20 BÔNUS" }
+                  { cr: 15, rs: 10, opt: 10, bonus: "+5 BÔNUS" },
+                  { cr: 25, rs: 20, opt: 20, bonus: "+5 BÔNUS" },
+                  { cr: 60, rs: 50, opt: 50, bonus: "+10 BÔNUS" }
                 ].map((p) => (
                   <button key={p.opt} onClick={() => setDepositOption(p.opt as any)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-[#FFD700]/30 transition-all active:scale-95 relative overflow-hidden">
                     {p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}
