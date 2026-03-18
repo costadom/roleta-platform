@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet } from "lucide-react";
 import { PlayersManager } from "./players";
 
 function DashboardContent() {
@@ -20,12 +20,17 @@ function DashboardContent() {
   const [metaValue, setMetaValue] = useState(0);
   const [metaPrize, setMetaPrize] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"prizes" | "players" | "history" | "ranking">("prizes");
+  const [activeTab, setActiveTab] = useState<"prizes" | "players" | "history" | "ranking" | "finance">("finance");
   const [prizes, setPrizes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [allModels, setAllModels] = useState<any[]>([]);
   const [playersCount, setPlayersCount] = useState(0);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
+
+  // Finanças
+  const [modelBalance, setModelBalance] = useState<number>(0);
+  const [lastWithdrawal, setLastWithdrawal] = useState<string | null>(null);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -63,6 +68,14 @@ function DashboardContent() {
         if (!isRankVisible && activeTab === "ranking") setActiveTab("prizes");
         setMetaValue(dataGlob[0].goal_amount);
         setMetaPrize(dataGlob[0].goal_reward);
+      }
+
+      // Carregar Saldo da Modelo
+      const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal`, { headers, cache: 'no-store' });
+      const dataModel = await resModel.json();
+      if (dataModel && dataModel[0]) {
+        setModelBalance(dataModel[0].balance || 0);
+        setLastWithdrawal(dataModel[0].last_withdrawal);
       }
       
       const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
@@ -131,6 +144,47 @@ function DashboardContent() {
     setEditingPrize(null); loadData();
   };
 
+  // Lógica de Saque
+  const handleWithdraw = async () => {
+    if (modelBalance <= 0) return alert("Você não possui saldo disponível para saque no momento.");
+    
+    // Verifica se já sacou hoje
+    if (lastWithdrawal) {
+      const lastDate = new Date(lastWithdrawal).toDateString();
+      const today = new Date().toDateString();
+      if (lastDate === today) return alert("Limite atingido! Você só pode solicitar 1 saque por dia.");
+    }
+
+    const confirm = window.confirm(`Deseja solicitar o saque de ${modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}? O valor será enviado via PIX em até 1 hora.`);
+    if (!confirm) return;
+
+    setIsWithdrawing(true);
+    try {
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+      const now = new Date().toISOString();
+
+      // 1. Cria o pedido na tabela Withdrawals para o Master ver
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals`, {
+        method: "POST", headers,
+        body: JSON.stringify({ model_id: modelId, amount: modelBalance })
+      });
+
+      // 2. Zera o saldo e atualiza a data do último saque
+      await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, {
+        method: "PATCH", headers,
+        body: JSON.stringify({ balance: 0, last_withdrawal: now })
+      });
+
+      setModelBalance(0);
+      setLastWithdrawal(now);
+      alert("Saque solicitado com sucesso! A plataforma enviará o PIX em até 1 hora.");
+    } catch (err) {
+      alert("Erro ao solicitar saque. Tente novamente.");
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
   return (
@@ -153,19 +207,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {showRankTab && (
-          <div className="mb-8 bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 p-6 rounded-3xl relative overflow-hidden group shadow-2xl animate-in zoom-in duration-500">
-             <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy size={80} className="text-amber-500"/></div>
-             <div className="relative z-10">
-               <div className="flex items-center gap-2 mb-4"><Trophy size={16} className="text-amber-500"/><h3 className="text-xs font-black uppercase text-amber-500 tracking-widest">Desafio de Faturamento</h3></div>
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 <div><p className="text-[9px] text-white/30 uppercase font-black mb-1">Meta Semanal</p><p className="text-xl font-black text-white">R$ {metaValue.toLocaleString('pt-BR')}</p></div>
-                 <div><p className="text-[9px] text-white/30 uppercase font-black mb-1">Prêmio</p><p className="text-xl font-black text-amber-500">{metaPrize || "Consulte o Master"}</p></div>
-               </div>
-             </div>
-          </div>
-        )}
-
         <div className="mb-8 bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
           <div className="flex items-center gap-4"><div className="p-3 bg-[#FFD700] text-black rounded-2xl shadow-lg"><LinkIcon size={20}/></div><div><p className="text-[9px] font-black uppercase text-white/40 tracking-widest">Link de Divulgação</p><p className="text-sm font-bold text-white lowercase tracking-tight">{isMounted ? modelUrl : "..."}</p></div></div>
           <button onClick={() => { navigator.clipboard.writeText(modelUrl); alert("Copiado!"); }} className="w-full sm:w-auto px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:bg-[#FFD700] hover:text-black transition-all">Copiar Link</button>
@@ -178,17 +219,44 @@ function DashboardContent() {
         </div>
 
         <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-2xl border border-white/5 overflow-x-auto">
+          <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "finance" ? "bg-emerald-500/20 text-emerald-400 shadow-lg shadow-emerald-500/10 border border-emerald-500/30" : "text-white/30"}`}><Wallet size={12} className="inline mr-1" /> Financeiro</button>
           <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "prizes" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Roleta</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "players" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Jogadores</button>
-          <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Saques</button>
-          
-          {showRankTab && (
-            <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-amber-500/20 text-amber-500 shadow-lg shadow-amber-500/10" : "text-white/30"}`}>Ranking</button>
-          )}
+          <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Entregas</button>
         </div>
+
+        {/* ABA FINANCEIRA (NOVA) */}
+        {activeTab === "finance" && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
+              <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (Seus 70%)</h2>
+              <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Valor livre de taxas, pronto para saque direto na sua conta.</p>
+              
+              <div className="text-5xl font-black text-white mb-8 tracking-tighter">
+                {modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </div>
+
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl mb-6 max-w-sm">
+                <p className="text-[10px] text-emerald-400/80 font-bold uppercase text-center leading-relaxed tracking-widest">
+                  ⚠️ Regras de Saque:<br/> 1 Saque por dia. O PIX será enviado em até 1 hora após a solicitação.
+                </p>
+              </div>
+
+              <button 
+                onClick={handleWithdraw} 
+                disabled={isWithdrawing || modelBalance <= 0}
+                className="w-full max-w-sm bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl shadow-emerald-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
+            {/* ... Todo o conteúdo da aba Roleta continuou igualzinho ... */}
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
               <div className="w-full sm:w-40 h-24 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative shrink-0">{(previewUrl || currentBg) ? <img src={(previewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}</div>
               <div className="flex-1 text-center sm:text-left"><p className="text-[10px] font-black uppercase text-white/40 mb-3 tracking-widest">Fundo (Máx 2MB | JPEG)</p><label className="bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">Trocar Foto <input type="file" accept="image/jpeg" onChange={handleFileChange} className="hidden" /></label>{selectedFile && <button onClick={handleSaveImage} className="bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase ml-2">Salvar</button>}</div>
@@ -233,32 +301,6 @@ function DashboardContent() {
                   await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=eq.${h.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ delivered: true }) });
                   loadData();
                 }} className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-all ${h.delivered ? 'bg-emerald-500 text-black' : 'bg-white/5 text-white/20'}`}><Check size={20}/></button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {showRankTab && activeTab === "ranking" && (
-          <div className="space-y-4 animate-in fade-in duration-500">
-            <div className="text-center py-6">
-              <h2 className="text-xl font-black uppercase text-amber-500 italic tracking-tighter">Ranking das Estrelas</h2>
-              <p className="text-[10px] text-white/30 uppercase font-black tracking-widest mt-1">Quem mais vendeu esta semana</p>
-            </div>
-            {modelRanking.map((m, i) => (
-              <div key={m.id} className={`p-6 rounded-[2rem] border flex items-center justify-between transition-all ${m.id === modelId ? 'bg-[#FF1493]/10 border-[#FF1493]/30 scale-[1.02]' : 'bg-white/5 border-white/5'}`}>
-                <div className="flex items-center gap-5">
-                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center font-black ${i === 0 ? 'bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-white/5 text-white/30'}`}>
-                    {i === 0 ? <Crown size={20}/> : `#${i+1}`}
-                  </div>
-                  <div>
-                    <h3 className={`font-black uppercase text-sm ${m.id === modelId ? 'text-[#FF1493]' : 'text-white'}`}>{m.slug} {m.id === modelId && "(Você)"}</h3>
-                    <p className="text-[9px] font-black text-white/20 uppercase">Parceira Savanah Labz</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[8px] font-black text-white/30 uppercase mb-1">Giros Totais</p>
-                  <p className="text-xl font-black text-white">{m.score}</p>
-                </div>
               </div>
             ))}
           </div>
