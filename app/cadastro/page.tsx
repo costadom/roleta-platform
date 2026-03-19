@@ -31,7 +31,7 @@ export default function CadastroModelo() {
   const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
-    nickname: "", fullName: "", whatsapp: "", email: "", cpf: "", birthDate: "", pix1: "", pix2: ""
+    nickname: "", fullName: "", whatsapp: "", cpf: "", birthDate: "", pix1: "", pix2: ""
   });
   
   const [prizes, setPrizes] = useState(["", "", "", "", "", ""]);
@@ -44,7 +44,10 @@ export default function CadastroModelo() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) return alert("A imagem deve ter no máximo 3MB!");
+    if (file.size > 2 * 1024 * 1024) {
+      alert("⚠️ A imagem é muito pesada! Escolha uma foto de até 2MB para não travar o seu cadastro.");
+      return;
+    }
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
   };
@@ -64,21 +67,21 @@ export default function CadastroModelo() {
     try {
       const slug = formData.nickname.toLowerCase().replace(/\s/g, '');
 
-      // 1. Upload da Foto
       const fileName = `bg_candidata_${slug}_${Date.now()}.jpeg`;
-      await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
+      const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "image/jpeg" }, body: selectedFile 
       });
+      
+      if (!uploadRes.ok) throw new Error("Erro ao subir a imagem");
+      
       const publicBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
 
-      // 2. Envia para a tabela de Candidaturas (Applications)
       const res = await fetch(`${supabaseUrl}/rest/v1/Applications`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ 
           nickname: slug, 
           full_name: formData.fullName,
           whatsapp: formData.whatsapp.replace(/\D/g, ""),
-          email: formData.email,
           cpf: formData.cpf.replace(/\D/g, ""),
           birth_date: formData.birthDate,
           pix_1: formData.pix1,
@@ -92,7 +95,7 @@ export default function CadastroModelo() {
       setSuccess(true);
 
     } catch (err) {
-      alert("Erro ao enviar seus dados. Tente novamente.");
+      alert("Erro ao enviar seus dados. Verifique sua internet e tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -106,7 +109,7 @@ export default function CadastroModelo() {
         </div>
         <h1 className="text-2xl font-black uppercase italic text-[#FF1493] mb-4 tracking-tighter">Candidatura Enviada!</h1>
         <p className="text-[12px] text-white/80 uppercase font-black tracking-widest leading-relaxed mb-6">
-          Boa sorte! Nossos diretores irão analisar o seu perfil. <br/><br/>Se você for aprovada, a nossa equipe entrará em contato em breve com o seu link e dados de acesso.
+          Boa sorte! Nossa diretoria irá analisar o seu perfil. <br/><br/>Se você for aprovada, a nossa equipe entrará em contato em breve com o seu link de vendas e dados de acesso.
         </p>
         <button onClick={() => window.location.reload()} className="w-full bg-white/5 border border-white/10 text-white/50 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 transition-all">Voltar ao Início</button>
       </div>
@@ -132,7 +135,6 @@ export default function CadastroModelo() {
                 <input required type="text" placeholder="NOME ARTÍSTICO (Sem espaços)" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.replace(/\s/g, '')})} />
                 <input required type="text" placeholder="NOME COMPLETO" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} />
                 <input required type="tel" placeholder="WHATSAPP" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: formatPhone(e.target.value)})} />
-                <input required type="email" placeholder="E-MAIL PESSOAL" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                 <input required type="text" placeholder="CPF" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.cpf} onChange={e => setFormData({...formData, cpf: formatCPF(e.target.value)})} />
                 <input required type="text" placeholder="DATA DE NASCIMENTO" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: formatDate(e.target.value)})} />
               </div>
@@ -154,12 +156,12 @@ export default function CadastroModelo() {
                   <input key={index} type="text" required placeholder={`PRÊMIO ${index + 1}`} className="w-full bg-black border border-[#FFD700]/30 p-4 rounded-xl text-xs outline-none focus:border-[#FFD700] text-white" value={p} onChange={e => handlePrizeChange(index, e.target.value)} />
                 ))}
               </div>
-              <h2 className="text-xs font-black uppercase text-white/50 mb-4 tracking-widest">Foto de Fundo da Roleta</h2>
+              <h2 className="text-xs font-black uppercase text-white/50 mb-4 tracking-widest">Foto de Fundo da Roleta (Máx 2MB)</h2>
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-[#FF1493]/50 hover:bg-[#FF1493]/5 transition-all relative overflow-hidden">
                 {previewUrl ? <img src={previewUrl} className="absolute inset-0 w-full h-full object-cover opacity-50" /> : (
                   <div className="flex flex-col items-center justify-center pt-5 pb-6 text-white/30"><Camera size={32} className="mb-2" /><p className="text-[10px] uppercase font-black tracking-widest">Tocar para enviar (JPG/PNG)</p></div>
                 )}
-                <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={handleFileChange} />
               </label>
               <div className="flex gap-4 mt-8">
                 <button type="button" onClick={() => setStep(1)} className="px-6 py-5 bg-white/5 text-white/50 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 transition-all">Voltar</button>
