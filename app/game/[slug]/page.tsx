@@ -6,6 +6,7 @@ import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye,
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
+import { weightedRandomIndex } from "@/src/lib/weightedRandom";
 
 // =========================================================================
 // ⚠️ CHAVES PIX DA PLATAFORMA (MASTER)
@@ -88,23 +89,24 @@ export default function GamePage() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
         
-        // 1. Pega o ID da modelo primeiro (rápido)
+        // 1. Pega o ID da modelo
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers, cache: "no-store" });
         const dataMod = await resMod.json();
-        if (!dataMod[0]) { setLoading(false); return; }
+        if (!dataMod || !dataMod[0]) { setLoading(false); return; }
         const mId = dataMod[0].id;
         setModelId(mId);
 
         const savedPlayerName = localStorage.getItem(`player_${slug}`);
 
-        // 2. Busca Prêmios, Configs e o Jogador TODOS AO MESMO TEMPO (Mágica da velocidade)
+        // 2. Busca Prêmios e Configs em paralelo
         const fetchPromises = [
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" })
         ];
 
+        // 3. Busca o jogador com segurança de codificação (encodeURIComponent)
         if (savedPlayerName) {
-          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${savedPlayerName}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }));
+          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }));
         }
 
         const responses = await Promise.all(fetchPromises);
@@ -113,15 +115,15 @@ export default function GamePage() {
         setPrizes(dataPrizes);
 
         const dataConfig = await responses[1].json();
-        if (dataConfig[0]) {
+        if (dataConfig && dataConfig[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
-          setSpinCost(dataConfig[0].spin_cost || 2);
+          setSpinCost(Number(dataConfig[0].spin_cost) || 2);
         }
 
         if (savedPlayerName && responses[2]) {
            const dataPlayer = await responses[2].json();
-           if (dataPlayer[0]) setPlayer(dataPlayer[0]);
+           if (dataPlayer && dataPlayer[0]) setPlayer(dataPlayer[0]);
         }
       } catch (error) { console.error("Erro ao carregar jogo:", error); } finally { setLoading(false); }
     }
@@ -201,21 +203,44 @@ export default function GamePage() {
     window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Esqueci minha senha na roleta da modelo ${modelName}, pode me ajudar?`)}`;
   };
 
+  // ✅ BLINDAGEM DE DESCONTO DE CRÉDITOS (AQUELA QUE TRAVOU A ROLETA)
   const deductCredits = async () => {
-    if (!player || !modelId) return false;
-    const res = await fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' });
-    const data = await res.json();
-    const currentCredits = data?.[0]?.credits || 0;
-    if (currentCredits < spinCost) { 
-      setShowDeposit(true); setAutoSpin(false); autoSpinRef.current = false; 
-      return false; 
+    if (!player || !player.id || !modelId) return false;
+    
+    try {
+      // 1. Busca os créditos atuais PELO ID (Muito mais seguro)
+      const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { 
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, 
+        cache: 'no-store' 
+      });
+      const data = await res.json();
+      const currentCredits = data?.[0]?.credits || 0;
+      const currentCost = Number(spinCost) || 2;
+
+      // 2. Bloqueia se não tiver saldo
+      if (currentCredits < currentCost) { 
+        setShowDeposit(true); 
+        setAutoSpin(false); 
+        autoSpinRef.current = false; 
+        return false; 
+      }
+      
+      // 3. Desconta no App
+      const newCredits = currentCredits - currentCost;
+      setPlayer({ ...player, credits: newCredits });
+      
+      // 4. Salva no Banco PELO ID (Evita erros com nomes com espaços)
+      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
+        method: "PATCH", 
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+        body: JSON.stringify({ credits: newCredits }) 
+      });
+
+      return true;
+    } catch (err) {
+      console.error("Erro crítico ao descontar créditos:", err);
+      return false;
     }
-    const newCredits = currentCredits - spinCost;
-    setPlayer({ ...player, credits: newCredits });
-    await fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}`, { 
-      method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: newCredits }) 
-    });
-    return true;
   };
 
   const runSpin = async (fromAuto = false) => {
@@ -224,7 +249,7 @@ export default function GamePage() {
     if (fromAuto) setModalOpen(false);
     
     const success = await deductCredits();
-    if (!success) return;
+    if (!success) return; // Se a dedução falhou (sem saldo ou erro), NÃO GIRA
 
     const weights = prizes.map((p) => Number(p.weight) || 10);
     const index = weightedRandomIndex(weights);
@@ -254,15 +279,17 @@ export default function GamePage() {
         body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: isAutoDelivered, model_id: modelId }) 
       }).catch(() => {});
 
+      // INJEÇÃO AUTOMÁTICA DE CRÉDITOS (Apenas se for prêmio de saldo)
       if (wonPrize.delivery_type === 'credit') {
         const bonusAmount = Number(wonPrize.delivery_value) || 0;
         if (bonusAmount > 0) {
           setPlayer((prev: any) => ({ ...prev, credits: prev.credits + bonusAmount }));
-          fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' })
+          // Atualiza DB pra garantir PELO ID
+          fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' })
             .then(r => r.json())
             .then(d => {
                const currentDb = d?.[0]?.credits || 0;
-               fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}`, {
+               fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, {
                  method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: currentDb + bonusAmount })
                });
             });
