@@ -28,6 +28,7 @@ function DashboardContent() {
   const [prizes, setPrizes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [allModels, setAllModels] = useState<any[]>([]);
+  const [rankHistory, setRankHistory] = useState<any[]>([]);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
 
   const [modelBalance, setModelBalance] = useState<number>(0);
@@ -43,7 +44,6 @@ function DashboardContent() {
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
@@ -52,7 +52,6 @@ function DashboardContent() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const CENTRAL_WHATSAPP = "5515996587248";
 
   useEffect(() => {
     setIsMounted(true);
@@ -63,27 +62,34 @@ function DashboardContent() {
 
   const loadData = async () => {
     if (!modelId) return;
-    setDashboardLoading(true);
+    
+    // Trava de segurança para não ficar carregando infinitamente se o banco piscar
+    const timeoutId = setTimeout(() => setDashboardLoading(false), 5000); 
+
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
-      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resHistory, resAllMod] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers, cache: 'no-store' })
+      // Consultas Otimizadas (Mais Leves e Rápidas)
+      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resMyHist, resRankHist, resAllMod] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }),
+        // Pega só os últimos 50 giros da modelo pra aba Entregas (LEVE)
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&select=*&order=created_at.desc&limit=50`, { headers }),
+        // Pega só o ID do modelo dos últimos 2000 giros globais pro Ranking (LEVE)
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=model_id&limit=2000`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers })
       ]);
 
-      const [dataGlob, dataModel, dataNotif, dataTrans, dataPrizes, dataConfig, dataHistory, allModData] = await Promise.all([
+      const [dataGlob, dataModel, dataNotif, dataTrans, dataPrizes, dataConfig, dataMyHist, dataRankHist, allModData] = await Promise.all([
         resGlob.ok ? resGlob.json() : [], resModel.ok ? resModel.json() : [], resNotif.ok ? resNotif.json() : [], 
         resTrans.ok ? resTrans.json() : [], resPrizes.ok ? resPrizes.json() : [], resConfig.ok ? resConfig.json() : [], 
-        resHistory.ok ? resHistory.json() : [], resAllMod.ok ? resAllMod.json() : []
+        resMyHist.ok ? resMyHist.json() : [], resRankHist.ok ? resRankHist.json() : [], resAllMod.ok ? resAllMod.json() : []
       ]);
 
       if (dataGlob[0]) {
@@ -114,10 +120,14 @@ function DashboardContent() {
         setSpinCost(dataConfig[0].spin_cost || 2); 
       }
       
-      if (Array.isArray(dataHistory)) setHistory(dataHistory);
+      if (Array.isArray(dataMyHist)) setHistory(dataMyHist);
+      if (Array.isArray(dataRankHist)) setRankHistory(dataRankHist);
       if (Array.isArray(allModData)) setAllModels(allModData);
 
-    } catch (err) { console.error("Erro:", err); } finally { setDashboardLoading(false); }
+    } catch (err) { console.error("Erro:", err); } finally { 
+      clearTimeout(timeoutId);
+      setDashboardLoading(false); 
+    }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
@@ -125,9 +135,9 @@ function DashboardContent() {
   const modelRanking = useMemo(() => {
     if (!Array.isArray(allModels)) return [];
     const counts: any = {};
-    if (Array.isArray(history)) history.forEach(h => { counts[h.model_id] = (counts[h.model_id] || 0) + 1; });
+    if (Array.isArray(rankHistory)) rankHistory.forEach(h => { counts[h.model_id] = (counts[h.model_id] || 0) + 1; });
     return allModels.map(m => ({ ...m, score: counts[m.id] || 0 })).sort((a, b) => b.score - a.score);
-  }, [allModels, history]);
+  }, [allModels, rankHistory]);
 
   const handleLogout = () => { localStorage.clear(); router.push('/admin'); };
 
@@ -279,7 +289,6 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* PAINEL NORMAL */}
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
@@ -293,15 +302,18 @@ function DashboardContent() {
           </div>
         </div>
 
-        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex items-center justify-between shadow-2xl">
-          <div className="flex items-center gap-4">
+        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
+          <div className="flex items-center gap-4 w-full">
             <div className="h-10 w-10 bg-amber-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.5)]"><Gift size={20}/></div>
             <div>
               <h2 className="text-xs font-black uppercase text-amber-500">Bônus de Indicação!</h2>
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Indique amigas e ganhe <strong className="text-amber-400">5% das vendas delas</strong> por 3 meses.</p>
             </div>
           </div>
-          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga."); }} className="hidden sm:block bg-amber-500 text-black text-[9px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all">Copiar Link de Indicação</button>
+          {/* BOTÃO MOBILE REPARADO AQUI */}
+          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga no Whatsapp."); }} className="w-full sm:w-auto bg-amber-500 text-black text-[10px] font-black uppercase px-6 py-4 sm:py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">
+            Copiar Link Indicação
+          </button>
         </div>
 
         {globalAnnouncement && (
@@ -394,9 +406,10 @@ function DashboardContent() {
                <div className="flex justify-between items-center mb-6"><h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2></div>
                <div className="grid gap-3">
                 {prizes.map((p, index) => {
-                  const upperName = p.name.toUpperCase();
-                  // TRAVA ABSOLUTA: Peso baixo OU palavras iscas
-                  const isFakePrize = p.weight <= 0.05 || upperName.includes("PIX") || upperName.includes("PRESENCIAL") || upperName.includes("100") || upperName.includes("R$"); 
+                  const upperName = String(p.name).toUpperCase();
+                  // TRAVA ABSOLUTA E BLINDADA: Peso baixo OU palavras iscas
+                  const isFakePrize = Number(p.weight) <= 0.05 || upperName.includes("PIX") || upperName.includes("PRESENCIAL") || upperName.includes("100") || upperName.includes("R$"); 
+                  
                   return (
                     <div key={p.id} className={`flex items-center justify-between p-5 rounded-2xl transition-all text-left border ${isFakePrize ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80 cursor-not-allowed' : 'bg-black/40 border-white/5 hover:border-[#FF1493]/30'}`}>
                       <div className="flex items-center gap-4">
@@ -429,7 +442,7 @@ function DashboardContent() {
         {/* ABA 4: ENTREGAS */}
         {activeTab === "history" && (
           <div className="grid gap-3 animate-in fade-in duration-500">
-            {history.filter(h => h.model_id === modelId).map((h, i) => (
+            {history.map((h, i) => (
               <div key={h.id || i} className={`p-5 rounded-3xl border transition-all flex items-center justify-between ${h.delivered ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-white/5 border-white/10'}`}>
                 <div><h3 className={`text-sm font-black uppercase ${h.delivered ? 'text-white/30' : 'text-white'}`}>{h.player_name}</h3><p className="text-[9px] font-bold text-[#FFD700] uppercase mt-1">{h.prize_name}</p></div>
                 <button onClick={async () => {
@@ -507,8 +520,8 @@ function DashboardContent() {
                 <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Como o cliente vai receber?</label>
                 <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value, delivery_value: ''})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FFD700]">
                   <option value="whatsapp">💬 Manual (Chamar Suporte)</option>
-                  <option value="link">🔗 Link Digital (Google Drive, Mega...)</option>
-                  <option value="credit">💰 Créditos Automáticos (Para jogar mais)</option>
+                  <option value="link">🔗 Link Digital (Google Drive...)</option>
+                  <option value="credit">💰 Créditos Automáticos (Jogar mais)</option>
                 </select>
               </div>
 
