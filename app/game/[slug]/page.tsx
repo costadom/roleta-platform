@@ -85,9 +85,13 @@ export default function GamePage() {
   useEffect(() => {
     async function fetchData() {
       if (!slug || !supabaseUrl) return;
+      
+      // TRAVA DE TEMPO: Se o banco demorar mais de 4s, ele abre a tela do mesmo jeito
+      const timeoutId = setTimeout(() => setLoading(false), 4000);
+
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers, cache: "no-store" });
+        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
         const dataMod = await resMod.json();
         if (!dataMod || !dataMod[0]) { setLoading(false); return; }
         const mId = dataMod[0].id;
@@ -95,12 +99,12 @@ export default function GamePage() {
 
         const savedPlayerName = localStorage.getItem(`player_${slug}`);
         const fetchPromises = [
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }),
-          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" })
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }),
+          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers })
         ];
 
         if (savedPlayerName) {
-          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }));
+          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers }));
         }
 
         const responses = await Promise.all(fetchPromises);
@@ -117,7 +121,10 @@ export default function GamePage() {
            const dataPlayer = await responses[2].json();
            if (dataPlayer && dataPlayer[0]) setPlayer(dataPlayer[0]);
         }
-      } catch (error) { console.error("Erro ao carregar jogo:", error); } finally { setLoading(false); }
+      } catch (error) { console.error("Erro ao carregar jogo:", error); } finally { 
+        clearTimeout(timeoutId);
+        setLoading(false); 
+      }
     }
     fetchData();
     if (typeof window !== "undefined") {
@@ -221,16 +228,22 @@ export default function GamePage() {
     if (!player) { setAuthMode("choose"); setShowAuthModal(true); return; }
     if (fromAuto) setModalOpen(false);
     
-    // Define o custo do giro (3 ou 6)
     const cost = isSuperSpin ? 6 : 3;
     const success = await deductCredits(cost);
     if (!success) return; 
 
-    // LÓGICA DE HIERARQUIA: Super Giro dobra o peso dos prêmios raros
-    let weights = prizes.map((p) => Number(p.weight) || 10);
+    // LÓGICA ABSOLUTA: Prêmios Falsos tem chance ZERO cravada aqui
+    let weights = prizes.map((p) => {
+      const upperName = String(p.name).toUpperCase();
+      const isFakePrize = Number(p.weight) <= 0.05 || upperName.includes("PIX") || upperName.includes("PRESENCIAL") || upperName.includes("100") || upperName.includes("R$");
+      
+      if (isFakePrize) return 0.000000001; // CHANCE NULA NA MATEMÁTICA
+      return Number(p.weight) || 10;
+    });
+
     if (isSuperSpin) {
       const maxWeight = Math.max(...weights);
-      weights = weights.map(w => w < maxWeight ? w * 2 : w);
+      weights = weights.map(w => (w < maxWeight && w > 0.01) ? w * 2 : w);
     }
 
     const index = weightedRandomIndex(weights);
@@ -243,13 +256,10 @@ export default function GamePage() {
       const currentMod = prev % 360;
       const sliceAngle = 360 / prizes.length;
       const targetMod = (360 - index * sliceAngle) % 360;
-      
-      // A MÁGICA DO "QUASE GANHEI" (60% de chance de parar na bordinha)
       const applyNearMiss = Math.random() > 0.4; 
       const nearMissOffset = (sliceAngle / 2) - 1.5; 
       const randomEdge = Math.random() > 0.5 ? nearMissOffset : -nearMissOffset;
       const finalTarget = applyNearMiss ? (targetMod + randomEdge) : targetMod;
-      
       let diff = finalTarget - currentMod;
       if (diff < 0) diff += 360;
       return prev + 6 * 360 + diff;
@@ -282,7 +292,7 @@ export default function GamePage() {
   };
 
   if (loading) return (
-    <div className="min-h-[100dvh] bg-black flex flex-col items-center justify-center text-white gap-4"><Loader2 className="animate-spin text-[#FF1493]" size={40} /><p className="uppercase font-black tracking-widest text-[10px]">Carregando...</p></div>
+    <div className="min-h-[100dvh] bg-black flex flex-col items-center justify-center text-white gap-4"><Loader2 className="animate-spin text-[#FF1493]" size={40} /><p className="uppercase font-black tracking-widest text-[10px]">Carregando A Roleta Sexy...</p></div>
   );
 
   return (
@@ -309,18 +319,14 @@ export default function GamePage() {
           </div>
 
           <div className="relative pb-8 pt-4 px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent">
-            {/* NOVO LAYOUT DOS BOTÕES - SALDO EM CIMA */}
             <div className="flex items-center justify-between bg-black/80 ring-1 ring-[#FFD700]/30 p-4 rounded-2xl mb-3 shadow-lg backdrop-blur-md">
                <div className="flex flex-col"><span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Seu Saldo</span><span className="text-xl font-black text-white">{player ? player.credits : 0} CR</span></div>
                <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="px-5 py-2 rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/10 text-[#FFD700] text-[10px] font-black uppercase shadow-lg active:scale-95 flex items-center gap-2"><ShoppingCart size={14}/> Depositar</button>
             </div>
-            
-            {/* GIRO NORMAL E SUPER GIRO LADO A LADO */}
             <div className="flex gap-2 w-full">
               <button onClick={() => runSpin(false, false)} disabled={isSpinning || prizes.length === 0} className="flex-1 h-16 bg-gradient-to-b from-[#FF1493] to-[#8B0045] rounded-xl flex flex-col items-center justify-center shadow-lg shadow-[#FF1493]/30 border border-[#FF1493]/50 disabled:opacity-50 active:scale-95"><span className="text-sm font-black uppercase text-white tracking-wider">Giro Normal</span><span className="text-[10px] font-black text-white/70 uppercase">3 CRÉDITOS</span></button>
               <button onClick={() => runSpin(false, true)} disabled={isSpinning || prizes.length === 0} className="flex-1 h-16 bg-gradient-to-b from-[#FFD700] to-[#b8860b] rounded-xl flex flex-col items-center justify-center shadow-lg shadow-[#FFD700]/30 border border-[#FFD700]/50 disabled:opacity-50 active:scale-95"><span className="text-sm font-black uppercase text-black tracking-wider flex items-center gap-1"><Zap size={14}/> Super Giro</span><span className="text-[10px] font-black text-black/70 uppercase">6 CRÉDITOS</span></button>
             </div>
-            
             <div className="mt-3 w-full"><button onClick={() => { setAutoSpin(!autoSpin); autoSpinRef.current = !autoSpin; }} className={`w-full py-4 rounded-xl text-[10px] font-black uppercase active:scale-95 ${ autoSpin ? "bg-[#FF1493] text-white shadow-lg shadow-[#FF1493]/30" : "bg-black/70 border border-white/20 text-white" }`}>{autoSpin ? "Parar Auto" : "Auto Giro (Normal)"}</button></div>
           </div>
         </div>
