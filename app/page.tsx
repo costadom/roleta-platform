@@ -5,22 +5,8 @@ import { Heart, Sparkles, MessageCircle, Crown, ChevronDown } from "lucide-react
 
 function TridenteIcon({ className }: { className?: string }) {
   return (
-    <svg 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      xmlns="http://www.w3.org/2000/svg" 
-      className={className}
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 22V2" />
-      <path d="M7 6.5C7 6.5 9 8.5 12 8.5C15 8.5 17 6.5 17 6.5" />
-      <path d="M12 11.5H8.5" />
-      <path d="M12 11.5H15.5" />
-      <path d="M12 2L10 4.5" />
-      <path d="M12 2L14 4.5" />
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22V2" /><path d="M7 6.5C7 6.5 9 8.5 12 8.5C15 8.5 17 6.5 17 6.5" /><path d="M12 11.5H8.5" /><path d="M12 11.5H15.5" /><path d="M12 2L10 4.5" /><path d="M12 2L14 4.5" />
     </svg>
   );
 }
@@ -30,7 +16,7 @@ export default function HomePage() {
   const [referrerId, setReferrerId] = useState<string | null>(null);
 
   useEffect(() => {
-    // 🚀 LÓGICA DE INDICAÇÃO: Se tiver ?ref= na URL, a gente pega e salva
+    // 🚀 LÓGICA DE INDICAÇÃO INVISÍVEL
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) {
@@ -45,28 +31,23 @@ export default function HomePage() {
   };
 
   const handleModelClick = () => {
-    // Manda para o WhatsApp, mas avisa se foi indicada para o suporte já saber
     let text = "Olá, tenho interesse em ser uma modelo parceira.";
     const savedRef = referrerId || localStorage.getItem("savanah_referral_id");
     if (savedRef) {
-       text = `Olá, fui indicada para ser uma modelo parceira! Meu código de indicação é: ${savedRef}`;
+       text = `Olá, fui indicada para ser uma modelo parceira! O ID de quem me indicou é: ${savedRef}`;
     }
     window.location.href = `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encodeURIComponent(text)}`;
   };
 
   return (
     <div className="min-h-screen bg-black text-white relative font-sans overflow-x-hidden selection:bg-[#FF1493] selection:text-white">
-      
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_center,rgba(255,20,147,0.12)_0%,rgba(0,0,0,1)_100%)] z-0 pointer-events-none" />
       <div className="fixed top-0 w-full h-1/2 bg-gradient-to-b from-[#FF1493]/10 to-transparent z-0 blur-3xl pointer-events-none" />
 
       <div className="relative z-10 w-full max-w-md mx-auto px-6 min-h-[100dvh] flex flex-col items-center justify-center pt-12 pb-6">
-        
         <div className="flex-1 flex flex-col items-center justify-center w-full">
           <div className="flex items-center gap-3 mb-4 mt-6">
-            <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tighter text-white">
-              Savanah <span className="text-[#FF1493]">Labz</span>
-            </h1>
+            <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tighter text-white">Savanah <span className="text-[#FF1493]">Labz</span></h1>
             <TridenteIcon className="w-9 h-9 sm:w-11 sm:h-11 text-[#FFD700] drop-shadow-[0_0_10px_rgba(255,215,0,0.7)]" />
           </div>
 
@@ -104,33 +85,21 @@ export default function HomePage() {
       </div>
 
       <div className="relative z-10 w-full max-w-md mx-auto px-6 pb-24 pt-10 flex flex-col items-center text-center space-y-8">
-        
-        <h2 className="text-2xl font-black uppercase text-white tracking-tighter flex items-center gap-3 italic">
-          <TridenteIcon className="w-6 h-6 text-[#FF1493]" /> Muito Além do Jogo
-        </h2>
-
+        <h2 className="text-2xl font-black uppercase text-white tracking-tighter flex items-center gap-3 italic"><TridenteIcon className="w-6 h-6 text-[#FF1493]" /> Muito Além do Jogo</h2>
         <div className="w-full bg-black/40 border border-[#FF1493]/20 p-8 rounded-[2.5rem] text-left shadow-2xl backdrop-blur-md">
           <h3 className="text-[#FF1493] font-black uppercase text-sm mb-4 flex items-center gap-2">Para quem quer se divertir</h3>
-          <p className="text-white/70 text-[12px] leading-relaxed font-medium">
-            Sabe aquela safadeza e intimidade que você sempre teve com a Rapha e com nossas parceiras? Ela continua aqui, mas agora com muito mais adrenalina! A Labz Sexy Roll foi criada para te colocar mais perto das suas modelos favoritas através de um jogo viciante. É o melhor custo-benefício do mercado: com apenas alguns créditos, você gira a roleta e garante conteúdos exclusivos, mimos, fotos e vídeos quentíssimos.
-          </p>
+          <p className="text-white/70 text-[12px] leading-relaxed font-medium">Sabe aquela safadeza e intimidade que você sempre teve com a Rapha e com nossas parceiras? Ela continua aqui, mas agora com muito mais adrenalina! A Labz Sexy Roll foi criada para te colocar mais perto das suas modelos favoritas através de um jogo viciante. É o melhor custo-benefício do mercado: com apenas alguns créditos, você gira a roleta e garante conteúdos exclusivos, mimos, fotos e vídeos quentíssimos.</p>
         </div>
 
         <div className="w-full bg-black/40 border border-[#FFD700]/20 p-8 rounded-[2.5rem] text-left shadow-2xl backdrop-blur-md">
           <h3 className="text-[#FFD700] font-black uppercase text-sm mb-4 flex items-center gap-2">Para quem cria o desejo</h3>
-          <p className="text-white/70 text-[12px] leading-relaxed font-medium">
-            Idealizada por <strong className="text-white font-black">Rapha Savanah (Savanah Cos)</strong>, a Savanah Labz nasceu de uma vivência real: a necessidade de ferramentas inovadoras que realmente valorizem o nosso trabalho. A Roleta Sexy é uma novidade explosiva para engajar seu público, multiplicar seus ganhos e ditar as suas próprias regras. Afinal, somos de criadora de conteúdos para criadoras de conteúdos.
-          </p>
+          <p className="text-white/70 text-[12px] leading-relaxed font-medium">Idealizada por <strong className="text-white font-black">Rapha Savanah (Savanah Cos)</strong>, a Savanah Labz nasceu de uma vivência real: a necessidade de ferramentas inovadoras que realmente valorizem o nosso trabalho. A Roleta Sexy é uma novidade explosiva para engajar seu público, multiplicar seus ganhos e ditar as suas próprias regras. Afinal, somos de criadora de conteúdos para criadoras de conteúdos.</p>
         </div>
-
       </div>
 
       <div className="relative z-10 w-full text-center pb-8 shrink-0">
-        <div className="text-[8px] text-white/20 uppercase font-black tracking-[0.3em]">
-          Powered by Savanah Labz © 2026
-        </div>
+        <div className="text-[8px] text-white/20 uppercase font-black tracking-[0.3em]">Powered by Savanah Labz © 2026</div>
       </div>
-
     </div>
   );
 }
