@@ -4,11 +4,11 @@ import { useState } from 'react';
 export default function TestePix() {
   const [pixData, setPixData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [errorLog, setErrorLog] = useState<string>("");
+  const [debugRaw, setDebugRaw] = useState<string>("");
 
   const testarCheckout = async () => {
     setLoading(true);
-    setErrorLog("Iniciando chamada para a API...");
+    setDebugRaw("Iniciando chamada...");
     setPixData(null);
 
     try {
@@ -21,62 +21,46 @@ export default function TestePix() {
         }),
       });
 
-      setErrorLog(prev => prev + `\nStatus da Resposta: ${response.status} ${response.statusText}`);
-
       const data = await response.json();
+      // AQUI ESTÁ O ESPIÃO REVELADOR: Mostra tudo o que a PushinPay mandou
+      setDebugRaw(JSON.stringify(data, null, 2));
       
-      if (!response.ok) {
-        setErrorLog(prev => prev + `\n❌ Erro na PushinPay: ${JSON.stringify(data)}`);
-      } else {
-        setErrorLog(prev => prev + `\n✅ Resposta recebida com sucesso!`);
+      if (response.ok) {
         setPixData(data);
       }
     } catch (error: any) {
-      setErrorLog(prev => prev + `\n🚨 Erro Crítico: ${error.message}`);
+      setDebugRaw("Erro: " + error.message);
     }
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#1a1a1a', color: '#fff', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-      <h2 style={{ color: '#00ff00' }}>🕵️ Espião de Checkout Savanah</h2>
+    <div style={{ padding: '20px', backgroundColor: '#000', color: '#fff', minHeight: '100vh' }}>
+      <h2 style={{ color: '#00ff00' }}>🕵️ Espião Revelador Savanah</h2>
       
-      <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #444', borderRadius: '8px' }}>
-        <button 
-          onClick={testarCheckout}
-          disabled={loading}
-          style={{ 
-            background: loading ? '#555' : '#00ff00', 
-            color: '#000', 
-            padding: '12px 24px', 
-            fontSize: '16px',
-            fontWeight: 'bold',
-            borderRadius: '5px', 
-            cursor: loading ? 'not-allowed' : 'pointer',
-            border: 'none'
-          }}
-        >
-          {loading ? 'Consultando PushinPay...' : '🚀 Gerar PIX Real (R$ 1,00)'}
-        </button>
-      </div>
+      <button onClick={testarCheckout} disabled={loading} style={{ background: '#00ff00', padding: '10px', fontWeight: 'bold' }}>
+        {loading ? 'Consultando...' : '🚀 GERAR PIX REAL'}
+      </button>
 
-      {/* PAINEL DO ESPIÃO */}
-      <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#aaa' }}>Console de Diagnóstico:</h4>
-        <pre style={{ whiteSpace: 'pre-wrap', fontSize: '14px', color: '#00ff00' }}>
-          {errorLog || "Aguardando clique no botão..."}
+      <div style={{ marginTop: '20px' }}>
+        <h4 style={{ color: '#aaa' }}>Resposta Bruta da PushinPay (O que veio de lá):</h4>
+        <pre style={{ 
+          backgroundColor: '#111', 
+          padding: '15px', 
+          border: '1px solid #333', 
+          color: '#00ff00',
+          overflowX: 'auto',
+          fontSize: '12px'
+        }}>
+          {debugRaw || "Aguardando clique..."}
         </pre>
       </div>
 
-      {pixData?.qr_code && (
-        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#003300', borderRadius: '8px' }}>
-          <h3 style={{ color: '#0ff' }}>✅ SUCESSO! QR CODE GERADO:</h3>
-          <p style={{ fontSize: '12px' }}>Copie o código abaixo e cole no seu banco:</p>
-          <textarea 
-            readOnly 
-            value={pixData.qr_code} 
-            style={{ width: '100%', height: '80px', backgroundColor: '#222', color: '#fff', border: '1px solid #0ff', padding: '10px' }} 
-          />
+      {/* Tenta mostrar o QR Code de várias formas possíveis */}
+      {(pixData?.qr_code || pixData?.qr_code_base64 || pixData?.data?.qr_code) && (
+        <div style={{ marginTop: '20px', padding: '10px', border: '2px solid #00ff00' }}>
+          <h3 style={{ color: '#00ff00' }}>✅ QR CODE ENCONTRADO!</h3>
+          <p>Se você está vendo isso, a integração funcionou!</p>
         </div>
       )}
     </div>
