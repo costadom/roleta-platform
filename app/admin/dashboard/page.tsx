@@ -270,7 +270,7 @@ function DashboardContent() {
               <p>A Plataforma adiciona prêmios impossíveis/iscas (R$ 100 PIX e Encontro Presencial). Caso o cliente ganhe o PIX, a plataforma pagará do próprio bolso. Caso ganhe o Encontro, ele será convertido em um Pack Digital Premium por questões de segurança.</p>
 
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">5. Indique e Ganhe:</h3>
-              <p>Durante os 3 primeiros meses de operação de uma modelo indicada por você, você receberá <strong>5%</strong> sobre o faturamento gerado por ela na plataforma, como um bônus vitalício pelo recrutamento.</p>
+              <p>Durante os 3 primeiros meses de operação de uma modelo indicada por você, você receberá <strong>5%</strong> sobre o faturamento gerado por ela na plataforma, como um bônus vitalício pelo recrutamento (O bônus sai da parte da plataforma, não afeta os 70% dela).</p>
             </div>
 
             <button onClick={handleAcceptTerms} disabled={acceptingTerms} className="w-full shrink-0 bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-[0_0_20px_rgba(255,20,147,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
