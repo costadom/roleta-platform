@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, KeyRound } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, KeyRound, Zap } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -49,7 +49,6 @@ export default function GamePage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [modelId, setModelId] = useState<string | null>(null);
   const [modelName, setModelName] = useState("");
-  const [spinCost, setSpinCost] = useState(2);
 
   const [player, setPlayer] = useState<any | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -123,7 +122,6 @@ export default function GamePage() {
         if (dataConfig && dataConfig[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
-          setSpinCost(Number(dataConfig[0].spin_cost) || 2);
         }
 
         if (savedPlayerName && responses[2]) {
@@ -142,7 +140,7 @@ export default function GamePage() {
   useEffect(() => { runSpinRef.current = runSpin; });
   useEffect(() => {
     if (!autoSpin || isSpinning) return;
-    autoSpinTimerRef.current = setTimeout(() => { if (autoSpinRef.current && runSpinRef.current) runSpinRef.current(true); }, 1500); 
+    autoSpinTimerRef.current = setTimeout(() => { if (autoSpinRef.current && runSpinRef.current) runSpinRef.current(true, false); }, 1500); 
     return () => { if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current); };
   }, [autoSpin, isSpinning]);
 
@@ -266,7 +264,7 @@ export default function GamePage() {
     window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Esqueci minha senha na roleta da modelo ${modelName}, pode me ajudar?`)}`;
   };
 
-  const deductCredits = async () => {
+  const deductCredits = async (cost: number) => {
     if (!player || !player.id || !modelId) return false;
     
     try {
@@ -276,16 +274,15 @@ export default function GamePage() {
       });
       const data = await res.json();
       const currentCredits = data?.[0]?.credits || 0;
-      const currentCost = Number(spinCost) || 2;
 
-      if (currentCredits < currentCost) { 
+      if (currentCredits < cost) { 
         setShowDeposit(true); 
         setAutoSpin(false); 
         autoSpinRef.current = false; 
         return false; 
       }
       
-      const newCredits = currentCredits - currentCost;
+      const newCredits = currentCredits - cost;
       setPlayer({ ...player, credits: newCredits });
       
       await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
@@ -301,27 +298,53 @@ export default function GamePage() {
     }
   };
 
-  const runSpin = async (fromAuto = false) => {
+  const runSpin = async (fromAuto = false, isSuperSpin = false) => {
     if (isSpinning || prizes.length === 0) return;
     if (!player) { setAuthMode("choose"); setShowAuthModal(true); return; }
     if (fromAuto) setModalOpen(false);
     
-    const success = await deductCredits();
+    // Define o custo do giro (3 ou 6)
+    const cost = isSuperSpin ? 6 : 3;
+
+    const success = await deductCredits(cost);
     if (!success) return; 
 
-    const weights = prizes.map((p) => Number(p.weight) || 10);
+    // LÓGICA DE HIERARQUIA: Se for Super Giro, dobramos a chance dos prêmios mais raros (os que têm menor peso)
+    let weights = prizes.map((p) => Number(p.weight) || 10);
+    if (isSuperSpin) {
+      const maxWeight = Math.max(...weights);
+      weights = weights.map(w => w < maxWeight ? w * 2 : w);
+    }
+
     const index = weightedRandomIndex(weights);
     const wonPrize = prizes[index];
 
     setIsSpinning(true);
     if (spinAudioRef.current && soundEnabled) { spinAudioRef.current.currentTime = 0; spinAudioRef.current.play().catch(() => {}); }
     
+    // A MÁGICA DO "QUASE GANHEI" (NEAR MISS)
     setRotation((prev) => {
       const currentMod = prev % 360;
-      const targetMod = (360 - index * (360 / prizes.length)) % 360;
-      let diff = targetMod - currentMod;
+      const sliceAngle = 360 / prizes.length;
+      
+      // targetMod é o centro exato da fatia que ele ganhou
+      const targetMod = (360 - index * sliceAngle) % 360;
+      
+      // 60% de chance de dar a ilusão de que parou "na bordinha" do prêmio
+      const applyNearMiss = Math.random() > 0.4; 
+      
+      // O offset move o ponteiro para 1.5 grau antes de encostar na linha da próxima fatia
+      const nearMissOffset = (sliceAngle / 2) - 1.5; 
+      
+      // Decide se a bordinha é pro lado esquerdo ou direito
+      const randomEdge = Math.random() > 0.5 ? nearMissOffset : -nearMissOffset;
+
+      const finalTarget = applyNearMiss ? (targetMod + randomEdge) : targetMod;
+
+      let diff = finalTarget - currentMod;
       if (diff < 0) diff += 360;
-      return prev + 6 * 360 + diff;
+      
+      return prev + 6 * 360 + diff; // 6 voltas completas + a diferença
     });
 
     setTimeout(() => {
@@ -404,7 +427,7 @@ export default function GamePage() {
           <div className="relative flex flex-1 flex-col items-center justify-center w-full min-h-[350px]">
             {prizes.length > 0 ? (
               <div className="transform scale-[0.95] flex items-center justify-center w-full">
-                <RouletteWheel segments={segments} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(false)} durationMs={SPIN_DURATION} />
+                <RouletteWheel segments={segments} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(false, false)} durationMs={SPIN_DURATION} />
               </div>
             ) : (
               <div className="text-center p-10 bg-black/50 rounded-3xl border border-white/10 m-4">
@@ -413,22 +436,43 @@ export default function GamePage() {
             )}
           </div>
 
-          {/* CONTROLES INFERIORES */}
+          {/* CONTROLES INFERIORES: SALDO + OS DOIS BOTÕES */}
           <div className="relative pb-8 pt-4 px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent">
-            <div className="grid grid-cols-[1fr_1.4fr_1fr] items-center justify-center gap-3 w-full">
-              <div className="rounded-2xl bg-black/80 p-3 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center transition-all">
-                <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Saldo</span>
-                <span className="text-sm font-black text-white">{player ? player.credits : 0} CR</span>
-              </div>
-              <button onClick={() => runSpin(false)} disabled={isSpinning || prizes.length === 0} className="h-16 w-full rounded-2xl bg-gradient-to-b from-[#FF1493] to-[#8B0045] text-lg font-black uppercase tracking-tighter text-white shadow-xl shadow-[#FF1493]/30 border border-[#FF1493]/50 disabled:opacity-50 transition-all active:scale-95">Girar</button>
-              <div className="rounded-2xl bg-black/80 p-3 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center">
-                <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Custo</span>
-                <span className="text-sm font-black text-[#FFD700]">{spinCost} CR</span>
-              </div>
+            
+            <div className="flex items-center justify-between bg-black/80 ring-1 ring-[#FFD700]/30 p-4 rounded-2xl mb-3 shadow-lg backdrop-blur-md">
+               <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Seu Saldo</span>
+                  <span className="text-xl font-black text-white">{player ? player.credits : 0} CR</span>
+               </div>
+               <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="px-5 py-2 rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/10 text-[#FFD700] text-[10px] font-black uppercase shadow-lg transition-all active:scale-95 flex items-center gap-2">
+                  <ShoppingCart size={14}/> Depositar
+               </button>
             </div>
-            <div className="mt-4 flex gap-3 w-full">
-              <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="flex-1 py-4 rounded-xl border border-[#FFD700]/30 bg-black/70 text-[#FFD700] text-[10px] font-black uppercase shadow-lg transition-all active:scale-95">Depositar</button>
-              <button onClick={() => { setAutoSpin(!autoSpin); autoSpinRef.current = !autoSpin; }} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${ autoSpin ? "bg-[#FF1493] text-white shadow-lg shadow-[#FF1493]/30" : "bg-black/70 border border-white/20 text-white" }`}>{autoSpin ? "Parar Auto" : "Auto Giro"}</button>
+
+            <div className="flex gap-2 w-full">
+              {/* GIRO NORMAL - 3 CR */}
+              <button 
+                onClick={() => runSpin(false, false)} 
+                disabled={isSpinning || prizes.length === 0} 
+                className="flex-1 h-16 bg-gradient-to-b from-[#FF1493] to-[#8B0045] rounded-xl flex flex-col items-center justify-center shadow-lg shadow-[#FF1493]/30 border border-[#FF1493]/50 disabled:opacity-50 transition-all active:scale-95"
+              >
+                 <span className="text-sm font-black uppercase text-white tracking-wider">Giro Normal</span>
+                 <span className="text-[10px] font-black text-white/70 uppercase">3 CRÉDITOS</span>
+              </button>
+
+              {/* SUPER GIRO - 6 CR */}
+              <button 
+                onClick={() => runSpin(false, true)} 
+                disabled={isSpinning || prizes.length === 0} 
+                className="flex-1 h-16 bg-gradient-to-b from-[#FFD700] to-[#b8860b] rounded-xl flex flex-col items-center justify-center shadow-lg shadow-[#FFD700]/30 border border-[#FFD700]/50 disabled:opacity-50 transition-all active:scale-95"
+              >
+                 <span className="text-sm font-black uppercase text-black tracking-wider flex items-center gap-1"><Zap size={14}/> Super Giro</span>
+                 <span className="text-[10px] font-black text-black/70 uppercase">6 CRÉDITOS</span>
+              </button>
+            </div>
+
+            <div className="mt-3 w-full">
+              <button onClick={() => { setAutoSpin(!autoSpin); autoSpinRef.current = !autoSpin; }} className={`w-full py-4 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${ autoSpin ? "bg-[#FF1493] text-white shadow-lg shadow-[#FF1493]/30" : "bg-black/70 border border-white/20 text-white" }`}>{autoSpin ? "Parar Auto" : "Auto Giro (Normal)"}</button>
             </div>
           </div>
         </div>
@@ -542,69 +586,4 @@ export default function GamePage() {
                   ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs, p.cr)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-[#FFD700]/30 transition-all active:scale-95 relative overflow-hidden">
                       {p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}
-                      <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div>
-                      <span className="bg-[#FF1493] text-white font-black text-[9px] px-3 py-1.5 rounded-lg shadow-lg">COMPRAR</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* MODAL DE PERFIL */}
-      {showProfile && player && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
-          <div className="bg-[#0f0f0f] border border-[#FFD700]/30 p-8 rounded-[3rem] w-full max-w-sm text-center relative shadow-2xl animate-in zoom-in duration-300">
-            <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
-            <div className="h-20 w-20 bg-[#FF1493]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#FF1493]/30 shadow-xl"><User size={40} className="text-[#FF1493]"/></div>
-            <h2 className="text-xl font-black uppercase text-white mb-1 tracking-tighter">{player.name}</h2>
-            <p className="text-[9px] text-white/30 uppercase font-black tracking-widest mb-8">{player.whatsapp}</p>
-            
-            <div className="bg-black/50 border border-white/5 p-6 rounded-3xl mb-6 shadow-inner">
-              <span className="text-[10px] text-[#FFD700] uppercase block mb-1 font-black">Créditos Atuais</span>
-              <span className="text-4xl font-black text-white">{player.credits} <span className="text-lg text-white/20">CR</span></span>
-            </div>
-
-            <div className="bg-black/30 border border-white/5 rounded-2xl p-4 mb-8">
-              <h3 className="text-[9px] font-black text-white/30 uppercase mb-3 flex items-center gap-2 justify-center"><Gift size={12} className="text-[#FF1493]" /> Seus Prêmios Ganhos</h3>
-              
-              <div className="max-h-32 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-white/10">
-                {accumulatedPrizes.length === 0 ? (
-                  <p className="text-[9px] text-white/10 italic py-4">Nenhum prêmio ainda...</p>
-                ) : (
-                  accumulatedPrizes.map((p, i) => (
-                    <div key={i} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
-                       <span className="text-[10px] text-white font-bold uppercase truncate pr-2 flex-1 text-left">{p.name}</span>
-                       
-                       {p.delivery_type === 'link' && p.delivery_value && (
-                          <button onClick={() => window.open(p.delivery_value, '_blank')} className="bg-emerald-500 text-black px-3 py-1.5 rounded-lg text-[8px] font-black uppercase shrink-0 shadow-lg active:scale-95">Acessar</button>
-                       )}
-                       
-                       {p.delivery_type === 'credit' && (
-                          <span className="text-emerald-400 font-black text-[9px] shrink-0 bg-emerald-500/10 px-2 py-1 rounded-lg">+{p.delivery_value} CR</span>
-                       )}
-
-                       {(!p.delivery_type || p.delivery_type === 'whatsapp') && (
-                          <span className="text-[#FF1493] font-black text-[8px] shrink-0 uppercase">Manual</span>
-                       )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').length > 0 && (
-              <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e preciso resgatar esses prêmios:\n${accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Manuais no Whats</button>
-            )}
-
-            <button onClick={() => { localStorage.removeItem(`player_${slug}`); window.location.reload(); }} className="text-white/20 hover:text-red-500 text-[9px] font-black uppercase transition-all tracking-widest active:scale-95 mt-2">Sair da Conta</button>
-          </div>
-        </div>
-      )}
-
-      <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.name || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-    </div>
-  );
-}
+                      <div className="text-left">
