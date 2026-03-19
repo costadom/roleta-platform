@@ -3,43 +3,29 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const { amount, userId } = await req.json();
-    const val = Math.round(parseFloat(amount) * 100); // R$ 1,00 -> 100 centavos
 
-    const payload = {
-      value: val,
-      webhook_url: `${process.env.NEXT_PUBLIC_URL}/api/webhooks/pushinpay`,
-      external_id: String(userId),
-    };
+    // Valor sempre em centavos (Ex: 1.00 vira 100)
+    const amountInCents = Math.round(parseFloat(amount) * 100);
 
-    const headers = {
-      'Authorization': `Bearer ${process.env.PUSHINPAY_TOKEN}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
+    // O ENDEREÇO CORRETO: sem hífen e com "I" maiúsculo no final
+    const response = await fetch('https://api.pushinpay.com.br/api/pix/cashIn', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.PUSHINPAY_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        value: amountInCents,
+        webhook_url: `${process.env.NEXT_PUBLIC_URL}/api/webhooks/pushinpay`,
+        external_id: String(userId),
+      }),
+    });
 
-    // VAMOS TENTAR OS 3 ENDEREÇOS POSSÍVEIS
-    const endpoints = [
-      'https://api.pushinpay.com.br/api/pix/cash-in',
-      'https://api.pushinpay.com.br/api/v1/pix/cash-in',
-      'https://api.pushinpay.com.br/pix/cash-in'
-    ];
+    const data = await response.json();
 
-    for (const url of endpoints) {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      // Se não for 404, significa que achamos o endereço certo!
-      if (response.status !== 404) {
-        return NextResponse.json({ ...data, url_tentada: url }, { status: response.status });
-      }
-    }
-
-    return NextResponse.json({ error: "Nenhum endpoint da PushinPay funcionou (Todos 404)" }, { status: 404 });
+    // Se ainda der erro, o espião vai nos mostrar o motivo real (ex: saldo, token...)
+    return NextResponse.json(data, { status: response.status });
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
