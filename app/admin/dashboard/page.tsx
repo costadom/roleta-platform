@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, HelpCircle } from "lucide-react";
-import { PlayersManager } from "./players";
+import PlayersManager from "./players";
 
 function DashboardContent() {
   const router = useRouter();
@@ -482,7 +482,7 @@ function DashboardContent() {
 
       </div>
 
-      {/* MODAL DE EDIÇÃO DO PRÊMIO (Sem a porcentagem agora) */}
+      {/* MODAL DE EDIÇÃO DO PRÊMIO */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveEditPrize} className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
