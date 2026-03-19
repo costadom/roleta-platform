@@ -55,10 +55,7 @@ function DashboardContent() {
   useEffect(() => {
     setIsMounted(true);
     setIsSuper(localStorage.getItem("super_admin_auth") === "true");
-    if (modelId) {
-      // Cria o link exclusivo de indicação usando o ID da modelo atual
-      setReferralUrl(`${window.location.origin}/?ref=${modelId}`);
-    }
+    if (modelId) setReferralUrl(`${window.location.origin}/?ref=${modelId}`);
     if (modelSlug) setModelUrl(`${window.location.origin}/game/${modelSlug}`);
   }, [modelSlug, modelId]);
 
@@ -223,16 +220,6 @@ function DashboardContent() {
     } catch (err) { alert("Erro ao solicitar saque."); } finally { setIsWithdrawing(false); }
   };
 
-  const markAsRead = async (notifId: string) => {
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${notifId}`, { 
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-        body: JSON.stringify({ is_read: true }) 
-      });
-      setNotifications(prev => prev.filter(n => n.id !== notifId));
-    } catch (err) {}
-  };
-
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
   if (dashboardLoading) return (
@@ -245,7 +232,6 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans relative">
       
-      {/* SIM, OS NOVOS TERMOS ESTÃO AQUI! */}
       {!termsAccepted && !isSuper && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-[#0f0f0f] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
@@ -256,19 +242,14 @@ function DashboardContent() {
 
             <div className="flex-1 overflow-y-auto pr-4 space-y-4 text-[11px] text-white/70 leading-relaxed mb-8 scrollbar-thin scrollbar-thumb-white/10">
               <p>Bem-vinda à <strong>LabzSexy Roll (Savanah Labz)</strong>. Este termo garante a sua segurança, seus direitos autorais e a transparência total dos seus ganhos.</p>
-              
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">1. O Formato do Negócio:</h3>
               <p>A Plataforma fornece a tecnologia de uma "Roleta Sexy". O seu público comprará Créditos (CR) para girar a roleta e concorrer aos seus conteúdos.</p>
-              
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">2. Divisão de Lucros:</h3>
               <p>A parceria é estruturada em <strong>70% para a Modelo e 30% para a Plataforma</strong>. Você não paga nenhuma taxa mensal.</p>
-
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">3. Saques e Pagamentos:</h3>
               <p>Os seus lucros (70%) ficam disponíveis em tempo real. Você tem direito a <strong>1 (um) saque por dia</strong> (mínimo R$ 20,00), descontada a taxa fixa bancária de R$ 1,00 por transação PIX exigida pelo banco.</p>
-
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">4. Prêmios Iscas:</h3>
               <p>A Plataforma adiciona prêmios impossíveis/iscas (R$ 100 PIX e Encontro Presencial). Caso o cliente ganhe o PIX, a plataforma pagará do próprio bolso. Caso ganhe o Encontro, ele será convertido em um Pack Digital Premium por questões de segurança.</p>
-
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">5. Indique e Ganhe:</h3>
               <p>Durante os 3 primeiros meses de operação de uma modelo indicada por você, você receberá <strong>5%</strong> sobre o faturamento gerado por ela na plataforma, como um bônus vitalício pelo recrutamento (O bônus sai da parte da plataforma, não afeta os 70% dela).</p>
             </div>
@@ -280,7 +261,6 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* PAINEL NORMAL */}
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
@@ -294,23 +274,16 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* 🚀 O NOVO BOTÃO DE INDICAÇÃO INTELIGENTE */}
-        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex items-center justify-between shadow-2xl">
-          <div className="flex items-center gap-4">
+        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
+          <div className="flex items-center gap-4 w-full">
             <div className="h-10 w-10 bg-amber-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.5)]"><Gift size={20}/></div>
             <div>
               <h2 className="text-xs font-black uppercase text-amber-500">Bônus de Indicação!</h2>
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Indique amigas e ganhe <strong className="text-amber-400">5% das vendas delas</strong> por 3 meses.</p>
             </div>
           </div>
-          <button 
-            onClick={() => {
-              navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`);
-              alert("Texto e link exclusivos copiados! Mande para a sua amiga no WhatsApp.");
-            }} 
-            className="hidden sm:block bg-amber-500 text-black text-[9px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all"
-          >
-            Copiar Link de Indicação
+          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga."); }} className="w-full sm:w-auto bg-amber-500 text-black text-[10px] font-black uppercase px-6 py-4 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">
+            Copiar Link 
           </button>
         </div>
 
@@ -331,13 +304,9 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "prizes" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Roleta</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "players" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Jogadores</button>
           <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Entregas</button>
-          
-          {showRankTab && (
-            <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-[#FFD700]/20 text-[#FFD700] shadow-lg shadow-[#FFD700]/10 border border-[#FFD700]/30" : "text-white/30"}`}><Trophy size={12} className="inline mr-1" /> Desafios</button>
-          )}
+          {showRankTab && <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-[#FFD700]/20 text-[#FFD700] shadow-lg shadow-[#FFD700]/10 border border-[#FFD700]/30" : "text-white/30"}`}><Trophy size={12} className="inline mr-1" /> Desafios</button>}
         </div>
 
-        {/* ABA 1: FINANCEIRO */}
         {activeTab === "finance" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -345,48 +314,31 @@ function DashboardContent() {
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (70%)</h2>
                 <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Pronto para saque na sua conta.</p>
-                <div className="text-5xl font-black text-white mb-8 tracking-tighter">
-                  {modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </div>
+                <div className="text-5xl font-black text-white mb-8 tracking-tighter">{modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl mb-6">
                   <p className="text-[10px] text-emerald-400 font-bold uppercase text-center leading-relaxed tracking-widest">⚠️ Mínimo de saque: R$ 20,00.</p>
                   <p className="text-[8px] text-emerald-500/60 font-bold uppercase text-center mt-1">Taxa bancária: R$ 1,00 por transação.</p>
                 </div>
-                <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">
-                  {isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}
-                </button>
+                <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">{isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}</button>
               </div>
-
               <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col justify-center">
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Calendar size={120} className="text-[#FFD700]" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Lucro Acumulado</h2>
                 <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Total de comissões ganhas (6 meses).</p>
-                <div className="text-5xl font-black text-white tracking-tighter">
-                  {accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </div>
+                <div className="text-5xl font-black text-white tracking-tighter">{accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
               </div>
-
               <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl col-span-1 md:col-span-2">
                 <h2 className="text-xs font-black uppercase mb-4 text-[#FF1493] tracking-widest flex items-center gap-2"><DollarSign size={16}/> Suas Chaves PIX</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label>
-                    <input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="CPF, Celular, E-mail..." />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Secundária (Opcional)</label>
-                    <input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="Chave reserva" />
-                  </div>
+                  <div><label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label><input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="CPF, Celular, E-mail..." /></div>
+                  <div><label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Secundária (Opcional)</label><input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="Chave reserva" /></div>
                 </div>
-                <button onClick={handleSavePix} disabled={savingPix} className="w-full md:w-auto bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-xl transition-all active:scale-95">
-                  {savingPix ? "Salvando..." : "Salvar Minhas Chaves PIX"}
-                </button>
+                <button onClick={handleSavePix} disabled={savingPix} className="w-full md:w-auto bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-xl transition-all active:scale-95">{savingPix ? "Salvando..." : "Salvar Minhas Chaves PIX"}</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ABA 2: ROLETA E PRÊMIOS */}
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
@@ -404,7 +356,9 @@ function DashboardContent() {
                <div className="flex justify-between items-center mb-6"><h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2></div>
                <div className="grid gap-3">
                 {prizes.map((p, index) => {
-                  const isFakePrize = p.weight <= 0.05; 
+                  const upperName = p.name.toUpperCase();
+                  // TRAVA ABSOLUTA: Se tiver peso baixo OU a palavra PIX / PRESENCIAL
+                  const isFakePrize = p.weight <= 0.05 || upperName.includes("PIX") || upperName.includes("PRESENCIAL"); 
                   return (
                     <div key={p.id} className={`flex items-center justify-between p-5 rounded-2xl transition-all text-left border ${isFakePrize ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80 cursor-not-allowed' : 'bg-black/40 border-white/5 hover:border-[#FF1493]/30'}`}>
                       <div className="flex items-center gap-4">
@@ -431,10 +385,8 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ABA 3: JOGADORES */}
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
         
-        {/* ABA 4: ENTREGAS */}
         {activeTab === "history" && (
           <div className="grid gap-3 animate-in fade-in duration-500">
             {history.filter(h => h.model_id === modelId).map((h, i) => (
@@ -450,7 +402,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ABA 5: RANKING */}
         {showRankTab && activeTab === "ranking" && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="text-center py-6">
@@ -491,7 +442,6 @@ function DashboardContent() {
 
       </div>
 
-      {/* MODAL DE EDIÇÃO DO PRÊMIO */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveEditPrize} className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -515,8 +465,8 @@ function DashboardContent() {
                 <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Como o cliente vai receber?</label>
                 <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value, delivery_value: ''})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FFD700]">
                   <option value="whatsapp">💬 Manual (Chamar Suporte)</option>
-                  <option value="link">🔗 Link Digital (Google Drive, Mega...)</option>
-                  <option value="credit">💰 Créditos Automáticos (Para jogar mais)</option>
+                  <option value="link">🔗 Link Digital (Google Drive...)</option>
+                  <option value="credit">💰 Créditos Automáticos (Jogar mais)</option>
                 </select>
               </div>
 
