@@ -86,32 +86,44 @@ export default function GamePage() {
     async function fetchData() {
       if (!slug || !supabaseUrl) return;
       try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
+        
+        // 1. Pega o ID da modelo primeiro (rápido)
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers, cache: "no-store" });
         const dataMod = await resMod.json();
-        if (!dataMod[0]) return;
+        if (!dataMod[0]) { setLoading(false); return; }
         const mId = dataMod[0].id;
         setModelId(mId);
 
-        const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" });
-        const dataPrizes = await resPrizes.json();
+        const savedPlayerName = localStorage.getItem(`player_${slug}`);
+
+        // 2. Busca Prêmios, Configs e o Jogador TODOS AO MESMO TEMPO (Mágica da velocidade)
+        const fetchPromises = [
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }),
+          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" })
+        ];
+
+        if (savedPlayerName) {
+          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${savedPlayerName}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }));
+        }
+
+        const responses = await Promise.all(fetchPromises);
+        
+        const dataPrizes = await responses[0].json();
         setPrizes(dataPrizes);
 
-        const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" });
-        const dataConfig = await resConfig.json();
+        const dataConfig = await responses[1].json();
         if (dataConfig[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
           setSpinCost(dataConfig[0].spin_cost || 2);
         }
 
-        const savedPlayerName = localStorage.getItem(`player_${slug}`);
-        if (savedPlayerName) {
-           const resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${savedPlayerName}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" });
-           const dataPlayer = await resPlayer.json();
+        if (savedPlayerName && responses[2]) {
+           const dataPlayer = await responses[2].json();
            if (dataPlayer[0]) setPlayer(dataPlayer[0]);
         }
-      } catch (error) { } finally { setLoading(false); }
+      } catch (error) { console.error("Erro ao carregar jogo:", error); } finally { setLoading(false); }
     }
     fetchData();
     if (typeof window !== "undefined") {
