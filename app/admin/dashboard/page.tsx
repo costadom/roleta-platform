@@ -51,6 +51,7 @@ function DashboardContent() {
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -63,21 +64,39 @@ function DashboardContent() {
 
   const loadData = async () => {
     if (!modelId) return;
+    setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
-      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers, cache: 'no-store' });
-      const dataGlob = await resGlob.json();
-      if (Array.isArray(dataGlob) && dataGlob[0]) {
+      // MAGIA DA VELOCIDADE: Promise.all dispara todos os pedidos ao mesmo tempo!
+      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resHistory, resAllMod, resPlayers] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers, cache: 'no-store' }),
+        fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&select=id`, { headers, cache: 'no-store' })
+      ]);
+
+      const [dataGlob, dataModel, dataNotif, dataTrans, dataPrizes, dataConfig, dataHistory, allModData, dataPlayers] = await Promise.all([
+        resGlob.ok ? resGlob.json() : [], resModel.ok ? resModel.json() : [], resNotif.ok ? resNotif.json() : [], 
+        resTrans.ok ? resTrans.json() : [], resPrizes.ok ? resPrizes.json() : [], resConfig.ok ? resConfig.json() : [], 
+        resHistory.ok ? resHistory.json() : [], resAllMod.ok ? resAllMod.json() : [], resPlayers.ok ? resPlayers.json() : []
+      ]);
+
+      if (dataGlob[0]) {
         setGlobalAnnouncement(dataGlob[0].announcement_msg);
         setShowRankTab(dataGlob[0].ranking_visible === true || dataGlob[0].ranking_visible === "true");
         setMetaValue(dataGlob[0].goal_amount);
         setMetaPrize(dataGlob[0].goal_reward);
       }
 
-      const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers, cache: 'no-store' });
-      const dataModel = await resModel.json();
-      if (dataModel && dataModel[0]) {
+      if (dataModel[0]) {
         setModelBalance(dataModel[0].balance || 0);
         setLastWithdrawal(dataModel[0].last_withdrawal);
         setPixKey1(dataModel[0].pix_key_1 || "");
@@ -85,40 +104,25 @@ function DashboardContent() {
         setTermsAccepted(dataModel[0].terms_accepted === true);
       }
 
-      const resNotif = await fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' });
-      const dataNotif = await resNotif.json();
       if (Array.isArray(dataNotif)) setNotifications(dataNotif);
 
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      const resTrans = await fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers, cache: 'no-store' });
-      const dataTrans = await resTrans.json();
       if (Array.isArray(dataTrans)) {
-        const total = dataTrans.reduce((acc, curr) => acc + (Number(curr.model_cut) || 0), 0);
-        setAccumulatedEarnings(total);
+        setAccumulatedEarnings(dataTrans.reduce((acc, curr) => acc + (Number(curr.model_cut) || 0), 0));
       }
       
-      // Busca prêmios já trazendo as novas colunas
-      const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
-      const dataPrizes = await resPrizes.json();
       if (Array.isArray(dataPrizes)) setPrizes(dataPrizes.sort((a: any, b: any) => b.weight - a.weight));
       
-      const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
-      const dataConfig = await resConfig.json();
-      if (Array.isArray(dataConfig) && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setSpinCost(dataConfig[0].spin_cost || 2); }
+      if (dataConfig[0]) { 
+        setCurrentBg(dataConfig[0].bg_url); 
+        setModelName(dataConfig[0].model_name || ""); 
+        setSpinCost(dataConfig[0].spin_cost || 2); 
+      }
       
-      const resHistory = await fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
-      const dataHistory = await resHistory.json();
       if (Array.isArray(dataHistory)) setHistory(dataHistory);
-      
-      const resAllMod = await fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers, cache: 'no-store' });
-      const allModData = await resAllMod.json();
-      setAllModels(Array.isArray(allModData) ? allModData : []);
-      
-      const resPlayers = await fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&select=id`, { headers, cache: 'no-store' });
-      const dataPlayers = await resPlayers.json();
+      if (Array.isArray(allModData)) setAllModels(allModData);
       if (Array.isArray(dataPlayers)) setPlayersCount(dataPlayers.length);
-    } catch (err) { console.error("Erro na leitura:", err); }
+
+    } catch (err) { console.error("Erro na leitura rápida:", err); } finally { setDashboardLoading(false); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
@@ -181,23 +185,30 @@ function DashboardContent() {
     setCurrentBg(publicUrl); setSelectedFile(null); setPreviewUrl(null); setUploading(false); alert("Fundo Atualizado!");
   };
 
+  // ✅ ATUALIZAÇÃO OTIMISTA: SALVA NA TELA INSTANTANEAMENTE
   const handleSaveEditPrize = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { 
+    
+    const payload = { 
+      name: editingPrize.name, 
+      shortLabel: editingPrize.name, 
+      weight: Number(editingPrize.weight), 
+      color: editingPrize.color, 
+      delivery_type: editingPrize.delivery_type || 'whatsapp',
+      delivery_value: editingPrize.delivery_value || null,
+      updatedAt: new Date().toISOString() 
+    };
+
+    // Altera a tela antes do banco terminar (Super rápido)
+    setPrizes(prev => prev.map(p => p.id === editingPrize.id ? { ...p, ...payload } : p));
+    setEditingPrize(null); 
+
+    // Salva silenciosamente no fundo
+    fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { 
       method: "PATCH", 
       headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-      body: JSON.stringify({ 
-        name: editingPrize.name, 
-        shortLabel: editingPrize.name, 
-        weight: Number(editingPrize.weight), 
-        color: editingPrize.color, 
-        delivery_type: editingPrize.delivery_type || 'whatsapp', // Salva o tipo
-        delivery_value: editingPrize.delivery_value || null,     // Salva o link ou os créditos
-        updatedAt: new Date().toISOString() 
-      }) 
-    });
-    setEditingPrize(null); 
-    loadData();
+      body: JSON.stringify(payload) 
+    }).catch(err => console.error("Erro ao salvar no banco:", err));
   };
 
   const handleWithdraw = async () => {
@@ -244,6 +255,13 @@ function DashboardContent() {
   };
 
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
+
+  if (dashboardLoading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-sans">
+      <Loader2 className="animate-spin text-[#FF1493] mb-4" size={40}/>
+      <h1 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 animate-pulse">Sincronizando Sistema...</h1>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans relative">
@@ -479,7 +497,7 @@ function DashboardContent() {
 
       </div>
 
-      {/* MODAL DE EDIÇÃO DO PRÊMIO (COM TIPO DE ENTREGA) */}
+      {/* MODAL DE EDIÇÃO DO PRÊMIO */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveEditPrize} className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
