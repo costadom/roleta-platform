@@ -57,13 +57,11 @@ export default function SuperAdmin() {
         setGoalReward(dataGlob[0].goal_reward);
       }
 
-      // Busca Transações (Últimos 6 Meses)
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const resTrans = await fetch(`${supabaseUrl}/rest/v1/Transactions?created_at=gte.${sixMonthsAgo.toISOString()}&select=*`, { headers, cache: 'no-store' });
       setTransactions(await resTrans.json() || []);
 
-      // Busca Pedidos de Saque
       const resWith = await fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
       setWithdrawals(await resWith.json() || []);
 
@@ -118,9 +116,9 @@ export default function SuperAdmin() {
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
         method: "PATCH",
         headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ status: 'pago' })
+        body: JSON.stringify({ status: 'pago', is_read: false }) // Notifica ela
       });
-      alert('Saque marcado como PAGO! A modelo poderá ver no histórico dela (em breve).');
+      alert('Saque marcado como PAGO! A modelo será notificada no painel dela.');
       fetchData();
     } catch (err) {
       alert("Erro ao aprovar saque.");
@@ -166,7 +164,6 @@ export default function SuperAdmin() {
     return models.map(m => ({ ...m, score: counts[m.id] || 0 })).sort((a, b) => b.score - a.score);
   }, [models, history]);
 
-  // MATEMÁTICA FINANCEIRA DO LIVRO CAIXA
   const financialData = useMemo(() => {
     let totalSales = 0;
     let totalPlatform = 0;
@@ -207,7 +204,6 @@ export default function SuperAdmin() {
     <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
       <div className="max-w-7xl mx-auto">
         
-        {/* HEADER */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
           <div>
             <h1 className="text-4xl font-black text-[#FF1493] uppercase italic drop-shadow-[0_0_15px_rgba(255,20,147,0.3)]">Savanah Labz</h1>
@@ -219,7 +215,7 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* ALERTA DE SAQUES PENDENTES */}
+        {/* ALERTA DE SAQUES PENDENTES COM CHAVE PIX */}
         {pendingWithdrawals.length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Solicitações de Saque (PIX)</h2>
@@ -227,14 +223,22 @@ export default function SuperAdmin() {
               {pendingWithdrawals.map(w => {
                 const model = models.find(m => m.id === w.model_id);
                 return (
-                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex justify-between items-center">
-                    <div>
-                      <p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug || 'Desconhecida'}</p>
-                      <p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p>
+                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug || 'Desconhecida'}</p>
+                        <p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p>
+                      </div>
+                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id)} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1">
+                        <CheckCircle2 size={14}/> Pagar
+                      </button>
                     </div>
-                    <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id)} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1">
-                      <CheckCircle2 size={14}/> Pagar
-                    </button>
+                    {/* EXIBIÇÃO DAS CHAVES PIX PARA O MASTER PAGAR */}
+                    <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                      <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves Cadastradas:</p>
+                      <p className="text-[10px] font-mono text-emerald-400 break-all mb-1">1: {model?.pix_key_1 || 'Não cadastrada'}</p>
+                      <p className="text-[10px] font-mono text-white/50 break-all">2: {model?.pix_key_2 || 'Não cadastrada'}</p>
+                    </div>
                   </div>
                 )
               })}
@@ -242,7 +246,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* ESTATÍSTICAS FINANCEIRAS (LIVRO CAIXA) */}
         <div className="mb-12">
           <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Livro Caixa (Últimos 6 Meses)</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -264,8 +267,6 @@ export default function SuperAdmin() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* COLUNA ESQUERDA: UNIDADES ATIVAS E FATURAMENTO */}
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -291,10 +292,7 @@ export default function SuperAdmin() {
             </div>
           </div>
 
-          {/* COLUNA DIREITA: COMANDOS GLOBAIS E RANKING */}
           <div className="space-y-8">
-            
-            {/* AVISOS GLOBAIS */}
             <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
                <div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div>
                <h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2>
@@ -304,7 +302,6 @@ export default function SuperAdmin() {
                </button>
             </div>
 
-            {/* METAS E VISIBILIDADE DO RANKING */}
             <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
                <div className="absolute top-0 right-0 p-6 opacity-5"><Trophy size={60}/></div>
                <h2 className="text-xs font-black uppercase text-[#FFD700] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Trophy size={14}/> Metas & Ranking</h2>
@@ -325,7 +322,6 @@ export default function SuperAdmin() {
                <button onClick={() => handleSaveGlobal()} className="w-full bg-[#FFD700] text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg shadow-[#FFD700]/20 active:scale-95 transition-all relative z-10">ATUALIZAR REGRAS</button>
             </div>
 
-            {/* TOP 3 RANKING DE GIROS */}
             <div className="bg-white/5 border border-white/5 p-6 rounded-[2.5rem]">
                <h3 className="text-[9px] font-black uppercase text-white/30 mb-4 tracking-widest flex items-center gap-2"><Crown size={12} className="text-[#FFD700]"/> Top 3 Faturamento</h3>
                <div className="space-y-3">
@@ -345,7 +341,6 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* MODAL NOVA FRANQUIA */}
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <form onSubmit={handleCreate} className="bg-[#0a0a0a] border border-white/10 p-12 rounded-[4rem] w-full max-w-md shadow-2xl">
