@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText } from "lucide-react";
 import { PlayersManager } from "./players";
 
 function DashboardContent() {
@@ -14,6 +14,10 @@ function DashboardContent() {
   const [isMounted, setIsMounted] = useState(false);
   const [modelUrl, setModelUrl] = useState("");
   const [isSuper, setIsSuper] = useState(false);
+
+  // Termos de Uso
+  const [termsAccepted, setTermsAccepted] = useState(true); // Começa true para não piscar na tela
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
 
   const [globalAnnouncement, setGlobalAnnouncement] = useState("");
   const [showRankTab, setShowRankTab] = useState(false); 
@@ -71,13 +75,14 @@ function DashboardContent() {
         setMetaPrize(dataGlob[0].goal_reward);
       }
 
-      const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2`, { headers, cache: 'no-store' });
+      const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers, cache: 'no-store' });
       const dataModel = await resModel.json();
       if (dataModel && dataModel[0]) {
         setModelBalance(dataModel[0].balance || 0);
         setLastWithdrawal(dataModel[0].last_withdrawal);
         setPixKey1(dataModel[0].pix_key_1 || "");
         setPixKey2(dataModel[0].pix_key_2 || "");
+        setTermsAccepted(dataModel[0].terms_accepted === true);
       }
 
       const resNotif = await fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' });
@@ -129,6 +134,22 @@ function DashboardContent() {
   }, [allModels, history]);
 
   const handleLogout = () => { localStorage.clear(); router.push('/admin'); };
+
+  const handleAcceptTerms = async () => {
+    setAcceptingTerms(true);
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { 
+        method: "PATCH", 
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+        body: JSON.stringify({ terms_accepted: true }) 
+      });
+      setTermsAccepted(true);
+    } catch (err) {
+      alert("Erro ao aceitar termos. Tente novamente.");
+    } finally {
+      setAcceptingTerms(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -211,7 +232,55 @@ function DashboardContent() {
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans relative">
+      
+      {/* TELA DE BLOQUEIO: CONTRATO */}
+      {!termsAccepted && !isSuper && (
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+          <div className="bg-[#0f0f0f] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center gap-3 mb-6 shrink-0">
+              <div className="h-12 w-12 bg-[#FF1493]/20 text-[#FF1493] rounded-full flex items-center justify-center border border-[#FF1493]/30"><FileText size={24}/></div>
+              <div>
+                <h2 className="text-xl font-black uppercase text-white italic">Termos de Parceria</h2>
+                <p className="text-[10px] text-white/50 uppercase font-black tracking-widest">Savanah Labz</p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-4 space-y-4 text-[11px] text-white/70 leading-relaxed mb-8 scrollbar-thin scrollbar-thumb-white/10">
+              <p>Bem-vinda à <strong>LabzSexy Roll (Savanah Labz)</strong>. Este termo garante a sua segurança, seus direitos autorais e a transparência total dos seus ganhos. Ao clicar em "Aceitar", firmamos nossa parceria exclusiva.</p>
+              
+              <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">1. O Formato do Negócio (Gamificação):</h3>
+              <p>A Plataforma fornece a tecnologia de uma "Roleta Sexy" personalizada. O seu público comprará Créditos (CR) para girar a roleta e concorrer aos seus conteúdos digitais. O cliente não compra o conteúdo diretamente, ele compra a experiência do jogo.</p>
+              
+              <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">2. Seus Direitos e Conteúdos:</h3>
+              <p>Você é a ÚNICA e exclusiva dona de todo o seu conteúdo (fotos, vídeos, áudios). Você apenas nos concede a licença para distribuir os materiais selecionados <strong>exclusivamente como premiação</strong> na sua roleta. O sigilo do seu número de telefone pessoal é garantido; a nossa Central de Suporte fará a entrega dos prêmios aos ganhadores.</p>
+              
+              <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">3. Divisão de Lucros (O Repasse):</h3>
+              <p>A parceria é estruturada na divisão de lucros de <strong>70% para a Modelo e 30% para a Plataforma</strong>. Os 30% da Plataforma cobrem toda a tecnologia, servidores, gateway de pagamento e suporte ao cliente. Você não paga nenhuma taxa fixa mensal.</p>
+
+              <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">4. Saques e Pagamentos:</h3>
+              <p>Os seus lucros (70%) ficam disponíveis em tempo real no seu Painel de Gestão. Você tem o direito de solicitar <strong>1 (um) saque por dia</strong>. A Plataforma se compromete a transferir o valor para a sua chave PIX cadastrada no prazo máximo de 1 hora após a solicitação.</p>
+
+              <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">5. Prêmios Especiais (Iscas da Plataforma):</h3>
+              <p>Para aumentar as suas vendas, a Plataforma adiciona automaticamente prêmios de alto valor à sua roleta (ex: "R$ 100 no PIX" e "Encontro Presencial"), com chances matemáticas mínimas de ganho (0.02%). <strong>Fica acordado que:</strong></p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Caso o cliente ganhe prêmios em dinheiro, a Plataforma arcará com 100% do valor (não será descontado do seu lucro).</li>
+                <li>Caso o cliente ganhe o "Encontro", o suporte da Plataforma fará a negociação e substituição do prêmio por um super kit digital, garantindo sua segurança física e isenção de compromisso presencial.</li>
+              </ul>
+
+              <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">6. Rescisão:</h3>
+              <p>Você é livre. Pode cancelar a parceria, excluir sua roleta e solicitar a remoção dos seus dados a qualquer momento, recebendo o saldo remanescente em conta.</p>
+            </div>
+
+            <button onClick={handleAcceptTerms} disabled={acceptingTerms} className="w-full shrink-0 bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-[0_0_20px_rgba(255,20,147,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+              {acceptingTerms ? <Loader2 className="animate-spin" size={18}/> : <><CheckCircle2 size={18} /> Eu Li e Aceito os Termos</>}
+            </button>
+            <p className="text-center mt-4 text-[9px] font-bold text-white/30 uppercase tracking-widest">Ao aceitar, você libera seu painel de gestão instantaneamente.</p>
+          </div>
+        </div>
+      )}
+
+      {/* PAINEL NORMAL (Fica atrás do modal se não tiver aceitado) */}
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
