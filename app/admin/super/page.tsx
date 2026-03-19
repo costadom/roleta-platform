@@ -18,7 +18,6 @@ export default function SuperAdmin() {
   
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  // NOVO: Campo de indicação
   const [newModel, setNewModel] = useState({ slug: "", email: "", password: "", referred_by: "" });
 
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
@@ -87,7 +86,7 @@ export default function SuperAdmin() {
       
       await fetch(`${supabaseUrl}/rest/v1/Models?id=not.is.null`, { 
         method: 'PATCH', headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ balance: 0, terms_accepted: false }) // Resetamos os termos aqui tbm!
+        body: JSON.stringify({ balance: 0, terms_accepted: false }) 
       });
 
       alert("Sistema Restaurado! O financeiro foi limpo para o lançamento oficial.");
@@ -177,7 +176,7 @@ export default function SuperAdmin() {
           slug: newModel.slug.toLowerCase().replace(/\s/g, ''), 
           email: newModel.email, 
           password: newModel.password, 
-          referred_by: newModel.referred_by || null, // O ID de quem indicou!
+          referred_by: newModel.referred_by || null,
           created_at: now 
         }),
       });
