@@ -6,62 +6,54 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
-  console.log("🚨 ALARME ESPIÃO: A PushinPay bateu na porta!");
-  
   try {
-    // 1. Lendo TUDO como texto puro (A Mágica Anti-Erro que evita o Fatal Error)
     const rawText = await req.text();
-    console.log("📦 CORPO BRUTO RECEBIDO:", rawText);
-
-    const signature = req.headers.get('x-pushinpay-token');
     
-    // 2. Tradutor: Transforma o texto bagunçado da PushinPay em algo que o site entenda
+    // PEGANDO O ID DIRETO DO ENDEREÇO DA URL (O Truque)
+    const { searchParams } = new URL(req.url);
+    const userIdDaUrl = searchParams.get('userId');
+
     let body: any = {};
     try {
       body = JSON.parse(rawText);
     } catch (e) {
-      console.log("⚠️ A PushinPay não mandou JSON. Traduzindo o texto bruto...");
       const params = new URLSearchParams(rawText);
       body = Object.fromEntries(params.entries());
     }
 
-    console.log("🧩 DADOS TRADUZIDOS COM SUCESSO:", JSON.stringify(body, null, 2));
-
-    // 3. Regra do Depósito
     if (body.status === 'paid' || body.status === 'PAID') {
-      const userId = body.external_id; 
-      const amountPaid = Number(body.value) / 100; 
+      // Usa o ID da URL se a PushinPay não mandar no corpo
+      const userId = userIdDaUrl || body.external_id; 
       
-      console.log(`✅ PIX PAGO CONFIRMADO! Fã: ${userId} | Valor: ${amountPaid}`);
+      if (!userId || userId === 'undefined') {
+         throw new Error("O ID do fã sumiu completamente!");
+      }
 
-      // Buscando saldo atual
+      const amountPaid = Number(body.value) / 100;
+      console.log(`✅ PIX PAGO! Fã: ${userId} | Valor: ${amountPaid}`);
+
       const { data: userData, error: fetchError } = await supabase
-        .from('Players') 
-        .select('credits') 
+        .from('Players')
+        .select('credits')
         .eq('id', userId)
         .single();
 
       if (fetchError) {
-        console.error("❌ ERRO NO SUPABASE:", fetchError);
         throw new Error("Erro ao buscar jogador.");
       }
 
       const novoSaldo = (userData?.credits || 0) + amountPaid;
 
-      // Salvando novo saldo
       const { error: updateError } = await supabase
         .from('Players')
-        .update({ credits: novoSaldo }) 
+        .update({ credits: novoSaldo })
         .eq('id', userId);
 
       if (updateError) {
-        console.error("❌ ERRO AO SALVAR NO SUPABASE:", updateError);
-        throw new Error("Erro ao salvar créditos.");
+        throw new Error("Erro ao salvar créditos no banco.");
       }
 
-      console.log(`💰 SUCESSO! Saldo do usuário atualizado para: ${novoSaldo}`);
-    } else {
-      console.log(`⚠️ Aviso recebido, mas o status não é 'paid'. Status: ${body.status}`);
+      console.log(`💰 SUCESSO! Saldo atualizado para: ${novoSaldo}`);
     }
 
     return NextResponse.json({ status: 'ok' });
