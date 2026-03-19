@@ -32,6 +32,11 @@ function DashboardContent() {
   const [lastWithdrawal, setLastWithdrawal] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
+  
+  // Chaves PIX da Modelo para Saque
+  const [pixKey1, setPixKey1] = useState("");
+  const [pixKey2, setPixKey2] = useState("");
+  const [savingPix, setSavingPix] = useState(false);
 
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -40,9 +45,6 @@ function DashboardContent() {
 
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
-  const [pix10, setPix10] = useState("");
-  const [pix20, setPix20] = useState("");
-  const [pix50, setPix50] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -68,14 +70,15 @@ function DashboardContent() {
         setMetaPrize(dataGlob[0].goal_reward);
       }
 
-      const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal`, { headers, cache: 'no-store' });
+      const resModel = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2`, { headers, cache: 'no-store' });
       const dataModel = await resModel.json();
       if (dataModel && dataModel[0]) {
         setModelBalance(dataModel[0].balance || 0);
         setLastWithdrawal(dataModel[0].last_withdrawal);
+        setPixKey1(dataModel[0].pix_key_1 || "");
+        setPixKey2(dataModel[0].pix_key_2 || "");
       }
 
-      // Calcula o acumulado dos últimos 6 meses (70% dela)
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const resTrans = await fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers, cache: 'no-store' });
@@ -91,7 +94,7 @@ function DashboardContent() {
       
       const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
       const dataConfig = await resConfig.json();
-      if (Array.isArray(dataConfig) && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setSpinCost(dataConfig[0].spin_cost || 2); setPix10(dataConfig[0].pix_10 || ""); setPix20(dataConfig[0].pix_20 || ""); setPix50(dataConfig[0].pix_50 || ""); }
+      if (Array.isArray(dataConfig) && dataConfig[0]) { setCurrentBg(dataConfig[0].bg_url); setModelName(dataConfig[0].model_name || ""); setSpinCost(dataConfig[0].spin_cost || 2); }
       
       const resHistory = await fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
       const dataHistory = await resHistory.json();
@@ -115,8 +118,14 @@ function DashboardContent() {
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
-    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName, spin_cost: spinCost, pix_10: pix10, pix_20: pix20, pix_50: pix50 }) });
+    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName, spin_cost: spinCost }) });
     setSavingSettings(false); alert("Painel Atualizado!");
+  };
+
+  const handleSavePix = async () => {
+    setSavingPix(true);
+    await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ pix_key_1: pixKey1, pix_key_2: pixKey2 }) });
+    setSavingPix(false); alert("Chaves PIX salvas com sucesso!");
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,6 +153,7 @@ function DashboardContent() {
 
   const handleWithdraw = async () => {
     if (modelBalance <= 0) return alert("Você não possui saldo disponível para saque no momento.");
+    if (!pixKey1) return alert("Por favor, cadastre pelo menos a sua Chave PIX Principal antes de solicitar o saque.");
     if (lastWithdrawal) {
       const lastDate = new Date(lastWithdrawal).toDateString();
       const today = new Date().toDateString();
@@ -209,7 +219,6 @@ function DashboardContent() {
         {activeTab === "finance" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Saldo Disponível */}
               <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (Seus 70%)</h2>
@@ -228,7 +237,6 @@ function DashboardContent() {
                 </button>
               </div>
 
-              {/* Acumulado (Últimos 6 Meses) */}
               <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col justify-center">
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Calendar size={120} className="text-[#FFD700]" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Lucro Acumulado</h2>
@@ -236,6 +244,26 @@ function DashboardContent() {
                 <div className="text-5xl font-black text-white tracking-tighter">
                   {accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </div>
+              </div>
+
+              {/* NOVA ÁREA: CHAVES PIX PARA RECEBIMENTO */}
+              <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl col-span-1 md:col-span-2">
+                <h2 className="text-xs font-black uppercase mb-4 text-[#FF1493] tracking-widest flex items-center gap-2"><DollarSign size={16}/> Suas Chaves PIX (Para Saques)</h2>
+                <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest">Cadastre onde você deseja receber seus lucros da Savanah Labz.</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label>
+                    <input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="CPF, Celular, E-mail ou Aleatória" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Secundária (Opcional)</label>
+                    <input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="Chave reserva caso a primeira falhe" />
+                  </div>
+                </div>
+                <button onClick={handleSavePix} disabled={savingPix} className="w-full md:w-auto bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-xl transition-all active:scale-95">
+                  {savingPix ? "Salvando..." : "Salvar Minhas Chaves PIX"}
+                </button>
               </div>
             </div>
           </div>
@@ -249,19 +277,16 @@ function DashboardContent() {
             </div>
 
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-left shadow-xl">
-              <h2 className="text-xs font-black uppercase mb-6 flex items-center gap-2 text-[#FF1493] tracking-widest"><DollarSign size={14} /> Dados do Sistema</h2>
+              <h2 className="text-xs font-black uppercase mb-6 flex items-center gap-2 text-[#FF1493] tracking-widest"><DollarSign size={14} /> Dados da Roleta</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">Nome na Roleta</label><input type="text" value={modelName} onChange={e => setModelName(e.target.value)} className="bg-transparent text-lg font-black outline-none text-[#FFD700] w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">Custo Giro</label><input type="number" value={spinCost} onChange={e => setSpinCost(Number(e.target.value))} className="bg-transparent text-lg font-black outline-none text-white w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 10 (Sua Chave)</label><input type="text" value={pix10} onChange={e => setPix10(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 20 (Sua Chave)</label><input type="text" value={pix20} onChange={e => setPix20(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">PIX R$ 50 (Sua Chave)</label><input type="text" value={pix50} onChange={e => setPix50(e.target.value)} className="bg-transparent text-[10px] font-mono outline-none text-white/60 w-full" /></div>
+                <div className="bg-black/40 p-4 rounded-2xl border border-white/5"><label className="text-[9px] uppercase font-black text-white/40 block mb-1">Custo Giro (Em CR)</label><input type="number" value={spinCost} onChange={e => setSpinCost(Number(e.target.value))} className="bg-transparent text-lg font-black outline-none text-white w-full" /></div>
               </div>
-              <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase shadow-xl hover:scale-[1.01] transition-all">SALVAR TUDO</button>
+              <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase shadow-xl hover:scale-[1.01] transition-all">SALVAR DADOS</button>
             </div>
 
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl">
-               <div className="flex justify-between items-center mb-6"><h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2><span className={`text-[10px] font-black ${totalChance === 100 ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>{totalChance.toFixed(2)}% / 100%</span></div>
+               <div className="flex justify-between items-center mb-6"><h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2><span className={`text-[10px] font-black ${Math.abs(totalChance - 100) < 0.05 ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>{totalChance.toFixed(2)}% / 100%</span></div>
                <div className="grid gap-3">
                 {prizes.map((p) => (
                   <div key={p.id} className="flex items-center justify-between bg-black/40 border border-white/5 p-5 rounded-2xl hover:border-[#FF1493]/30 transition-all text-left">
@@ -317,4 +342,3 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
-
