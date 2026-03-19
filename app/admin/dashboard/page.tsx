@@ -27,7 +27,6 @@ function DashboardContent() {
   const [prizes, setPrizes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [allModels, setAllModels] = useState<any[]>([]);
-  const [playersCount, setPlayersCount] = useState(0);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
 
   const [modelBalance, setModelBalance] = useState<number>(0);
@@ -43,7 +42,6 @@ function DashboardContent() {
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
@@ -68,7 +66,7 @@ function DashboardContent() {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
-      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resHistory, resAllMod, resPlayers] = await Promise.all([
+      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resHistory, resAllMod] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers, cache: 'no-store' }),
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers, cache: 'no-store' }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' }),
@@ -76,14 +74,13 @@ function DashboardContent() {
         fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' }),
         fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' }),
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers, cache: 'no-store' }),
-        fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&select=id`, { headers, cache: 'no-store' })
+        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers, cache: 'no-store' })
       ]);
 
-      const [dataGlob, dataModel, dataNotif, dataTrans, dataPrizes, dataConfig, dataHistory, allModData, dataPlayers] = await Promise.all([
+      const [dataGlob, dataModel, dataNotif, dataTrans, dataPrizes, dataConfig, dataHistory, allModData] = await Promise.all([
         resGlob.ok ? resGlob.json() : [], resModel.ok ? resModel.json() : [], resNotif.ok ? resNotif.json() : [], 
         resTrans.ok ? resTrans.json() : [], resPrizes.ok ? resPrizes.json() : [], resConfig.ok ? resConfig.json() : [], 
-        resHistory.ok ? resHistory.json() : [], resAllMod.ok ? resAllMod.json() : [], resPlayers.ok ? resPlayers.json() : []
+        resHistory.ok ? resHistory.json() : [], resAllMod.ok ? resAllMod.json() : []
       ]);
 
       if (dataGlob[0]) {
@@ -116,7 +113,6 @@ function DashboardContent() {
       
       if (Array.isArray(dataHistory)) setHistory(dataHistory);
       if (Array.isArray(allModData)) setAllModels(allModData);
-      if (Array.isArray(dataPlayers)) setPlayersCount(dataPlayers.length);
 
     } catch (err) { console.error("Erro:", err); } finally { setDashboardLoading(false); }
   };
@@ -164,12 +160,11 @@ function DashboardContent() {
 
   const handleSaveImage = async () => {
     if (!selectedFile) return;
-    setUploading(true);
     const fileName = `bg_${modelId}_${Date.now()}.jpeg`;
     await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "image/jpeg" }, body: selectedFile });
     const publicUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
     await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: publicUrl }) });
-    setCurrentBg(publicUrl); setSelectedFile(null); setPreviewUrl(null); setUploading(false); alert("Fundo Atualizado!");
+    setCurrentBg(publicUrl); setSelectedFile(null); setPreviewUrl(null); alert("Fundo Atualizado!");
   };
 
   const handleSaveEditPrize = async (e: React.FormEvent) => {
