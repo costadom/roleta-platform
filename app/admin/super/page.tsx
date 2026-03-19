@@ -132,11 +132,13 @@ export default function SuperAdmin() {
 
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
       const appPrizes = Array.isArray(app.prizes) ? app.prizes : JSON.parse(app.prizes || "[]");
+      
+      // INSERINDO OS PRÊMIOS COM O FORMATO DE ENTREGA DEFAULT 'whatsapp'
       const prizesToInsert = appPrizes.map((p: string, i: number) => ({
-        id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now
+        id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp'
       }));
-      prizesToInsert.push({ id: crypto.randomUUID(), name: "R$ 100 no PIX", shortLabel: "R$ 100", type: "digital", weight: 0.02, color: "#10b981", active: true, model_id: mId, createdAt: now, updatedAt: now });
-      prizesToInsert.push({ id: crypto.randomUUID(), name: "Encontro Presencial", shortLabel: "Presencial", type: "digital", weight: 0.02, color: "#6366f1", active: true, model_id: mId, createdAt: now, updatedAt: now });
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "R$ 100 no PIX", shortLabel: "R$ 100", type: "digital", weight: 0.02, color: "#10b981", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "Encontro Presencial", shortLabel: "Presencial", type: "digital", weight: 0.02, color: "#6366f1", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
 
       await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
 
@@ -165,6 +167,18 @@ export default function SuperAdmin() {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }),
       });
+      
+      // Criando 8 Prêmios padrão no caso de criar a Franquia Manualmente
+      const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
+      const fallbackPrizes = ["Mimo Surpresa", "Vídeo Exclusivo", "Foto Especial", "Áudio Picante", "Acesso VIP", "Pack Econômico"];
+      const prizesToInsert = fallbackPrizes.map((p, i) => ({
+        id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp'
+      }));
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "R$ 100 no PIX", shortLabel: "R$ 100", type: "digital", weight: 0.02, color: "#10b981", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "Encontro Presencial", shortLabel: "Presencial", type: "digital", weight: 0.02, color: "#6366f1", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+
+      await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
+
       alert(`Franquia manual criada!`); setShowModal(false); fetchData(); setNewModel({ slug: "", email: "", password: "" });
     } catch (err) {} finally { setLoading(false); }
   };
@@ -326,7 +340,6 @@ export default function SuperAdmin() {
                </button>
             </div>
 
-            {/* RESTAURAÇÃO: METAS E RANKING */}
             <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
                <div className="absolute top-0 right-0 p-6 opacity-5"><Trophy size={60}/></div>
                <h2 className="text-xs font-black uppercase text-[#FFD700] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Trophy size={14}/> Metas & Ranking</h2>
