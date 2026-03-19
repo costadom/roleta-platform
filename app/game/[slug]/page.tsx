@@ -9,7 +9,7 @@ import { weightedRandomIndex } from "@/src/lib/weightedRandom";
 import { PrizeModal } from "@/components/PrizeModal";
 
 const SPIN_DURATION = 4000;
-const CENTRAL_WHATSAPP = "5515996587248"; // Número Oficial da Savanah Labz
+const CENTRAL_WHATSAPP = "5515996587248";
 
 const formatPhone = (val: string) => {
   let v = val.replace(/\D/g, "");
@@ -141,19 +141,8 @@ export default function GamePage() {
       const zapClean = regZap.replace(/\D/g, "");
       const res = await fetch(`${supabaseUrl}/rest/v1/Players`, {
         method: "POST",
-        headers: {
-          apikey: supabaseKey!,
-          Authorization: `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({
-          name: regName,
-          whatsapp: zapClean,
-          password: regPass,
-          model_id: modelId,
-          credits: 0
-        }),
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ name: regName, whatsapp: zapClean, password: regPass, model_id: modelId, credits: 0 }),
       });
 
       const data = await res.json();
@@ -165,11 +154,7 @@ export default function GamePage() {
       } else {
         setAuthError("Erro: Apelido já em uso. Escolha outro.");
       }
-    } catch (err) {
-      setAuthError("Erro de conexão com o servidor.");
-    } finally {
-      setAuthLoading(false);
-    }
+    } catch (err) { setAuthError("Erro de conexão com o servidor."); } finally { setAuthLoading(false); }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -184,9 +169,7 @@ export default function GamePage() {
         setPlayer(data[0]); 
         localStorage.setItem(`player_${slug}`, data[0].name); 
         setShowAuthModal(false); 
-      } else { 
-        setAuthError("WhatsApp ou Senha incorretos."); 
-      }
+      } else { setAuthError("WhatsApp ou Senha incorretos."); }
     } finally { setAuthLoading(false); }
   };
 
@@ -200,17 +183,13 @@ export default function GamePage() {
     const data = await res.json();
     const currentCredits = data?.[0]?.credits || 0;
     if (currentCredits < spinCost) { 
-      setShowDeposit(true); 
-      setAutoSpin(false); 
-      autoSpinRef.current = false; 
+      setShowDeposit(true); setAutoSpin(false); autoSpinRef.current = false; 
       return false; 
     }
     const newCredits = currentCredits - spinCost;
     setPlayer({ ...player, credits: newCredits });
     await fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}`, { 
-      method: "PATCH", 
-      headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-      body: JSON.stringify({ credits: newCredits }) 
+      method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: newCredits }) 
     });
     return true;
   };
@@ -244,11 +223,29 @@ export default function GamePage() {
       setModalOpen(true);
       setAccumulatedPrizes((prev) => [...prev, wonPrize]);
       
+      const isAutoDelivered = wonPrize.delivery_type !== 'whatsapp';
+
       fetch(`${supabaseUrl}/rest/v1/SpinHistory`, { 
-        method: "POST", 
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-        body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: false, model_id: modelId }) 
+        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+        body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: isAutoDelivered, model_id: modelId }) 
       }).catch(() => {});
+
+      // INJEÇÃO AUTOMÁTICA DE CRÉDITOS SE FOR BÔNUS
+      if (wonPrize.delivery_type === 'credit') {
+        const bonusAmount = Number(wonPrize.delivery_value) || 0;
+        if (bonusAmount > 0) {
+          setPlayer((prev: any) => ({ ...prev, credits: prev.credits + bonusAmount }));
+          // Atualiza DB pra garantir
+          fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' })
+            .then(r => r.json())
+            .then(d => {
+               const currentDb = d?.[0]?.credits || 0;
+               fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}`, {
+                 method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: currentDb + bonusAmount })
+               });
+            });
+        }
+      }
 
       if (spinAudioRef.current) spinAudioRef.current.pause();
       if (winAudioRef.current && soundEnabled) { winAudioRef.current.currentTime = 0.6; winAudioRef.current.play().catch(() => {}); }
@@ -314,7 +311,7 @@ export default function GamePage() {
           {/* CONTROLES INFERIORES */}
           <div className="relative pb-8 pt-4 px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent">
             <div className="grid grid-cols-[1fr_1.4fr_1fr] items-center justify-center gap-3 w-full">
-              <div className="rounded-2xl bg-black/80 p-3 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center">
+              <div className="rounded-2xl bg-black/80 p-3 ring-1 ring-[#FFD700]/30 backdrop-blur-md flex flex-col text-center shadow-lg h-full justify-center transition-all">
                 <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Saldo</span>
                 <span className="text-sm font-black text-white">{player ? player.credits : 0} CR</span>
               </div>
@@ -443,23 +440,45 @@ export default function GamePage() {
             </div>
 
             <div className="bg-black/30 border border-white/5 rounded-2xl p-4 mb-8">
-              <h3 className="text-[9px] font-black text-white/30 uppercase mb-3 flex items-center gap-2 justify-center"><Gift size={12} className="text-[#FF1493]" /> Prêmios Ganhos</h3>
-              <div className="max-h-24 overflow-y-auto space-y-2">
+              <h3 className="text-[9px] font-black text-white/30 uppercase mb-3 flex items-center gap-2 justify-center"><Gift size={12} className="text-[#FF1493]" /> Seus Prêmios Ganhos</h3>
+              
+              {/* LISTA INTELIGENTE DE PRÊMIOS */}
+              <div className="max-h-32 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-white/10">
                 {accumulatedPrizes.length === 0 ? (
                   <p className="text-[9px] text-white/10 italic py-4">Nenhum prêmio ainda...</p>
                 ) : (
-                  accumulatedPrizes.map((p, i) => <div key={i} className="text-[10px] text-white font-bold bg-white/5 p-2 rounded-lg uppercase border border-white/5">{p.name}</div>)
+                  accumulatedPrizes.map((p, i) => (
+                    <div key={i} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                       <span className="text-[10px] text-white font-bold uppercase truncate pr-2 flex-1 text-left">{p.name}</span>
+                       
+                       {p.delivery_type === 'link' && p.delivery_value && (
+                          <button onClick={() => window.open(p.delivery_value, '_blank')} className="bg-emerald-500 text-black px-3 py-1.5 rounded-lg text-[8px] font-black uppercase shrink-0 shadow-lg active:scale-95">Acessar</button>
+                       )}
+                       
+                       {p.delivery_type === 'credit' && (
+                          <span className="text-emerald-400 font-black text-[9px] shrink-0 bg-emerald-500/10 px-2 py-1 rounded-lg">+{p.delivery_value} CR</span>
+                       )}
+
+                       {(!p.delivery_type || p.delivery_type === 'whatsapp') && (
+                          <span className="text-[#FF1493] font-black text-[8px] shrink-0 uppercase">Manual</span>
+                       )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
 
-            <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e ganhei os seguintes prêmios:\n${accumulatedPrizes.map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Prêmios no Whats</button>
-            <button onClick={() => { localStorage.removeItem(`player_${slug}`); window.location.reload(); }} className="text-white/20 hover:text-red-500 text-[9px] font-black uppercase transition-all tracking-widest active:scale-95">Sair da Conta</button>
+            {/* BOTÃO DO WHATSAPP SÓ APARECE SE TIVER PRÊMIO MANUAL */}
+            {accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').length > 0 && (
+              <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e preciso resgatar esses prêmios:\n${accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Manuais no Whats</button>
+            )}
+
+            <button onClick={() => { localStorage.removeItem(`player_${slug}`); window.location.reload(); }} className="text-white/20 hover:text-red-500 text-[9px] font-black uppercase transition-all tracking-widest active:scale-95 mt-2">Sair da Conta</button>
           </div>
         </div>
       )}
 
-      <PrizeModal open={modalOpen} prize={selectedPrize} onClose={() => setModalOpen(false)} />
+      <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.name || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
     </div>
   );
 }
