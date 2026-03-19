@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell } from "lucide-react";
 import { PlayersManager } from "./players";
 
 function DashboardContent() {
@@ -27,13 +27,14 @@ function DashboardContent() {
   const [playersCount, setPlayersCount] = useState(0);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
 
-  // Finanças
+  // Finanças & Notificações
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [lastWithdrawal, setLastWithdrawal] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
+  const [notifications, setNotifications] = useState<any[]>([]);
   
-  // Chaves PIX da Modelo para Saque
+  // Chaves PIX
   const [pixKey1, setPixKey1] = useState("");
   const [pixKey2, setPixKey2] = useState("");
   const [savingPix, setSavingPix] = useState(false);
@@ -79,6 +80,10 @@ function DashboardContent() {
         setPixKey2(dataModel[0].pix_key_2 || "");
       }
 
+      const resNotif = await fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers, cache: 'no-store' });
+      const dataNotif = await resNotif.json();
+      if (Array.isArray(dataNotif)) setNotifications(dataNotif);
+
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const resTrans = await fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers, cache: 'no-store' });
@@ -114,6 +119,15 @@ function DashboardContent() {
 
   const totalChance = useMemo(() => prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0), [prizes]);
   
+  const modelRanking = useMemo(() => {
+    if (!Array.isArray(allModels)) return [];
+    const counts: any = {};
+    if (Array.isArray(history)) {
+      history.forEach(h => { counts[h.model_id] = (counts[h.model_id] || 0) + 1; });
+    }
+    return allModels.map(m => ({ ...m, score: counts[m.id] || 0 })).sort((a, b) => b.score - a.score);
+  }, [allModels, history]);
+
   const handleLogout = () => { localStorage.clear(); router.push('/admin'); };
 
   const handleSaveSettings = async () => {
@@ -153,7 +167,7 @@ function DashboardContent() {
 
   const handleWithdraw = async () => {
     if (modelBalance <= 0) return alert("Você não possui saldo disponível para saque no momento.");
-    if (!pixKey1) return alert("Por favor, cadastre pelo menos a sua Chave PIX Principal antes de solicitar o saque.");
+    if (!pixKey1) return alert("Por favor, cadastre pelo menos a sua Chave PIX Principal na aba 'Financeiro' antes de solicitar o saque.");
     if (lastWithdrawal) {
       const lastDate = new Date(lastWithdrawal).toDateString();
       const today = new Date().toDateString();
@@ -183,6 +197,17 @@ function DashboardContent() {
     } catch (err) { alert("Erro ao solicitar saque. Tente novamente."); } finally { setIsWithdrawing(false); }
   };
 
+  const markAsRead = async (notifId: string) => {
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${notifId}`, { 
+        method: "PATCH", 
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+        body: JSON.stringify({ is_read: true }) 
+      });
+      setNotifications(prev => prev.filter(n => n.id !== notifId));
+    } catch (err) { console.error(err); }
+  };
+
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
   return (
@@ -194,8 +219,24 @@ function DashboardContent() {
           ) : (
             <button onClick={handleLogout} className="flex items-center gap-2 text-[10px] font-black uppercase text-red-500/50 hover:text-red-500 bg-red-500/5 px-4 py-2 rounded-xl transition-all"><LogOut size={14}/> Sair</button>
           )}
-          <div className="text-right"><h1 className="text-2xl font-black uppercase tracking-tighter text-[#FF1493]">Painel VIP</h1><p className="text-[#FFD700] text-[9px] font-bold uppercase tracking-[0.2em]">{modelName || "Modelo"}</p></div>
+          <div className="text-right">
+            <h1 className="text-2xl font-black uppercase tracking-tighter text-[#FF1493]">Painel VIP</h1>
+            <p className="text-[#FFD700] text-[9px] font-bold uppercase tracking-[0.2em]">{modelName || "Modelo"}</p>
+          </div>
         </div>
+
+        {notifications.map(notif => (
+          <div key={notif.id} className="mb-6 bg-emerald-500/10 border border-emerald-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-[0_0_25px_rgba(16,185,129,0.15)] animate-in zoom-in duration-300">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 bg-emerald-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-lg"><CheckCircle2 size={24}/></div>
+              <div>
+                <p className="text-[12px] font-black uppercase text-emerald-500 tracking-widest flex items-center gap-2"><Bell size={14} className="animate-pulse"/> Pagamento Concluído!</p>
+                <p className="text-[10px] font-bold text-white/50 uppercase mt-1">Seu saque de <strong className="text-white">R$ {Number(notif.amount).toFixed(2)}</strong> já foi enviado via PIX.</p>
+              </div>
+            </div>
+            <button onClick={() => markAsRead(notif.id)} className="w-full sm:w-auto bg-white/5 hover:bg-emerald-500 hover:text-black text-white/50 px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all">OK, ENTENDI</button>
+          </div>
+        ))}
 
         {globalAnnouncement && (
           <div className="mb-6 bg-[#FF1493]/10 border border-[#FF1493]/20 p-4 rounded-2xl flex items-center gap-4">
@@ -214,6 +255,10 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "prizes" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Roleta</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "players" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Jogadores</button>
           <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Entregas</button>
+          
+          {showRankTab && (
+            <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-[#FFD700]/20 text-[#FFD700] shadow-lg shadow-[#FFD700]/10 border border-[#FFD700]/30" : "text-white/30"}`}><Trophy size={12} className="inline mr-1" /> Desafios</button>
+          )}
         </div>
 
         {activeTab === "finance" && (
@@ -223,15 +268,12 @@ function DashboardContent() {
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (Seus 70%)</h2>
                 <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Pronto para saque na sua conta.</p>
-                
                 <div className="text-5xl font-black text-white mb-8 tracking-tighter">
                   {modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </div>
-
                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl mb-6">
                   <p className="text-[10px] text-emerald-400/80 font-bold uppercase text-center leading-relaxed tracking-widest">⚠️ 1 Saque por dia. PIX em até 1 hora.</p>
                 </div>
-
                 <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance <= 0} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">
                   {isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}
                 </button>
@@ -246,11 +288,9 @@ function DashboardContent() {
                 </div>
               </div>
 
-              {/* NOVA ÁREA: CHAVES PIX PARA RECEBIMENTO */}
               <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl col-span-1 md:col-span-2">
                 <h2 className="text-xs font-black uppercase mb-4 text-[#FF1493] tracking-widest flex items-center gap-2"><DollarSign size={16}/> Suas Chaves PIX (Para Saques)</h2>
                 <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest">Cadastre onde você deseja receber seus lucros da Savanah Labz.</p>
-                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div>
                     <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label>
@@ -273,7 +313,7 @@ function DashboardContent() {
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
               <div className="w-full sm:w-40 h-24 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative shrink-0">{(previewUrl || currentBg) ? <img src={(previewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}</div>
-              <div className="flex-1 text-center sm:text-left"><p className="text-[10px] font-black uppercase text-white/40 mb-3 tracking-widest">Fundo (Máx 2MB | JPEG)</p><label className="bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">Trocar Foto <input type="file" accept="image/jpeg" onChange={handleFileChange} className="hidden" /></label>{selectedFile && <button onClick={handleSaveImage} className="bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase ml-2">Salvar</button>}</div>
+              <div className="flex-1 text-center sm:text-left"><p className="text-[10px] font-black uppercase text-white/40 mb-3 tracking-widest">Fundo (Máx 2MB | JPEG)</p><label className="bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">Trocar Foto <input type="file" accept="image/jpeg, image/png" onChange={handleFileChange} className="hidden" /></label>{selectedFile && <button onClick={handleSaveImage} className="bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase ml-2">Salvar</button>}</div>
             </div>
 
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-left shadow-xl">
@@ -315,6 +355,45 @@ function DashboardContent() {
             ))}
           </div>
         )}
+
+        {showRankTab && activeTab === "ranking" && (
+          <div className="space-y-4 animate-in fade-in duration-500">
+            <div className="text-center py-6">
+              <h2 className="text-xl font-black uppercase text-[#FFD700] italic tracking-tighter">Ranking das Estrelas</h2>
+              <p className="text-[10px] text-white/30 uppercase font-black tracking-widest mt-1">Quem mais faturou esta semana</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 p-6 rounded-3xl relative overflow-hidden mb-6 shadow-2xl">
+               <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy size={80} className="text-amber-500"/></div>
+               <div className="relative z-10">
+                 <div className="flex items-center gap-2 mb-4"><Trophy size={16} className="text-amber-500"/><h3 className="text-xs font-black uppercase text-amber-500 tracking-widest">Desafio de Faturamento</h3></div>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                   <div><p className="text-[9px] text-white/30 uppercase font-black mb-1">Meta Semanal</p><p className="text-xl font-black text-white">R$ {metaValue.toLocaleString('pt-BR')}</p></div>
+                   <div><p className="text-[9px] text-white/30 uppercase font-black mb-1">Prêmio</p><p className="text-xl font-black text-amber-500">{metaPrize || "Consulte o Master"}</p></div>
+                 </div>
+               </div>
+            </div>
+
+            {modelRanking.map((m, i) => (
+              <div key={m.id} className={`p-6 rounded-[2rem] border flex items-center justify-between transition-all ${m.id === modelId ? 'bg-[#FF1493]/10 border-[#FF1493]/30 scale-[1.02]' : 'bg-white/5 border-white/5'}`}>
+                <div className="flex items-center gap-5">
+                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center font-black ${i === 0 ? 'bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.5)]' : 'bg-white/5 text-white/30'}`}>
+                    {i === 0 ? <Crown size={20}/> : `#${i+1}`}
+                  </div>
+                  <div>
+                    <h3 className={`font-black uppercase text-sm ${m.id === modelId ? 'text-[#FF1493]' : 'text-white'}`}>{m.slug} {m.id === modelId && "(Você)"}</h3>
+                    <p className="text-[9px] font-black text-white/20 uppercase">Parceira Savanah Labz</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[8px] font-black text-white/30 uppercase mb-1">Giros Totais</p>
+                  <p className="text-xl font-black text-white">{m.score}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
 
       {editingPrize && (
