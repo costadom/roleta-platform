@@ -16,7 +16,7 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
 
   // Termos de Uso
-  const [termsAccepted, setTermsAccepted] = useState(true); // Começa true para não piscar na tela
+  const [termsAccepted, setTermsAccepted] = useState(true);
   const [acceptingTerms, setAcceptingTerms] = useState(false);
 
   const [globalAnnouncement, setGlobalAnnouncement] = useState("");
@@ -98,6 +98,7 @@ function DashboardContent() {
         setAccumulatedEarnings(total);
       }
       
+      // Busca prêmios já trazendo as novas colunas
       const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers, cache: 'no-store' });
       const dataPrizes = await resPrizes.json();
       if (Array.isArray(dataPrizes)) setPrizes(dataPrizes.sort((a: any, b: any) => b.weight - a.weight));
@@ -182,8 +183,21 @@ function DashboardContent() {
 
   const handleSaveEditPrize = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: editingPrize.name, shortLabel: editingPrize.name, weight: Number(editingPrize.weight), color: editingPrize.color, updatedAt: new Date().toISOString() }) });
-    setEditingPrize(null); loadData();
+    await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { 
+      method: "PATCH", 
+      headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+      body: JSON.stringify({ 
+        name: editingPrize.name, 
+        shortLabel: editingPrize.name, 
+        weight: Number(editingPrize.weight), 
+        color: editingPrize.color, 
+        delivery_type: editingPrize.delivery_type || 'whatsapp', // Salva o tipo
+        delivery_value: editingPrize.delivery_value || null,     // Salva o link ou os créditos
+        updatedAt: new Date().toISOString() 
+      }) 
+    });
+    setEditingPrize(null); 
+    loadData();
   };
 
   const handleWithdraw = async () => {
@@ -280,7 +294,7 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* PAINEL NORMAL (Fica atrás do modal se não tiver aceitado) */}
+      {/* PAINEL NORMAL */}
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
@@ -465,17 +479,65 @@ function DashboardContent() {
 
       </div>
 
+      {/* MODAL DE EDIÇÃO DO PRÊMIO (COM TIPO DE ENTREGA) */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSaveEditPrize} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-sm shadow-2xl">
+          <form onSubmit={handleSaveEditPrize} className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-black uppercase mb-8 text-[#FF1493] italic text-center tracking-tighter">Editar Prêmio</h2>
-            <div className="space-y-4">
-              <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" />
-              <input type="number" step="0.01" value={editingPrize.weight} onChange={e => setEditingPrize({...editingPrize, weight: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" />
-              <div className="flex items-center gap-3 bg-black border border-white/10 p-4 rounded-2xl"><Palette size={16} className="text-white/30" /><input type="color" value={editingPrize.color} onChange={e => setEditingPrize({...editingPrize, color: e.target.value})} className="w-10 h-8 bg-transparent border-none cursor-pointer" /><span className="text-[10px] text-white/40 font-black uppercase">Cor da Fatia</span></div>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Nome que aparece na Roleta</label>
+                <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none focus:border-[#FF1493]" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Chance (%)</label>
+                  <input type="number" step="0.01" value={editingPrize.weight} onChange={e => setEditingPrize({...editingPrize, weight: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none focus:border-[#FF1493]" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Cor da Fatia</label>
+                  <div className="flex items-center gap-3 bg-black border border-white/10 p-4 rounded-2xl h-[56px]"><Palette size={16} className="text-white/30 shrink-0" /><input type="color" value={editingPrize.color} onChange={e => setEditingPrize({...editingPrize, color: e.target.value})} className="w-full h-8 bg-transparent border-none cursor-pointer" /></div>
+                </div>
+              </div>
             </div>
-            <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase mt-8 shadow-xl">Salvar Alterações</button>
-            <button type="button" onClick={() => setEditingPrize(null)} className="w-full text-[9px] font-black text-white/20 mt-6 uppercase text-center tracking-widest">Voltar</button>
+
+            <div className="bg-white/5 border border-white/10 p-5 rounded-3xl space-y-5">
+              <h3 className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest flex items-center gap-2"><Gift size={14}/> Regras de Entrega</h3>
+              
+              <div>
+                <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Como o cliente vai receber?</label>
+                <select 
+                  value={editingPrize.delivery_type || 'whatsapp'} 
+                  onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value, delivery_value: ''})}
+                  className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FFD700]"
+                >
+                  <option value="whatsapp">💬 Manual (Chamar Suporte no WhatsApp)</option>
+                  <option value="link">🔗 Link Digital (Google Drive, Mega, etc)</option>
+                  <option value="credit">💰 Créditos Automáticos (Girar de novo)</option>
+                </select>
+              </div>
+
+              {editingPrize.delivery_type === 'link' && (
+                <div className="animate-in fade-in zoom-in duration-300">
+                   <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Cole o Link de Acesso</label>
+                   <input type="url" placeholder="Ex: https://drive.google.com/..." value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-emerald-500/50 p-4 rounded-xl text-xs text-white outline-none focus:border-emerald-500" />
+                   <p className="text-[8px] text-white/30 uppercase mt-2 font-bold">O cliente verá um botão verde para abrir este link ao ganhar.</p>
+                </div>
+              )}
+
+              {editingPrize.delivery_type === 'credit' && (
+                <div className="animate-in fade-in zoom-in duration-300">
+                   <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Quantos CR ele vai ganhar?</label>
+                   <input type="number" placeholder="Ex: 10" value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-amber-500/50 p-4 rounded-xl text-xs text-white outline-none focus:border-amber-500" />
+                   <p className="text-[8px] text-white/30 uppercase mt-2 font-bold">O saldo será adicionado automaticamente na conta dele.</p>
+                </div>
+              )}
+            </div>
+
+            <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase mt-8 shadow-xl hover:scale-[1.02] transition-all">Salvar Alterações</button>
+            <button type="button" onClick={() => setEditingPrize(null)} className="w-full text-[9px] font-black text-white/20 mt-6 uppercase text-center tracking-widest">Cancelar</button>
           </form>
         </div>
       )}
