@@ -1,66 +1,72 @@
 "use client";
 import { useState } from 'react';
 
-export default function TestePix() {
+export default function CheckoutTeste() {
   const [pixData, setPixData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [debugRaw, setDebugRaw] = useState<string>("");
 
-  const testarCheckout = async () => {
+  const gerarPix = async () => {
     setLoading(true);
-    setDebugRaw("Iniciando chamada...");
-    setPixData(null);
-
     try {
       const response = await fetch('/api/checkout/pix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          amount: 1, 
-          userId: 'USUARIO_TESTE_01' 
-        }),
+        body: JSON.stringify({ amount: 1, userId: 'RAFAEL_BOSS_01' }),
       });
-
       const data = await response.json();
-      // AQUI ESTÁ O ESPIÃO REVELADOR: Mostra tudo o que a PushinPay mandou
-      setDebugRaw(JSON.stringify(data, null, 2));
-      
-      if (response.ok) {
-        setPixData(data);
-      }
-    } catch (error: any) {
-      setDebugRaw("Erro: " + error.message);
+      setPixData(data);
+    } catch (error) {
+      console.error("Erro:", error);
     }
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#000', color: '#fff', minHeight: '100vh' }}>
-      <h2 style={{ color: '#00ff00' }}>🕵️ Espião Revelador Savanah</h2>
-      
-      <button onClick={testarCheckout} disabled={loading} style={{ background: '#00ff00', padding: '10px', fontWeight: 'bold' }}>
-        {loading ? 'Consultando...' : '🚀 GERAR PIX REAL'}
-      </button>
+    <div style={{ padding: '40px', backgroundColor: '#000', color: '#fff', minHeight: '100vh', textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <h1 style={{ color: '#00ff00', marginBottom: '10px' }}>SAVANAH LABZ</h1>
+      <p style={{ color: '#888' }}>Teste de Integração de Pagamento Real</p>
 
-      <div style={{ marginTop: '20px' }}>
-        <h4 style={{ color: '#aaa' }}>Resposta Bruta da PushinPay (O que veio de lá):</h4>
-        <pre style={{ 
-          backgroundColor: '#111', 
-          padding: '15px', 
-          border: '1px solid #333', 
-          color: '#00ff00',
-          overflowX: 'auto',
-          fontSize: '12px'
-        }}>
-          {debugRaw || "Aguardando clique..."}
-        </pre>
-      </div>
+      {!pixData ? (
+        <button 
+          onClick={gerarPix} 
+          disabled={loading}
+          style={{ 
+            background: '#00ff00', color: '#000', padding: '15px 30px', 
+            fontSize: '18px', fontWeight: 'bold', borderRadius: '50px', 
+            border: 'none', cursor: 'pointer', marginTop: '20px' 
+          }}
+        >
+          {loading ? 'GERANDO...' : '🚀 GERAR PIX DE R$ 1,00'}
+        </button>
+      ) : (
+        <div style={{ marginTop: '30px', backgroundColor: '#111', padding: '20px', borderRadius: '20px', display: 'inline-block' }}>
+          <h3 style={{ color: '#00ff00' }}>QR Code Gerado!</h3>
+          
+          {/* AQUI ESTÁ A MÁGICA: DESENHANDO A IMAGEM NA TELA */}
+          <img 
+            src={pixData.qr_code_base64} 
+            alt="QR Code PIX" 
+            style={{ width: '250px', height: '250px', border: '10px solid #fff', borderRadius: '10px', marginTop: '10px' }} 
+          />
 
-      {/* Tenta mostrar o QR Code de várias formas possíveis */}
-      {(pixData?.qr_code || pixData?.qr_code_base64 || pixData?.data?.qr_code) && (
-        <div style={{ marginTop: '20px', padding: '10px', border: '2px solid #00ff00' }}>
-          <h3 style={{ color: '#00ff00' }}>✅ QR CODE ENCONTRADO!</h3>
-          <p>Se você está vendo isso, a integração funcionou!</p>
+          <div style={{ marginTop: '20px' }}>
+            <p style={{ fontSize: '14px', color: '#aaa' }}>Ou use o Copia e Cola:</p>
+            <input 
+              readOnly 
+              value={pixData.qr_code} 
+              style={{ width: '100%', padding: '10px', background: '#222', color: '#fff', border: '1px solid #333', textAlign: 'center' }} 
+            />
+            <button 
+              onClick={() => { navigator.clipboard.writeText(pixData.qr_code); alert('Copiado!'); }}
+              style={{ marginTop: '10px', background: 'transparent', color: '#00ff00', border: 'none', cursor: 'pointer' }}
+            >
+              📋 Copiar Código
+            </button>
+          </div>
+
+          <p style={{ marginTop: '20px', color: '#ffcc00', fontSize: '13px' }}>
+            ⚠️ Após pagar, o Webhook da PushinPay avisará o sistema!
+          </p>
         </div>
       )}
     </div>
