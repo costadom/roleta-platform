@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus } from "lucide-react";
+import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X } from "lucide-react";
 
 export default function SuperAdmin() {
   const [isLogged, setIsLogged] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [adminUser, setAdminUser] = useState("");
   const [adminPass, setAdminPass] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -18,6 +19,8 @@ export default function SuperAdmin() {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newModel, setNewModel] = useState({ slug: "", email: "", password: "" });
+
+  const [selectedApp, setSelectedApp] = useState<any | null>(null);
 
   const [globalMsg, setGlobalMsg] = useState("");
   const [rankVisible, setRankVisible] = useState(false);
@@ -56,11 +59,11 @@ export default function SuperAdmin() {
           setGoalReward(dataGlob[0].goal_reward);
         }
       }
-    } catch (err) { console.error("Erro no fetch", err); }
+    } catch (err) { console.error("Erro no fetch", err); } finally { setInitialLoading(false); }
   };
 
   useEffect(() => {
-    if (localStorage.getItem("super_admin_auth") === "true") { setIsLogged(true); fetchData(); }
+    if (localStorage.getItem("super_admin_auth") === "true") { setIsLogged(true); fetchData(); } else { setInitialLoading(false); }
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -68,6 +71,7 @@ export default function SuperAdmin() {
     if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
       localStorage.setItem("super_admin_auth", "true");
       setIsLogged(true);
+      setInitialLoading(true);
       fetchData();
     } else { alert("Acesso negado!"); }
   };
@@ -84,6 +88,12 @@ export default function SuperAdmin() {
     } catch (err) {} finally { setSavingGlobal(false); }
   };
 
+  const toggleRankingVisibility = async () => {
+    const nextVal = !rankVisible;
+    setRankVisible(nextVal);
+    await handleSaveGlobal(nextVal);
+  };
+
   const handleApproveWithdrawal = async (id: string, amount: number, modelId: string) => {
     if (!confirm(`Confirmar pagamento?`)) return;
     try {
@@ -95,16 +105,15 @@ export default function SuperAdmin() {
     } catch (err) { alert("Erro ao aprovar."); }
   };
 
-  // FUNÇÃO QUE APROVA A CANDIDATURA E CRIA A MODELO
   const handleApproveApplication = async (app: any) => {
     if (!confirm(`Deseja aprovar e criar a roleta de ${app.nickname}?`)) return;
+    setLoading(true);
     try {
       const now = new Date().toISOString();
       const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
       const generatedEmail = `${app.nickname}@admin.com`;
       const generatedPass = `${capNick}Admin26`;
 
-      // 1. Cria a Modelo
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ 
@@ -116,13 +125,11 @@ export default function SuperAdmin() {
       const dataMod = await resMod.json();
       const mId = dataMod[0].id;
 
-      // 2. Configs
       await fetch(`${supabaseUrl}/rest/v1/Configs`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, created_at: now }),
       });
 
-      // 3. Prêmios
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
       const appPrizes = Array.isArray(app.prizes) ? app.prizes : JSON.parse(app.prizes || "[]");
       const prizesToInsert = appPrizes.map((p: string, i: number) => ({
@@ -133,15 +140,15 @@ export default function SuperAdmin() {
 
       await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
 
-      // 4. Marca como aprovada
       await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, {
         method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ status: 'aprovada' }),
       });
 
       alert(`Sucesso! Envie no WhatsApp dela:\nLink: site.com/game/${app.nickname}\nE-mail: ${generatedEmail}\nSenha: ${generatedPass}`);
+      setSelectedApp(null);
       fetchData();
-    } catch (err) { alert("Erro ao criar a roleta."); }
+    } catch (err) { alert("Erro ao criar a roleta."); } finally { setLoading(false); }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -188,6 +195,13 @@ export default function SuperAdmin() {
 
   const pendingWithdrawals = withdrawals.filter(w => w.status === 'pendente');
 
+  if (initialLoading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-white font-sans">
+      <Loader2 className="animate-spin text-[#FF1493] mb-4" size={40}/>
+      <h1 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 animate-pulse">Sincronizando Sistema...</h1>
+    </div>
+  );
+
   if (!isLogged) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl relative overflow-hidden">
@@ -220,23 +234,22 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* CANDIDATURAS PENDENTES (NOVO) */}
+        {/* CANDIDATURAS PENDENTES */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {applications.map(app => (
-                <div key={app.id} className="bg-black border border-indigo-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl flex flex-col justify-between cursor-pointer hover:border-indigo-400 transition-all group">
                   <div className="mb-4">
                     <p className="text-[12px] text-white uppercase font-black">{app.full_name}</p>
                     <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mb-2">@{app.nickname}</p>
                     <div className="text-[9px] text-white/50 uppercase font-mono space-y-1">
                       <p>📱 {app.whatsapp}</p>
-                      <p>📄 {app.cpf}</p>
                     </div>
                   </div>
-                  <button onClick={() => handleApproveApplication(app)} className="bg-indigo-500 text-white px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-2">
-                    <CheckCircle2 size={14}/> Aprovar & Criar Roleta
+                  <button className="bg-indigo-500/20 text-indigo-400 px-4 py-3 rounded-xl text-[9px] font-black uppercase group-hover:bg-indigo-500 group-hover:text-white transition-all">
+                    Analisar Perfil
                   </button>
                 </div>
               ))}
@@ -312,14 +325,96 @@ export default function SuperAdmin() {
                  {savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}
                </button>
             </div>
+
+            {/* RESTAURAÇÃO: METAS E RANKING */}
+            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-6 opacity-5"><Trophy size={60}/></div>
+               <h2 className="text-xs font-black uppercase text-[#FFD700] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Trophy size={14}/> Metas & Ranking</h2>
+               <div className="space-y-4 mb-6 relative z-10">
+                 <div>
+                   <label className="text-[9px] font-black text-white/30 uppercase block mb-1">Meta Semanal (R$)</label>
+                   <input type="number" value={goalAmount} onChange={e => setGoalAmount(Number(e.target.value))} className="w-full bg-black border border-white/10 p-3 rounded-xl text-xs text-white outline-none focus:border-[#FFD700]"/>
+                 </div>
+                 <div>
+                   <label className="text-[9px] font-black text-white/30 uppercase block mb-1">Premiação</label>
+                   <input type="text" value={goalReward} onChange={e => setGoalReward(e.target.value)} className="w-full bg-black border border-white/10 p-3 rounded-xl text-xs text-white outline-none focus:border-[#FFD700]"/>
+                 </div>
+                 <button onClick={toggleRankingVisibility} className={`w-full py-4 rounded-xl text-[10px] font-black uppercase border transition-all active:scale-95 ${rankVisible ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'bg-red-500/10 border-red-500/50 text-red-500'}`}>
+                   {rankVisible ? 'RANKING VISÍVEL P/ ELAS' : 'RANKING OCULTO P/ ELAS'}
+                 </button>
+               </div>
+               <button onClick={() => handleSaveGlobal()} className="w-full bg-[#FFD700] text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg shadow-[#FFD700]/20 active:scale-95 transition-all relative z-10">ATUALIZAR REGRAS</button>
+            </div>
+
+            <div className="bg-white/5 border border-white/5 p-6 rounded-[2.5rem]">
+               <h3 className="text-[9px] font-black uppercase text-white/30 mb-4 tracking-widest flex items-center gap-2"><Crown size={12} className="text-[#FFD700]"/> Top 3 Faturamento</h3>
+               <div className="space-y-3">
+                 {modelRanking.length === 0 ? (
+                   <p className="text-[10px] text-white/20 italic">Nenhum giro registrado.</p>
+                 ) : (
+                   modelRanking.slice(0, 3).map((m, i) => (
+                     <div key={m.id} className="flex justify-between items-center text-[10px] font-black uppercase">
+                       <span className="flex items-center gap-2"><span className={i === 0 ? "text-[#FFD700]" : "text-[#FF1493]"}>#{i+1}</span> {m.slug}</span>
+                       <span className="text-white/30">{m.score} GIROS</span>
+                     </div>
+                   ))
+                 )}
+               </div>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* MODAL DE ANÁLISE DE CANDIDATURA */}
+      {selectedApp && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
+            <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
+            <h2 className="text-2xl font-black uppercase mb-6 text-indigo-400 italic tracking-tighter">Analisar Perfil</h2>
+            
+            <div className="flex gap-6 mb-6">
+              <div className="w-32 h-40 bg-black border border-white/10 rounded-2xl overflow-hidden shrink-0">
+                <img src={selectedApp.bg_url} className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
+                <div><p className="text-[8px] text-white/40 uppercase font-black">Nascimento / CPF</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.birth_date} | {selectedApp.cpf}</p></div>
+                <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
+              </div>
+            </div>
+
+            <div className="bg-white/5 p-4 rounded-2xl mb-6">
+              <p className="text-[9px] text-white/40 uppercase font-black mb-2">Chaves PIX</p>
+              <p className="text-[10px] font-mono text-emerald-400">1: {selectedApp.pix_1}</p>
+              <p className="text-[10px] font-mono text-white/50">2: {selectedApp.pix_2 || 'N/A'}</p>
+            </div>
+
+            <div className="bg-white/5 p-4 rounded-2xl mb-6">
+              <p className="text-[9px] text-white/40 uppercase font-black mb-2">Prêmios Solicitados</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(Array.isArray(selectedApp.prizes) ? selectedApp.prizes : JSON.parse(selectedApp.prizes || "[]")).map((p: string, i: number) => (
+                  <div key={i} className="text-[9px] bg-black border border-white/5 p-2 rounded-lg text-white font-bold uppercase truncate">{p}</div>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
+              {loading ? <Loader2 className="animate-spin" size={16}/> : <><CheckCircle2 size={16}/> Aprovar e Criar Roleta</>}
+            </button>
+            <button onClick={async () => {
+              if(!confirm('Rejeitar e excluir esta candidatura?')) return;
+              await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }});
+              setSelectedApp(null); fetchData();
+            }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVA FRANQUIA (MANUAL) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <form onSubmit={handleCreate} className="bg-[#0a0a0a] border border-white/10 p-12 rounded-[4rem] w-full max-w-md shadow-2xl">
-            <h2 className="text-3xl font-black uppercase mb-8 text-[#FF1493] text-center italic tracking-tighter">Nova Franquia</h2>
+            <h2 className="text-3xl font-black uppercase mb-8 text-[#FF1493] text-center italic tracking-tighter">Criar Manual</h2>
             <div className="space-y-4">
               <input type="text" placeholder="APELIDO (URL)" required className="w-full bg-black border border-white/10 p-5 rounded-3xl text-xs outline-none focus:border-[#FF1493] text-white" value={newModel.slug} onChange={e => setNewModel({...newModel, slug: e.target.value.toLowerCase().replace(/\s/g, '')})} />
               <input type="email" placeholder="E-MAIL" required className="w-full bg-black border border-white/10 p-5 rounded-3xl text-xs outline-none focus:border-[#FF1493] text-white" value={newModel.email} onChange={e => setNewModel({...newModel, email: e.target.value})} />
