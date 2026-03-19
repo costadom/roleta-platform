@@ -76,6 +76,31 @@ export default function SuperAdmin() {
     } else { alert("Acesso negado!"); }
   };
 
+  // BOTÃO NUCLEAR DE RESET
+  const handleResetSystem = async () => {
+    const confirmText = prompt("ATENÇÃO: Você está prestes a ZERAR todo o financeiro, histórico de giros e saques do sistema.\n\nIsso limpará tudo para o lançamento oficial. \n\nDigite ZERARTUDO para confirmar:");
+    if (confirmText !== "ZERARTUDO") return alert("Cancelado.");
+
+    setInitialLoading(true);
+    try {
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+      
+      await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
+      
+      await fetch(`${supabaseUrl}/rest/v1/Models?id=not.is.null`, { 
+        method: 'PATCH', headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ balance: 0 }) 
+      });
+
+      alert("Sistema Restaurado! O financeiro foi limpo para o lançamento oficial.");
+      fetchData();
+    } catch (err) {
+      alert("Erro ao tentar limpar o sistema.");
+    }
+  };
+
   const handleSaveGlobal = async (valRanking?: boolean) => {
     setSavingGlobal(true);
     const isVisible = typeof valRanking === 'boolean' ? valRanking : rankVisible;
@@ -133,7 +158,6 @@ export default function SuperAdmin() {
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
       const appPrizes = Array.isArray(app.prizes) ? app.prizes : JSON.parse(app.prizes || "[]");
       
-      // INSERINDO OS PRÊMIOS COM O FORMATO DE ENTREGA DEFAULT 'whatsapp'
       const prizesToInsert = appPrizes.map((p: string, i: number) => ({
         id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp'
       }));
@@ -168,7 +192,6 @@ export default function SuperAdmin() {
         body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }),
       });
       
-      // Criando 8 Prêmios padrão no caso de criar a Franquia Manualmente
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
       const fallbackPrizes = ["Mimo Surpresa", "Vídeo Exclusivo", "Foto Especial", "Áudio Picante", "Acesso VIP", "Pack Econômico"];
       const prizesToInsert = fallbackPrizes.map((p, i) => ({
@@ -242,13 +265,13 @@ export default function SuperAdmin() {
             <h1 className="text-4xl font-black uppercase italic drop-shadow-[0_0_15px_rgba(255,20,147,0.3)]"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1>
             <p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1">SISTEMA DE GESTÃO V.3001 MASTER</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowModal(true)} className="bg-white text-black px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button>
+            <button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button>
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all" title="Sair do Master"><Lock size={18}/></button>
           </div>
         </div>
 
-        {/* CANDIDATURAS PENDENTES */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
@@ -271,7 +294,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* ALERTA DE SAQUES */}
         {pendingWithdrawals.length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Saques (PIX)</h2>
@@ -297,7 +319,7 @@ export default function SuperAdmin() {
         )}
 
         <div className="mb-12">
-          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Livro Caixa (6 Meses)</h2>
+          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Livro Caixa Global</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Vendas Totais</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
             <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
@@ -378,7 +400,6 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* MODAL DE ANÁLISE DE CANDIDATURA */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -423,7 +444,6 @@ export default function SuperAdmin() {
         </div>
       )}
 
-      {/* MODAL NOVA FRANQUIA (MANUAL) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <form onSubmit={handleCreate} className="bg-[#0a0a0a] border border-white/10 p-12 rounded-[4rem] w-full max-w-md shadow-2xl">
