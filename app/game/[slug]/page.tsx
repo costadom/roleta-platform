@@ -5,8 +5,22 @@ import { useParams, useRouter } from "next/navigation";
 import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, KeyRound } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
-import { weightedRandomIndex } from "@/src/lib/weightedRandom";
 import { PrizeModal } from "@/components/PrizeModal";
+
+// =========================================================================
+// ⚠️ CHAVES PIX DA PLATAFORMA (MASTER)
+// O dinheiro cai na conta central e depois o sistema divide pra modelo sacar.
+// =========================================================================
+const MASTER_PIX_10 = "00020126770014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700215recargamaster10520400005303986540510.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609493ASA6304198F";
+const MASTER_PIX_20 = "00020126730014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700211recargade20520400005303986540520.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609561ASA6304E985";
+const MASTER_PIX_50 = "00020126710014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700209recarga50520400005303986540550.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609590ASA6304956E";
+
+const pixKeys = { 
+  10: MASTER_PIX_10, 
+  20: MASTER_PIX_20, 
+  50: MASTER_PIX_50 
+};
+// =========================================================================
 
 const SPIN_DURATION = 4000;
 const CENTRAL_WHATSAPP = "5515996587248";
@@ -33,7 +47,6 @@ export default function GamePage() {
   const [modelId, setModelId] = useState<string | null>(null);
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState(2);
-  const [pixKeys, setPixKeys] = useState<Record<number, string>>({ 10: "", 20: "", 50: "" });
 
   const [player, setPlayer] = useState<any | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -90,7 +103,6 @@ export default function GamePage() {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
           setSpinCost(dataConfig[0].spin_cost || 2);
-          setPixKeys({ 10: dataConfig[0].pix_10 || "", 20: dataConfig[0].pix_20 || "", 50: dataConfig[0].pix_50 || "" });
         }
 
         const savedPlayerName = localStorage.getItem(`player_${slug}`);
@@ -230,12 +242,10 @@ export default function GamePage() {
         body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: isAutoDelivered, model_id: modelId }) 
       }).catch(() => {});
 
-      // INJEÇÃO AUTOMÁTICA DE CRÉDITOS SE FOR BÔNUS
       if (wonPrize.delivery_type === 'credit') {
         const bonusAmount = Number(wonPrize.delivery_value) || 0;
         if (bonusAmount > 0) {
           setPlayer((prev: any) => ({ ...prev, credits: prev.credits + bonusAmount }));
-          // Atualiza DB pra garantir
           fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${player.name}&model_id=eq.${modelId}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' })
             .then(r => r.json())
             .then(d => {
