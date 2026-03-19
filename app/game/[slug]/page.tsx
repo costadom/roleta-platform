@@ -6,11 +6,27 @@ import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye,
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
-import { weightedRandomIndex } from "@/src/lib/weightedRandom";
+
+// =========================================================================
+// ⚠️ FÓRMULA MATEMÁTICA DE PROBABILIDADE (Embutida para não quebrar)
+// =========================================================================
+function weightedRandomIndex(weights: number[]): number {
+  let totalWeight = 0;
+  for (let i = 0; i < weights.length; i++) {
+    totalWeight += weights[i];
+  }
+  let random = Math.random() * totalWeight;
+  for (let i = 0; i < weights.length; i++) {
+    if (random < weights[i]) {
+      return i;
+    }
+    random -= weights[i];
+  }
+  return weights.length - 1;
+}
 
 // =========================================================================
 // ⚠️ CHAVES PIX DA PLATAFORMA (MASTER)
-// O dinheiro cai na conta central e depois o sistema divide pra modelo sacar.
 // =========================================================================
 const MASTER_PIX_10 = "00020126770014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700215recargamaster10520400005303986540510.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609493ASA6304198F";
 const MASTER_PIX_20 = "00020126730014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700211recargade20520400005303986540520.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609561ASA6304E985";
@@ -104,7 +120,7 @@ export default function GamePage() {
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" })
         ];
 
-        // 3. Busca o jogador com segurança de codificação (encodeURIComponent)
+        // 3. Busca o jogador
         if (savedPlayerName) {
           fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }));
         }
@@ -203,12 +219,10 @@ export default function GamePage() {
     window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Esqueci minha senha na roleta da modelo ${modelName}, pode me ajudar?`)}`;
   };
 
-  // ✅ BLINDAGEM DE DESCONTO DE CRÉDITOS (AQUELA QUE TRAVOU A ROLETA)
   const deductCredits = async () => {
     if (!player || !player.id || !modelId) return false;
     
     try {
-      // 1. Busca os créditos atuais PELO ID (Muito mais seguro)
       const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { 
         headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, 
         cache: 'no-store' 
@@ -217,7 +231,6 @@ export default function GamePage() {
       const currentCredits = data?.[0]?.credits || 0;
       const currentCost = Number(spinCost) || 2;
 
-      // 2. Bloqueia se não tiver saldo
       if (currentCredits < currentCost) { 
         setShowDeposit(true); 
         setAutoSpin(false); 
@@ -225,11 +238,9 @@ export default function GamePage() {
         return false; 
       }
       
-      // 3. Desconta no App
       const newCredits = currentCredits - currentCost;
       setPlayer({ ...player, credits: newCredits });
       
-      // 4. Salva no Banco PELO ID (Evita erros com nomes com espaços)
       await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
         method: "PATCH", 
         headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
@@ -249,8 +260,9 @@ export default function GamePage() {
     if (fromAuto) setModalOpen(false);
     
     const success = await deductCredits();
-    if (!success) return; // Se a dedução falhou (sem saldo ou erro), NÃO GIRA
+    if (!success) return; 
 
+    // Agora a função matemática embutida roda perfeitamente aqui!
     const weights = prizes.map((p) => Number(p.weight) || 10);
     const index = weightedRandomIndex(weights);
     const wonPrize = prizes[index];
@@ -279,12 +291,10 @@ export default function GamePage() {
         body: JSON.stringify({ player_name: player.name, prize_name: wonPrize.name, delivered: isAutoDelivered, model_id: modelId }) 
       }).catch(() => {});
 
-      // INJEÇÃO AUTOMÁTICA DE CRÉDITOS (Apenas se for prêmio de saldo)
       if (wonPrize.delivery_type === 'credit') {
         const bonusAmount = Number(wonPrize.delivery_value) || 0;
         if (bonusAmount > 0) {
           setPlayer((prev: any) => ({ ...prev, credits: prev.credits + bonusAmount }));
-          // Atualiza DB pra garantir PELO ID
           fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' })
             .then(r => r.json())
             .then(d => {
