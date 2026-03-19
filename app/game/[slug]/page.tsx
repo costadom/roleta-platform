@@ -586,4 +586,69 @@ export default function GamePage() {
                   ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs, p.cr)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-[#FFD700]/30 transition-all active:scale-95 relative overflow-hidden">
                       {p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}
-                      <div className="text-left">
+                      <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div>
+                      <span className="bg-[#FF1493] text-white font-black text-[9px] px-3 py-1.5 rounded-lg shadow-lg">COMPRAR</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* MODAL DE PERFIL */}
+      {showProfile && player && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
+          <div className="bg-[#0f0f0f] border border-[#FFD700]/30 p-8 rounded-[3rem] w-full max-w-sm text-center relative shadow-2xl animate-in zoom-in duration-300">
+            <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
+            <div className="h-20 w-20 bg-[#FF1493]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#FF1493]/30 shadow-xl"><User size={40} className="text-[#FF1493]"/></div>
+            <h2 className="text-xl font-black uppercase text-white mb-1 tracking-tighter">{player.name}</h2>
+            <p className="text-[9px] text-white/30 uppercase font-black tracking-widest mb-8">{player.whatsapp}</p>
+            
+            <div className="bg-black/50 border border-white/5 p-6 rounded-3xl mb-6 shadow-inner">
+              <span className="text-[10px] text-[#FFD700] uppercase block mb-1 font-black">Créditos Atuais</span>
+              <span className="text-4xl font-black text-white">{player.credits} <span className="text-lg text-white/20">CR</span></span>
+            </div>
+
+            <div className="bg-black/30 border border-white/5 rounded-2xl p-4 mb-8">
+              <h3 className="text-[9px] font-black text-white/30 uppercase mb-3 flex items-center gap-2 justify-center"><Gift size={12} className="text-[#FF1493]" /> Seus Prêmios Ganhos</h3>
+              
+              <div className="max-h-32 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                {accumulatedPrizes.length === 0 ? (
+                  <p className="text-[9px] text-white/10 italic py-4">Nenhum prêmio ainda...</p>
+                ) : (
+                  accumulatedPrizes.map((p, i) => (
+                    <div key={i} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                       <span className="text-[10px] text-white font-bold uppercase truncate pr-2 flex-1 text-left">{p.name}</span>
+                       
+                       {p.delivery_type === 'link' && p.delivery_value && (
+                          <button onClick={() => window.open(p.delivery_value, '_blank')} className="bg-emerald-500 text-black px-3 py-1.5 rounded-lg text-[8px] font-black uppercase shrink-0 shadow-lg active:scale-95">Acessar</button>
+                       )}
+                       
+                       {p.delivery_type === 'credit' && (
+                          <span className="text-emerald-400 font-black text-[9px] shrink-0 bg-emerald-500/10 px-2 py-1 rounded-lg">+{p.delivery_value} CR</span>
+                       )}
+
+                       {(!p.delivery_type || p.delivery_type === 'whatsapp') && (
+                          <span className="text-[#FF1493] font-black text-[8px] shrink-0 uppercase">Manual</span>
+                       )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').length > 0 && (
+              <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e preciso resgatar esses prêmios:\n${accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Manuais no Whats</button>
+            )}
+
+            <button onClick={() => { localStorage.removeItem(`player_${slug}`); window.location.reload(); }} className="text-white/20 hover:text-red-500 text-[9px] font-black uppercase transition-all tracking-widest active:scale-95 mt-2">Sair da Conta</button>
+          </div>
+        </div>
+      )}
+
+      <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.name || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
+    </div>
+  );
+}
