@@ -13,6 +13,7 @@ function DashboardContent() {
 
   const [isMounted, setIsMounted] = useState(false);
   const [modelUrl, setModelUrl] = useState("");
+  const [referralUrl, setReferralUrl] = useState("");
   const [isSuper, setIsSuper] = useState(false);
 
   const [termsAccepted, setTermsAccepted] = useState(true);
@@ -50,13 +51,16 @@ function DashboardContent() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const CENTRAL_WHATSAPP = "5515996587248";
 
   useEffect(() => {
     setIsMounted(true);
     setIsSuper(localStorage.getItem("super_admin_auth") === "true");
+    if (modelId) {
+      // Cria o link exclusivo de indicação usando o ID da modelo atual
+      setReferralUrl(`${window.location.origin}/?ref=${modelId}`);
+    }
     if (modelSlug) setModelUrl(`${window.location.origin}/game/${modelSlug}`);
-  }, [modelSlug]);
+  }, [modelSlug, modelId]);
 
   const loadData = async () => {
     if (!modelId) return;
@@ -241,6 +245,7 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans relative">
       
+      {/* SIM, OS NOVOS TERMOS ESTÃO AQUI! */}
       {!termsAccepted && !isSuper && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-[#0f0f0f] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
@@ -289,6 +294,7 @@ function DashboardContent() {
           </div>
         </div>
 
+        {/* 🚀 O NOVO BOTÃO DE INDICAÇÃO INTELIGENTE */}
         <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex items-center justify-between shadow-2xl">
           <div className="flex items-center gap-4">
             <div className="h-10 w-10 bg-amber-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.5)]"><Gift size={20}/></div>
@@ -297,7 +303,15 @@ function DashboardContent() {
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Indique amigas e ganhe <strong className="text-amber-400">5% das vendas delas</strong> por 3 meses.</p>
             </div>
           </div>
-          <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=Oi, quero indicar uma modelo para a Savanah Labz!`, '_blank')} className="hidden sm:block bg-amber-500 text-black text-[9px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all">Indicar Agora</button>
+          <button 
+            onClick={() => {
+              navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`);
+              alert("Texto e link exclusivos copiados! Mande para a sua amiga no WhatsApp.");
+            }} 
+            className="hidden sm:block bg-amber-500 text-black text-[9px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all"
+          >
+            Copiar Link de Indicação
+          </button>
         </div>
 
         {globalAnnouncement && (
