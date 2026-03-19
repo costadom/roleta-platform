@@ -18,10 +18,10 @@ export default function SuperAdmin() {
   
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [newModel, setNewModel] = useState({ slug: "", email: "", password: "" });
+  // NOVO: Campo de indicação
+  const [newModel, setNewModel] = useState({ slug: "", email: "", password: "", referred_by: "" });
 
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
-
   const [globalMsg, setGlobalMsg] = useState("");
   const [rankVisible, setRankVisible] = useState(false);
   const [goalAmount, setGoalAmount] = useState(1000);
@@ -70,13 +70,10 @@ export default function SuperAdmin() {
     e.preventDefault();
     if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
       localStorage.setItem("super_admin_auth", "true");
-      setIsLogged(true);
-      setInitialLoading(true);
-      fetchData();
+      setIsLogged(true); setInitialLoading(true); fetchData();
     } else { alert("Acesso negado!"); }
   };
 
-  // BOTÃO NUCLEAR DE RESET
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: Você está prestes a ZERAR todo o financeiro, histórico de giros e saques do sistema.\n\nIsso limpará tudo para o lançamento oficial. \n\nDigite ZERARTUDO para confirmar:");
     if (confirmText !== "ZERARTUDO") return alert("Cancelado.");
@@ -84,21 +81,18 @@ export default function SuperAdmin() {
     setInitialLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      
       await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
       await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
       
       await fetch(`${supabaseUrl}/rest/v1/Models?id=not.is.null`, { 
         method: 'PATCH', headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ balance: 0 }) 
+        body: JSON.stringify({ balance: 0, terms_accepted: false }) // Resetamos os termos aqui tbm!
       });
 
       alert("Sistema Restaurado! O financeiro foi limpo para o lançamento oficial.");
       fetchData();
-    } catch (err) {
-      alert("Erro ao tentar limpar o sistema.");
-    }
+    } catch (err) { alert("Erro ao tentar limpar o sistema."); }
   };
 
   const handleSaveGlobal = async (valRanking?: boolean) => {
@@ -114,9 +108,7 @@ export default function SuperAdmin() {
   };
 
   const toggleRankingVisibility = async () => {
-    const nextVal = !rankVisible;
-    setRankVisible(nextVal);
-    await handleSaveGlobal(nextVal);
+    const nextVal = !rankVisible; setRankVisible(nextVal); await handleSaveGlobal(nextVal);
   };
 
   const handleApproveWithdrawal = async (id: string, amount: number, modelId: string) => {
@@ -157,7 +149,6 @@ export default function SuperAdmin() {
 
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
       const appPrizes = Array.isArray(app.prizes) ? app.prizes : JSON.parse(app.prizes || "[]");
-      
       const prizesToInsert = appPrizes.map((p: string, i: number) => ({
         id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp'
       }));
@@ -172,9 +163,8 @@ export default function SuperAdmin() {
       });
 
       alert(`Sucesso! Envie no WhatsApp dela:\nLink: site.com/game/${app.nickname}\nE-mail: ${generatedEmail}\nSenha: ${generatedPass}`);
-      setSelectedApp(null);
-      fetchData();
-    } catch (err) { alert("Erro ao criar a roleta."); } finally { setLoading(false); }
+      setSelectedApp(null); fetchData();
+    } catch (err) { alert("Erro ao criar."); } finally { setLoading(false); }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -183,7 +173,13 @@ export default function SuperAdmin() {
       const now = new Date().toISOString(); 
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ ...newModel, created_at: now }),
+        body: JSON.stringify({ 
+          slug: newModel.slug.toLowerCase().replace(/\s/g, ''), 
+          email: newModel.email, 
+          password: newModel.password, 
+          referred_by: newModel.referred_by || null, // O ID de quem indicou!
+          created_at: now 
+        }),
       });
       const dataMod = await resMod.json();
       const mId = dataMod[0].id;
@@ -202,7 +198,7 @@ export default function SuperAdmin() {
 
       await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
 
-      alert(`Franquia manual criada!`); setShowModal(false); fetchData(); setNewModel({ slug: "", email: "", password: "" });
+      alert(`Franquia manual criada!`); setShowModal(false); fetchData(); setNewModel({ slug: "", email: "", password: "", referred_by: "" });
     } catch (err) {} finally { setLoading(false); }
   };
 
@@ -337,12 +333,23 @@ export default function SuperAdmin() {
                   <div className="flex justify-between items-start mb-4 relative z-10">
                     <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
                     <div className="flex gap-2">
+                      <div className="text-right">
+                        <span className="text-[8px] font-black text-white/30 uppercase block">ID do Perfil</span>
+                        <span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span>
+                      </div>
                       <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
                       <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                     </div>
                   </div>
                   <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
                   <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  
+                  {m.referred_by && (
+                    <div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block">
+                      <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por: {m.referred_by.split('-')[0]}</span>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10">
                     <div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div>
                     <div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div>
@@ -452,6 +459,10 @@ export default function SuperAdmin() {
               <input type="text" placeholder="APELIDO (URL)" required className="w-full bg-black border border-white/10 p-5 rounded-3xl text-xs outline-none focus:border-[#FF1493] text-white" value={newModel.slug} onChange={e => setNewModel({...newModel, slug: e.target.value.toLowerCase().replace(/\s/g, '')})} />
               <input type="email" placeholder="E-MAIL" required className="w-full bg-black border border-white/10 p-5 rounded-3xl text-xs outline-none focus:border-[#FF1493] text-white" value={newModel.email} onChange={e => setNewModel({...newModel, email: e.target.value})} />
               <input type="text" placeholder="SENHA" required className="w-full bg-black border border-white/10 p-5 rounded-3xl text-xs outline-none focus:border-[#FF1493] text-white" value={newModel.password} onChange={e => setNewModel({...newModel, password: e.target.value})} />
+              <div className="pt-4 border-t border-white/10">
+                <label className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-2 block">Foi indicada? (Opcional)</label>
+                <input type="text" placeholder="Cole o ID da Modelo que indicou" className="w-full bg-amber-500/10 border border-amber-500/30 p-5 rounded-3xl text-xs outline-none focus:border-amber-500 text-amber-500" value={newModel.referred_by} onChange={e => setNewModel({...newModel, referred_by: e.target.value})} />
+              </div>
             </div>
             <button type="submit" disabled={loading} className="w-full bg-[#FF1493] py-5 rounded-[2rem] text-[10px] font-black uppercase mt-10 shadow-xl flex items-center justify-center gap-3">{loading ? <Loader2 className="animate-spin" size={16}/> : "CRIAR MANUALMENTE"}</button>
             <button type="button" onClick={() => setShowModal(false)} className="w-full text-[9px] font-black uppercase text-white/20 mt-6 text-center tracking-widest">Cancelar</button>
