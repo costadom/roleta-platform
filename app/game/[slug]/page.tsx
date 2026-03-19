@@ -8,7 +8,7 @@ import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
 
 // =========================================================================
-// ⚠️ FÓRMULA MATEMÁTICA DE PROBABILIDADE (Embutida para não quebrar)
+// ⚠️ FÓRMULA MATEMÁTICA DE PROBABILIDADE
 // =========================================================================
 function weightedRandomIndex(weights: number[]): number {
   let totalWeight = 0;
@@ -24,20 +24,6 @@ function weightedRandomIndex(weights: number[]): number {
   }
   return weights.length - 1;
 }
-
-// =========================================================================
-// ⚠️ CHAVES PIX DA PLATAFORMA (MASTER)
-// =========================================================================
-const MASTER_PIX_10 = "00020126770014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700215recargamaster10520400005303986540510.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609493ASA6304198F";
-const MASTER_PIX_20 = "00020126730014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700211recargade20520400005303986540520.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609561ASA6304E985";
-const MASTER_PIX_50 = "00020126710014br.gov.bcb.pix01362495188e-f610-46e5-b62f-b853e0aed2700209recarga50520400005303986540550.005802BR592355489582 RAPHAELA FERNA6008Sorocaba622905255548958200000612609590ASA6304956E";
-
-const pixKeys = { 
-  10: MASTER_PIX_10, 
-  20: MASTER_PIX_20, 
-  50: MASTER_PIX_50 
-};
-// =========================================================================
 
 const SPIN_DURATION = 4000;
 const CENTRAL_WHATSAPP = "5515996587248";
@@ -70,10 +56,16 @@ export default function GamePage() {
   const [authMode, setAuthMode] = useState<"choose" | "login" | "register">("choose");
   const [authError, setAuthError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  
+  // ESTADOS DO MOTOR PIX
   const [showDeposit, setShowDeposit] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [depositOption, setDepositOption] = useState<10 | 20 | 50 | null>(null);
+  const [depositOption, setDepositOption] = useState<number | null>(null);
+  const [pixData, setPixData] = useState<any>(null);
+  const [pixLoading, setPixLoading] = useState(false);
+  const [pixPaid, setPixPaid] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const [showProfile, setShowProfile] = useState(false);
 
   const [regName, setRegName] = useState("");
   const [regZap, setRegZap] = useState("");
@@ -105,7 +97,6 @@ export default function GamePage() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
         
-        // 1. Pega o ID da modelo
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers, cache: "no-store" });
         const dataMod = await resMod.json();
         if (!dataMod || !dataMod[0]) { setLoading(false); return; }
@@ -114,13 +105,11 @@ export default function GamePage() {
 
         const savedPlayerName = localStorage.getItem(`player_${slug}`);
 
-        // 2. Busca Prêmios e Configs em paralelo
         const fetchPromises = [
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers, cache: "no-store" })
         ];
 
-        // 3. Busca o jogador
         if (savedPlayerName) {
           fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers, cache: "no-store" }));
         }
@@ -156,6 +145,64 @@ export default function GamePage() {
     autoSpinTimerRef.current = setTimeout(() => { if (autoSpinRef.current && runSpinRef.current) runSpinRef.current(true); }, 1500); 
     return () => { if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current); };
   }, [autoSpin, isSpinning]);
+
+  // =========================================================================
+  // MOTOR PIX - GERADOR E RADAR
+  // =========================================================================
+  const handleGeneratePix = async (valorPago: number, creditosDoPacote: number) => {
+    if (!player || !player.id) return;
+    setPixLoading(true);
+    setPixPaid(false);
+    setPixData(null);
+    setDepositOption(creditosDoPacote); 
+
+    try {
+      const response = await fetch('/api/checkout/pix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: valorPago, userId: player.id }),
+      });
+      const data = await response.json();
+      if (data.qr_code_base64) {
+        setPixData(data);
+      } else {
+        console.error("Erro na PushinPay:", data);
+        alert("Erro ao gerar PIX. Tente novamente.");
+      }
+    } catch (error) {
+      console.error("Erro PIX:", error);
+    }
+    setPixLoading(false);
+  };
+
+  useEffect(() => {
+    let intervalo: NodeJS.Timeout;
+    if (pixData && !pixPaid && player) {
+      intervalo = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/checkout/check-status?userId=${player.id}`);
+          const data = await res.json();
+          if (data.status === 'pago') {
+            setPixPaid(true);
+            clearInterval(intervalo);
+            
+            const creditosGanhos = depositOption || 0;
+            setPlayer((prev: any) => ({ ...prev, credits: prev.credits + creditosGanhos }));
+            
+            setTimeout(() => {
+              setShowDeposit(false);
+              setPixData(null);
+              setPixPaid(false);
+              setDepositOption(null);
+            }, 3000);
+          }
+        } catch (error) {
+          console.error("Erro no radar:", error);
+        }
+      }, 3000); 
+    }
+    return () => clearInterval(intervalo);
+  }, [pixData, pixPaid, player, depositOption]);
 
   const segments = useMemo(() => prizes.map((p) => ({ 
     color: p.color || "#ff0000", 
@@ -262,7 +309,6 @@ export default function GamePage() {
     const success = await deductCredits();
     if (!success) return; 
 
-    // Agora a função matemática embutida roda perfeitamente aqui!
     const weights = prizes.map((p) => Number(p.weight) || 10);
     const index = weightedRandomIndex(weights);
     const wonPrize = prizes[index];
@@ -447,38 +493,61 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* MODAL DE DEPÓSITO */}
+      {/* MODAL DE DEPÓSITO (O NOVO MOTOR V8) */}
       {showDeposit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-lg p-4">
-          <div className="bg-[#0f0f0f] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm relative shadow-2xl text-center animate-in zoom-in duration-300">
-            <button onClick={() => { setShowDeposit(false); setDepositOption(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
-            <h2 className="text-2xl font-black uppercase text-[#FFD700] mb-2 italic">Recarregar</h2>
-            <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-10">Escolha um pacote de créditos</p>
+          <div className="bg-[#0f0f0f] border border-[#FFD700]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-2xl text-center animate-in zoom-in duration-300">
+            {!pixLoading && !pixPaid && (
+              <button onClick={() => { setShowDeposit(false); setPixData(null); setDepositOption(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
+            )}
             
-            {!depositOption ? (
-              <div className="space-y-4">
-                {[
-                  { cr: 15, rs: 10, opt: 10, bonus: "+5 BÔNUS" },
-                  { cr: 25, rs: 20, opt: 20, bonus: "+5 BÔNUS" },
-                  { cr: 60, rs: 50, opt: 50, bonus: "+10 BÔNUS" }
-                ].map((p) => (
-                  <button key={p.opt} onClick={() => setDepositOption(p.opt as any)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-[#FFD700]/30 transition-all active:scale-95 relative overflow-hidden">
-                    {p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}
-                    <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div>
-                    <span className="bg-[#FF1493] text-white font-black text-[9px] px-3 py-1.5 rounded-lg shadow-lg">COMPRAR</span>
-                  </button>
-                ))}
+            <h2 className="text-2xl font-black uppercase text-[#FFD700] mb-2 italic">Recarregar</h2>
+            
+            {pixLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center">
+                <Loader2 className="animate-spin text-[#FF1493] mb-4" size={50} />
+                <p className="text-[#FFD700] uppercase font-black text-[10px] tracking-widest">Conectando ao Banco...</p>
+              </div>
+            ) : pixPaid ? (
+              <div className="py-8 flex flex-col items-center justify-center animate-bounce">
+                <CheckCircle2 size={70} className="text-[#00ff00] mb-4 shadow-[0_0_15px_rgba(0,255,0,0.5)] rounded-full" />
+                <h2 className="text-[#00ff00] text-xl font-black uppercase tracking-widest mb-2">Aprovado!</h2>
+                <p className="text-white/70 text-[10px] uppercase font-bold">Os créditos já estão na conta.</p>
+                <p className="text-white/40 text-[9px] uppercase font-bold mt-4">Voltando para a roleta...</p>
+              </div>
+            ) : pixData ? (
+              <div className="mt-6">
+                <div className="bg-black/80 border border-[#FFD700]/20 p-6 rounded-3xl mb-4 shadow-inner">
+                  <p className="text-[10px] text-white/40 uppercase font-black mb-4">Escaneie para pagar</p>
+                  <div className="bg-white p-2 rounded-xl inline-block mb-4 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                    <img src={pixData.qr_code_base64} alt="QR Code" className="w-40 h-40" />
+                  </div>
+                  <p className="text-[9px] text-white/40 uppercase font-black mb-2 mt-2">Ou Pix Copia e Cola:</p>
+                  <input readOnly value={pixData.qr_code} className="w-full bg-[#0a0a0a] border border-white/5 p-3 rounded-xl text-[9px] font-mono text-[#FFD700] mb-4 text-center" />
+                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase bg-[#FF1493] text-white py-4 rounded-xl hover:bg-[#ff1493]/80 transition-all active:scale-95">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Código Copiado!" : "Copiar Chave Pix"}</button>
+                </div>
+                <p className="text-[9px] text-[#FF1493] font-bold uppercase tracking-widest animate-pulse mt-4 mb-4">Aguardando confirmação automática...</p>
+                <button onClick={() => { setPixData(null); setDepositOption(null); }} className="text-[10px] text-white/20 uppercase font-black tracking-widest hover:text-white transition-all">Escolher outro pacote</button>
               </div>
             ) : (
-              <div>
-                <div className="bg-black border border-[#FFD700]/20 p-6 rounded-3xl mb-6 shadow-inner">
-                  <p className="text-[10px] text-white/40 uppercase font-black mb-3">Chave Pix Copia e Cola:</p>
-                  <div className="bg-[#0a0a0a] p-4 rounded-xl text-[9px] break-all font-mono text-[#FFD700] mb-4 border border-white/5 max-h-24 overflow-y-auto">{pixKeys[depositOption]}</div>
-                  <button onClick={() => { navigator.clipboard.writeText(pixKeys[depositOption]); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase text-[#FF1493] hover:text-white transition-all">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Código Copiado!" : "Copiar Chave Pix"}</button>
+              <>
+                <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-8">Escolha um pacote de créditos</p>
+                <div className="space-y-4">
+                  {[
+                    // AS REGRAS EXATAS: R$15 (20cr), R$25 (30cr), R$35 (40cr), R$55 (60cr)
+                    { cr: 20, rs: 15, bonus: "+5 BÔNUS" },
+                    { cr: 30, rs: 25, bonus: "+5 BÔNUS" },
+                    { cr: 40, rs: 35, bonus: "+5 BÔNUS" },
+                    { cr: 60, rs: 55, bonus: "+5 BÔNUS" }
+                  ].map((p) => (
+                    <button key={p.rs} onClick={() => handleGeneratePix(p.rs, p.cr)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-[#FFD700]/30 transition-all active:scale-95 relative overflow-hidden">
+                      {p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}
+                      <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div>
+                      <span className="bg-[#FF1493] text-white font-black text-[9px] px-3 py-1.5 rounded-lg shadow-lg">COMPRAR</span>
+                    </button>
+                  ))}
                 </div>
-                <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player?.name}. Acabei de pagar R$ ${depositOption} via PIX para jogar na roleta da modelo ${modelName}. Pode liberar meus créditos?`)}`} className="w-full bg-[#FF1493] py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl shadow-[#FF1493]/20 transition-all active:scale-95">Já Paguei! Enviar Comprovante</button>
-                <button onClick={() => setDepositOption(null)} className="mt-6 text-[10px] text-white/20 uppercase font-black tracking-widest">Voltar para pacotes</button>
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -501,7 +570,6 @@ export default function GamePage() {
             <div className="bg-black/30 border border-white/5 rounded-2xl p-4 mb-8">
               <h3 className="text-[9px] font-black text-white/30 uppercase mb-3 flex items-center gap-2 justify-center"><Gift size={12} className="text-[#FF1493]" /> Seus Prêmios Ganhos</h3>
               
-              {/* LISTA INTELIGENTE DE PRÊMIOS */}
               <div className="max-h-32 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-white/10">
                 {accumulatedPrizes.length === 0 ? (
                   <p className="text-[9px] text-white/10 italic py-4">Nenhum prêmio ainda...</p>
@@ -527,7 +595,6 @@ export default function GamePage() {
               </div>
             </div>
 
-            {/* BOTÃO DO WHATSAPP SÓ APARECE SE TIVER PRÊMIO MANUAL */}
             {accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').length > 0 && (
               <button onClick={() => window.location.href = `https://api.whatsapp.com/send?phone=${CENTRAL_WHATSAPP}&text=${encodeURIComponent(`Oi! Aqui é o(a) ${player.name}. Girei a roleta da modelo ${modelName} e preciso resgatar esses prêmios:\n${accumulatedPrizes.filter(p => !p.delivery_type || p.delivery_type === 'whatsapp').map(p => `- ${p.name}`).join('\n')}`)}`} className="w-full bg-[#FF1493] text-white font-black py-5 rounded-2xl text-xs uppercase mb-4 shadow-xl transition-all active:scale-95">Retirar Manuais no Whats</button>
             )}
