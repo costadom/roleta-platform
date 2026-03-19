@@ -3,47 +3,44 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const { amount, userId } = await req.json();
+    const val = Math.round(parseFloat(amount) * 100); // R$ 1,00 -> 100 centavos
 
-    // Transformamos em centavos (ex: 1.00 virá 100)
-    const amountInCents = Math.round(parseFloat(amount) * 100);
+    const payload = {
+      value: val,
+      webhook_url: `${process.env.NEXT_PUBLIC_URL}/api/webhooks/pushinpay`,
+      external_id: String(userId),
+    };
 
-    // TENTATIVA 1: Adicionando /v1/ que é o padrão atual da PushinPay
-    const response = await fetch('https://api.pushinpay.com.br/api/v1/pix/cash-in', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.PUSHINPAY_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        value: amountInCents,
-        webhook_url: `${process.env.NEXT_PUBLIC_URL}/api/webhooks/pushinpay`,
-        external_id: String(userId),
-      }),
-    });
+    const headers = {
+      'Authorization': `Bearer ${process.env.PUSHINPAY_TOKEN}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
 
-    const data = await response.json();
+    // VAMOS TENTAR OS 3 ENDEREÇOS POSSÍVEIS
+    const endpoints = [
+      'https://api.pushinpay.com.br/api/pix/cash-in',
+      'https://api.pushinpay.com.br/api/v1/pix/cash-in',
+      'https://api.pushinpay.com.br/pix/cash-in'
+    ];
 
-    // Se a primeira tentativa falhar com 404, tentamos sem o /v1/ (Backup)
-    if (response.status === 404) {
-        const retryResponse = await fetch('https://api.pushinpay.com.br/api/pix/cash-in', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${process.env.PUSHINPAY_TOKEN}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify({
-                value: amountInCents,
-                webhook_url: `${process.env.NEXT_PUBLIC_URL}/api/webhooks/pushinpay`,
-                external_id: String(userId),
-            }),
-        });
-        const retryData = await retryResponse.json();
-        return NextResponse.json(retryData, { status: retryResponse.status });
+    for (const url of endpoints) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      // Se não for 404, significa que achamos o endereço certo!
+      if (response.status !== 404) {
+        return NextResponse.json({ ...data, url_tentada: url }, { status: response.status });
+      }
     }
 
-    return NextResponse.json(data, { status: response.status });
+    return NextResponse.json({ error: "Nenhum endpoint da PushinPay funcionou (Todos 404)" }, { status: 404 });
+
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
