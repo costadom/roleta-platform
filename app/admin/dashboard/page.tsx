@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, HelpCircle, ChevronUp, ChevronDown } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, HelpCircle, ChevronUp, ChevronDown, User } from "lucide-react";
 import PlayersManager from "./players";
 
 function DashboardContent() {
@@ -41,12 +41,17 @@ function DashboardContent() {
   const [pixKey2, setPixKey2] = useState("");
   const [savingPix, setSavingPix] = useState(false);
 
+  // FOTO DO FUNDO
   const [currentBg, setCurrentBg] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [selectedBgFile, setSelectedBgFile] = useState<File | null>(null);
+  const [bgPreviewUrl, setBgPreviewUrl] = useState<string | null>(null);
 
-  // 🔥 ESTADO DA VITRINE
+  // FOTO DE PERFIL (VITRINE)
+  const [currentProfile, setCurrentProfile] = useState<string | null>(null);
+  const [selectedProfileFile, setSelectedProfileFile] = useState<File | null>(null);
+  const [profilePreviewUrl, setProfilePreviewUrl] = useState<string | null>(null);
+
+  const [uploading, setUploading] = useState(false);
   const [showcaseVisible, setShowcaseVisible] = useState(false);
 
   const [modelName, setModelName] = useState("");
@@ -116,9 +121,9 @@ function DashboardContent() {
       
       if (dataConfig[0]) { 
         setCurrentBg(dataConfig[0].bg_url); 
+        setCurrentProfile(dataConfig[0].profile_url); 
         setModelName(dataConfig[0].model_name || ""); 
         setSpinCost(dataConfig[0].spin_cost || 2); 
-        // 🔥 LENDO DO BANCO SE A VITRINE TÁ LIGADA
         setShowcaseVisible(dataConfig[0].showcase_visible === true);
       }
       
@@ -154,33 +159,46 @@ function DashboardContent() {
     } catch (err) { alert("Erro ao aceitar termos."); } finally { setAcceptingTerms(false); }
   };
 
-  const handleSaveSettings = async () => {
-    setSavingSettings(true);
-    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName, spin_cost: spinCost }) });
-    setSavingSettings(false); alert("Painel Atualizado!");
-  };
-
   const handleSavePix = async () => {
     setSavingPix(true);
     await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ pix_key_1: pixKey1, pix_key_2: pixKey2 }) });
     setSavingPix(false); alert("Chaves PIX salvas com sucesso!");
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // UPLOAD DA FOTO DE FUNDO
+  const handleBgFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB!");
-    setSelectedFile(file); setPreviewUrl(URL.createObjectURL(file));
+    setSelectedBgFile(file); setBgPreviewUrl(URL.createObjectURL(file));
   };
 
-  const handleSaveImage = async () => {
-    if (!selectedFile) return;
+  const handleSaveBgImage = async () => {
+    if (!selectedBgFile) return;
     setUploading(true);
-    const fileName = `bg_${modelId}_${Date.now()}.jpeg`;
-    await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "image/jpeg" }, body: selectedFile });
+    const fileName = `bg_${modelId}_${Date.now()}.${selectedBgFile.name.split('.').pop()}`;
+    await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": selectedBgFile.type }, body: selectedBgFile });
     const publicUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
     await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: publicUrl }) });
-    setCurrentBg(publicUrl); setSelectedFile(null); setPreviewUrl(null); setUploading(false); alert("Fundo Atualizado!");
+    setCurrentBg(publicUrl); setSelectedBgFile(null); setBgPreviewUrl(null); setUploading(false); alert("Fundo da Roleta Atualizado!");
+  };
+
+  // UPLOAD DA FOTO DA VITRINE
+  const handleProfileFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB!");
+    setSelectedProfileFile(file); setProfilePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleSaveProfileImage = async () => {
+    if (!selectedProfileFile) return;
+    setUploading(true);
+    const fileName = `profile_${modelId}_${Date.now()}.${selectedProfileFile.name.split('.').pop()}`;
+    await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": selectedProfileFile.type }, body: selectedProfileFile });
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
+    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ profile_url: publicUrl }) });
+    setCurrentProfile(publicUrl); setSelectedProfileFile(null); setProfilePreviewUrl(null); setUploading(false); alert("Foto da Vitrine Atualizada!");
   };
 
   const handleSaveEditPrize = async (e: React.FormEvent) => {
@@ -203,7 +221,6 @@ function DashboardContent() {
     }).catch(err => console.error(err));
   };
 
-  // 🔥 FUNÇÃO DE ATIVAR/DESATIVAR A VITRINE
   const toggleShowcase = async () => {
     const newVal = !showcaseVisible;
     setShowcaseVisible(newVal);
@@ -213,9 +230,7 @@ function DashboardContent() {
         headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ showcase_visible: newVal })
       });
-    } catch(err) {
-      alert("Erro ao alterar vitrine.");
-    }
+    } catch(err) { alert("Erro ao alterar vitrine."); }
   };
 
   const handleWithdraw = async () => {
@@ -341,7 +356,7 @@ function DashboardContent() {
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Indique amigas e ganhe <strong className="text-amber-400">5% das vendas delas</strong> por 3 meses.</p>
             </div>
           </div>
-          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga no Whatsapp."); }} className="w-full sm:w-auto bg-amber-500 text-black text-[10px] font-black uppercase px-6 py-4 sm:py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">Copiar Link Indicação</button>
+          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga."); }} className="w-full sm:w-auto bg-amber-500 text-black text-[10px] font-black uppercase px-6 py-4 sm:py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">Copiar Link Indicação</button>
         </div>
 
         {globalAnnouncement && (
@@ -351,9 +366,20 @@ function DashboardContent() {
           </div>
         )}
 
-        <div className="mb-8 bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
-          <div className="flex items-center gap-4"><div className="p-3 bg-[#FFD700] text-black rounded-2xl shadow-lg"><LinkIcon size={20}/></div><div><p className="text-[9px] font-black uppercase text-white/40 tracking-widest">Link da sua Roleta</p><p className="text-sm font-bold text-white lowercase tracking-tight">{isMounted ? modelUrl : "..."}</p></div></div>
-          <button onClick={() => { navigator.clipboard.writeText(modelUrl); alert("Copiado!"); }} className="w-full sm:w-auto px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:bg-[#FFD700] hover:text-black transition-all">Copiar Link</button>
+        {/* 🔥 VISUAL DO LINK CORRIGIDO PARA NÃO ESTOURAR NA TELA 🔥 */}
+        <div className="mb-8 bg-white/5 border border-white/10 p-5 rounded-3xl flex flex-col sm:flex-row items-center gap-4 shadow-xl">
+          <div className="flex items-center gap-4 w-full">
+            <div className="p-3 bg-[#FFD700] text-black rounded-2xl shadow-[0_0_15px_rgba(255,215,0,0.3)] shrink-0">
+              <LinkIcon size={20}/>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-black uppercase text-white/40 tracking-widest mb-1">Link da sua Roleta</p>
+              <p className="text-xs sm:text-sm font-bold text-white lowercase tracking-tight truncate w-full">{isMounted ? modelUrl : "..."}</p>
+            </div>
+          </div>
+          <button onClick={() => { navigator.clipboard.writeText(modelUrl); alert("Copiado!"); }} className="w-full sm:w-auto px-6 py-3 bg-[#FFD700] text-black rounded-xl text-[10px] font-black uppercase hover:bg-yellow-400 transition-all shrink-0">
+            Copiar Link
+          </button>
         </div>
 
         <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-2xl border border-white/5 overflow-x-auto">
@@ -402,7 +428,6 @@ function DashboardContent() {
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             
-            {/* 🔥 O NOVO BOTÃO DA VITRINE */}
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <h3 className="text-[11px] font-black uppercase text-[#FFD700] mb-1">Exibir meu perfil na Vitrine</h3>
@@ -413,9 +438,39 @@ function DashboardContent() {
               </button>
             </div>
 
-            <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
-              <div className="w-full sm:w-40 h-24 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative shrink-0">{(previewUrl || currentBg) ? <img src={(previewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}</div>
-              <div className="flex-1 text-center sm:text-left"><p className="text-[10px] font-black uppercase text-white/40 mb-3 tracking-widest">Fundo (Máx 2MB | JPEG)</p><label className="bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">Trocar Foto <input type="file" accept="image/jpeg, image/png" onChange={handleFileChange} className="hidden" /></label>{selectedFile && <button onClick={handleSaveImage} className="bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase ml-2">Salvar</button>}</div>
+            {/* 🔥 ÁREA DUPLA DE FOTOS (PERFIL E FUNDO) 🔥 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* FOTO DO PERFIL (VITRINE) */}
+              <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col items-center text-center">
+                <div className="w-32 h-32 mb-4 bg-black/50 border border-white/10 rounded-full overflow-hidden flex items-center justify-center relative shrink-0">
+                  {(profilePreviewUrl || currentProfile) ? <img src={(profilePreviewUrl || currentProfile) as string} className="w-full h-full object-cover" /> : <User className="text-white/10" size={40} />}
+                </div>
+                <h3 className="text-[11px] font-black uppercase text-[#FFD700] mb-1">Foto da Vitrine</h3>
+                <p className="text-[9px] font-bold text-white/40 mb-4 tracking-widest leading-relaxed px-2">Aparece na página inicial para os clientes escolherem você. (Máx 2MB)</p>
+                <div className="flex flex-col w-full gap-2 mt-auto">
+                  <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">
+                    Escolher Imagem
+                    <input type="file" accept="image/jpeg, image/png" onChange={handleProfileFileChange} className="hidden" />
+                  </label>
+                  {selectedProfileFile && <button onClick={handleSaveProfileImage} disabled={uploading} className="w-full bg-[#FFD700] text-black px-5 py-3 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-[#FFD700]/20">{uploading ? "Salvando..." : "Salvar Perfil"}</button>}
+                </div>
+              </div>
+
+              {/* FOTO DO FUNDO (ROLETA) */}
+              <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col items-center text-center">
+                <div className="w-full h-32 mb-4 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative shrink-0">
+                  {(bgPreviewUrl || currentBg) ? <img src={(bgPreviewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}
+                </div>
+                <h3 className="text-[11px] font-black uppercase text-[#FF1493] mb-1">Fundo da Roleta</h3>
+                <p className="text-[9px] font-bold text-white/40 mb-4 tracking-widest leading-relaxed px-2">Imagem que fica atrás da sua roleta no momento do jogo. (Máx 2MB)</p>
+                <div className="flex flex-col w-full gap-2 mt-auto">
+                  <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">
+                    Escolher Imagem
+                    <input type="file" accept="image/jpeg, image/png" onChange={handleBgFileChange} className="hidden" />
+                  </label>
+                  {selectedBgFile && <button onClick={handleSaveBgImage} disabled={uploading} className="w-full bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-[#FF1493]/20">{uploading ? "Salvando..." : "Salvar Fundo"}</button>}
+                </div>
+              </div>
             </div>
 
             <div className="bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/30 p-6 rounded-3xl relative overflow-hidden">
