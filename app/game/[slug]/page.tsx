@@ -86,7 +86,6 @@ export default function GamePage() {
     async function fetchData() {
       if (!slug || !supabaseUrl) return;
       
-      // TRAVA DE TEMPO: Se o banco demorar mais de 4s, ele abre a tela do mesmo jeito
       const timeoutId = setTimeout(() => setLoading(false), 4000);
 
       try {
@@ -232,12 +231,11 @@ export default function GamePage() {
     const success = await deductCredits(cost);
     if (!success) return; 
 
-    // LÓGICA ABSOLUTA: Prêmios Falsos tem chance ZERO cravada aqui
     let weights = prizes.map((p) => {
       const upperName = String(p.name).toUpperCase();
       const isFakePrize = Number(p.weight) <= 0.05 || upperName.includes("PIX") || upperName.includes("PRESENCIAL") || upperName.includes("100") || upperName.includes("R$");
       
-      if (isFakePrize) return 0.000000001; // CHANCE NULA NA MATEMÁTICA
+      if (isFakePrize) return 0.000000001; 
       return Number(p.weight) || 10;
     });
 
@@ -296,11 +294,11 @@ export default function GamePage() {
   );
 
   return (
-    <div className="min-h-[100dvh] font-sans text-white bg-[#0a0a0a] flex items-center justify-center overflow-hidden sm:p-4">
-      <div className="relative w-full h-[100dvh] sm:h-[95vh] max-w-[430px] mx-auto bg-black flex flex-col overflow-hidden sm:rounded-[2.5rem] sm:border sm:border-white/10 shadow-2xl">
+    <div className="min-h-[100dvh] font-sans text-white bg-[#0a0a0a] flex items-center justify-center sm:p-4">
+      <div className="relative w-full h-[100dvh] sm:h-[95vh] max-w-[430px] mx-auto bg-black flex flex-col overflow-y-auto overflow-x-hidden sm:rounded-[2.5rem] sm:border sm:border-white/10 shadow-2xl">
         <div className="absolute inset-0 z-0"><div className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat" style={ bgUrl ? { backgroundImage: `url(${bgUrl})` } : { backgroundColor: "#120008" } } />{bgUrl && <div className="absolute inset-0 bg-black/55" />}</div>
 
-        <div className="relative z-10 flex h-full w-full flex-col justify-between pointer-events-auto">
+        <div className="relative z-10 flex h-full w-full flex-col justify-between pointer-events-auto min-h-full">
           <div className="relative pt-6 px-4 w-full shrink-0">
             <div className="flex justify-end mb-2"><span className="inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-[9px] uppercase font-black text-white/90 shadow-md">{player ? `Logado: ${player.name.split(" ")[0]}` : "Online"} <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /></span></div>
             <div className="flex items-center justify-between mb-4 w-full">
@@ -314,11 +312,11 @@ export default function GamePage() {
             <div className="relative w-full h-8 bg-black/50 border-y border-[#FFD700]/30 overflow-hidden backdrop-blur-sm"><div className="flex whitespace-nowrap animate-marquee items-center h-full">{winnerFeed.concat(winnerFeed).map((w, i) => (<span key={i} className="mx-12 text-[10px] uppercase font-black tracking-widest flex items-center gap-2"><Sparkles size={11} className="text-[#FFD700] animate-pulse" /><span className="text-white/80">{w.name}</span><span className="text-[#FF1493]">ganhou {w.prize}</span></span>))}</div></div>
           </div>
 
-          <div className="relative flex flex-1 flex-col items-center justify-center w-full min-h-[350px]">
+          <div className="relative flex flex-1 flex-col items-center justify-center w-full min-h-[280px]">
             {prizes.length > 0 ? ( <div className="transform scale-[0.95] flex items-center justify-center w-full"><RouletteWheel segments={segments} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(false, false)} durationMs={SPIN_DURATION} /></div> ) : ( <div className="text-center p-10 bg-black/50 rounded-3xl border border-white/10 m-4"><Gift className="mx-auto text-[#FF1493] mb-4" size={48}/><p className="text-xs uppercase font-black text-white/50 tracking-widest">Aguardando prêmios...</p></div> )}
           </div>
 
-          <div className="relative pb-8 pt-4 px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent">
+          <div className="relative pb-12 pt-4 px-4 shrink-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent mt-auto">
             <div className="flex items-center justify-between bg-black/80 ring-1 ring-[#FFD700]/30 p-4 rounded-2xl mb-3 shadow-lg backdrop-blur-md">
                <div className="flex flex-col"><span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">Seu Saldo</span><span className="text-xl font-black text-white">{player ? player.credits : 0} CR</span></div>
                <button onClick={() => player ? setShowDeposit(true) : setShowAuthModal(true)} className="px-5 py-2 rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/10 text-[#FFD700] text-[10px] font-black uppercase shadow-lg active:scale-95 flex items-center gap-2"><ShoppingCart size={14}/> Depositar</button>
