@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle } from "lucide-react";
+import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2 } from "lucide-react";
 
 export default function SuperAdmin() {
   const [isLogged, setIsLogged] = useState(false);
@@ -15,6 +15,7 @@ export default function SuperAdmin() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
+  const [totalPlayers, setTotalPlayers] = useState(0); // 🔥 NOVO: Estado para clientes
   
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -34,17 +35,20 @@ export default function SuperAdmin() {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       
-      const [resMod, resHist, resGlob, resTrans, resWith, resApp] = await Promise.all([
+      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?select=*&order=created_at.asc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })) // Busca os clientes
       ]);
 
+      const dataHist = resHist.ok ? await resHist.json() : [];
+
       if (resMod.ok) setModels(await resMod.json());
-      if (resHist.ok) setHistory(await resHist.json());
+      setHistory(dataHist);
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
       if (resApp.ok) setApplications(await resApp.json());
@@ -58,6 +62,17 @@ export default function SuperAdmin() {
           setGoalReward(dataGlob[0].goal_reward);
         }
       }
+
+      // 🔥 LÓGICA DOS CLIENTES CADASTRADOS
+      if (resPlayers && resPlayers.ok) {
+        const pData = await resPlayers.json();
+        setTotalPlayers(pData.length);
+      } else {
+        // Fallback: Se não tiver a tabela Players, ele conta os números de telefone únicos no histórico
+        const uniquePlayers = new Set(dataHist.map((h: any) => h.player_phone).filter(Boolean)).size;
+        setTotalPlayers(uniquePlayers);
+      }
+
     } catch (err) { console.error("Erro no fetch", err); } finally { setInitialLoading(false); }
   };
 
@@ -121,7 +136,6 @@ export default function SuperAdmin() {
     } catch (err) { alert("Erro ao aprovar."); }
   };
 
-  // 🔥 APROVAÇÃO COM UPLOAD DUPLO DE BASE64
   const handleApproveApplication = async (app: any) => {
     if (!confirm(`Deseja aprovar e criar a roleta de ${app.nickname}?`)) return;
     setLoading(true);
@@ -134,28 +148,21 @@ export default function SuperAdmin() {
       let finalBgUrl = app.bg_url;
       let finalProfileUrl = app.profile_url || app.bg_url;
 
-      // Função ajudante para processar as imagens
-      const uploadBase64 = async (base64Str: string, prefix: string) => {
-        if (!base64Str || !base64Str.startsWith('data:image')) return base64Str;
+      if (finalBgUrl && finalBgUrl.startsWith('data:image')) {
         try {
-          const base64Data = base64Str.split(',')[1];
-          const mimeType = base64Str.split(';')[0].split(':')[1];
+          const base64Data = finalBgUrl.split(',')[1];
+          const mimeType = finalBgUrl.split(';')[0].split(':')[1];
           const ext = mimeType.split('/')[1] || 'jpeg';
           const byteCharacters = atob(base64Data);
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
           const byteArray = new Uint8Array(byteNumbers);
           const blob = new Blob([byteArray], { type: mimeType });
-          const fileName = `${prefix}_app_${app.id}_${Date.now()}.${ext}`;
+          const fileName = `bg_app_${app.id}_${Date.now()}.${ext}`;
           const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": mimeType }, body: blob });
-          if (uploadRes.ok) return `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
-        } catch (e) { console.error("Erro upload:", e); }
-        return base64Str;
-      };
-
-      // Roda o processo de upload para as duas fotos!
-      finalBgUrl = await uploadBase64(finalBgUrl, 'bg');
-      finalProfileUrl = await uploadBase64(finalProfileUrl, 'profile');
+          if (uploadRes.ok) finalBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
+        } catch (uploadError) { console.error("Erro foto", uploadError); }
+      }
 
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
@@ -255,6 +262,32 @@ export default function SuperAdmin() {
           <div className="flex flex-wrap items-center gap-3"><button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button><button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button><button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button></div>
         </div>
 
+        {/* ALERTA DE SAQUES PENDENTES */}
+        {pendingWithdrawals.length > 0 && (
+          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
+            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Saques (PIX) Solicitados</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingWithdrawals.map(w => {
+                const model = models.find(m => m.id === w.model_id);
+                return (
+                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                      <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
+                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id)} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                      <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves PIX:</p>
+                      <p className="text-[10px] font-mono text-emerald-400 break-all mb-1">1: {model?.pix_key_1 || 'N/A'}</p>
+                      <p className="text-[10px] font-mono text-white/50 break-all">2: {model?.pix_key_2 || 'N/A'}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* NOVAS CANDIDATURAS */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
@@ -273,6 +306,30 @@ export default function SuperAdmin() {
           </div>
         )}
 
+        {/* 🔥 FINANCEIRO E NOVAS ESTATÍSTICAS QUE TINHAM SUMIDO */}
+        <div className="mb-12">
+          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Faturamento Bruto</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden"><p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse Modelos (70%)</p><h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
+              <div className="p-4 bg-[#FFD700]/20 rounded-2xl"><Users size={32} className="text-[#FFD700]" /></div>
+              <div><p className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-1">Modelos Parceiras Ativas</p><h3 className="text-3xl font-black text-white">{models.length} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Contas</span></h3></div>
+            </div>
+            
+            <div className="bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
+              <div className="p-4 bg-blue-500/20 rounded-2xl"><Gamepad2 size={32} className="text-blue-500" /></div>
+              <div><p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Clientes Cadastrados</p><h3 className="text-3xl font-black text-white">{totalPlayers} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Jogadores</span></h3></div>
+            </div>
+          </div>
+        </div>
+
+        {/* FRANQUIAS E COMUNICADOS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
@@ -309,6 +366,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
+      {/* MODAL DE APROVAÇÃO */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
