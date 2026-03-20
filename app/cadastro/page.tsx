@@ -19,10 +19,27 @@ export default function CadastroModelo() {
     if (savedRef) setReferralId(savedRef);
   }, []);
 
+  // 🔥 SISTEMA DE UPLOAD (BASE64)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'bg_url' | 'profile_url') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+      alert("A imagem é muito pesada! Escolha uma foto de no máximo 2MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData(prev => ({ ...prev, [field]: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.bg_url || !formData.profile_url) {
-      alert("ATENÇÃO: Você precisa preencher os DOIS links de foto para continuar!");
+      alert("ATENÇÃO: Você precisa carregar as DUAS fotos (Vitrine e Fundo) para continuar!");
       return;
     }
     setLoading(true);
@@ -73,12 +90,31 @@ export default function CadastroModelo() {
           <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4 pt-6">Mídia & Design (Obrigatório)</h2>
           <div className="space-y-6">
             <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl">
-              <p className="text-[9px] text-red-400 uppercase font-black tracking-widest flex items-center gap-2 mb-1"><AlertTriangle size={14}/> ATENÇÃO: REGRAS PARA FOTOS</p>
-              <p className="text-[9px] text-white/60 uppercase font-bold leading-relaxed">Fotos sensuais são permitidas e incentivadas! Mas NUDEZ EXPLÍCITA nas fotos da plataforma é estritamente proibida e causará a reprovação imediata do seu perfil.</p>
+              <p className="text-[9px] text-red-400 uppercase font-black tracking-widest flex items-center gap-2 mb-2"><AlertTriangle size={14}/> ATENÇÃO: REGRAS DE NUDEZ</p>
+              <p className="text-[9px] text-white/70 uppercase font-bold leading-relaxed">Você pode vender seus conteúdos explícitos normalmente. MAS, nestas <strong>duas fotos abaixo</strong> (Vitrine e Roleta) a nudez explícita é <strong>PROIBIDA</strong>. Use fotos sensuais (biquíni, lingerie). Nudez aqui causará a reprovação do seu perfil.</p>
             </div>
 
-            <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">1. Link da Foto para a VITRINE (Seu Perfil Principal)</label><div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FFD700]" size={16}/><input type="url" required value={formData.profile_url} onChange={e => setFormData({...formData, profile_url: e.target.value})} className="w-full bg-black border border-[#FFD700]/30 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Cole o link do Drive ou Instagram aqui" /></div></div>
-            <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">2. Link da Foto para o FUNDO DA ROLETA (Ambientação)</label><div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="url" required value={formData.bg_url} onChange={e => setFormData({...formData, bg_url: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Cole o link do Drive ou Instagram aqui" /></div></div>
+            <div>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">1. Foto para a VITRINE (Seu Perfil Principal)</label>
+              <label className="w-full bg-black border border-[#FFD700]/30 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] flex items-center justify-between cursor-pointer hover:bg-white/5 transition-all">
+                <span className="flex items-center gap-2 truncate">
+                  <ImageIcon size={16} className={formData.profile_url ? "text-emerald-500 shrink-0" : "text-[#FFD700] shrink-0"} />
+                  {formData.profile_url ? <span className="text-emerald-500 font-bold">✅ Foto da Vitrine carregada!</span> : <span className="text-white/50">Clique para escolher a imagem...</span>}
+                </span>
+                <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={e => handleFileChange(e, 'profile_url')} />
+              </label>
+            </div>
+
+            <div>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">2. Foto para o FUNDO DA ROLETA (Ambientação)</label>
+              <label className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] flex items-center justify-between cursor-pointer hover:bg-white/10 transition-all">
+                <span className="flex items-center gap-2 truncate">
+                  <ImageIcon size={16} className={formData.bg_url ? "text-emerald-500 shrink-0" : "text-white/20 shrink-0"} />
+                  {formData.bg_url ? <span className="text-emerald-500 font-bold">✅ Foto da Roleta carregada!</span> : <span className="text-white/50">Clique para escolher a imagem...</span>}
+                </span>
+                <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={e => handleFileChange(e, 'bg_url')} />
+              </label>
+            </div>
           </div>
 
           <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4 pt-6">Recebimento</h2>
