@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Heart, Sparkles, MessageCircle, Crown, ChevronDown } from "lucide-react";
 
 function TridenteIcon({ className }: { className?: string }) {
@@ -12,15 +13,14 @@ function TridenteIcon({ className }: { className?: string }) {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const whatsappNumber = "5515996587248";
-  const [referrerId, setReferrerId] = useState<string | null>(null);
-
+  
   useEffect(() => {
-    // 🚀 LÓGICA DE INDICAÇÃO INVISÍVEL
+    // 🚀 SALVA A INDICAÇÃO DE FORMA INVISÍVEL
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) {
-      setReferrerId(ref);
       localStorage.setItem("savanah_referral_id", ref);
     }
   }, []);
@@ -31,12 +31,8 @@ export default function HomePage() {
   };
 
   const handleModelClick = () => {
-    let text = "Olá, tenho interesse em ser uma modelo parceira.";
-    const savedRef = referrerId || localStorage.getItem("savanah_referral_id");
-    if (savedRef) {
-       text = `Olá, fui indicada para ser uma modelo parceira! O ID de quem me indicou é: ${savedRef}`;
-    }
-    window.location.href = `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encodeURIComponent(text)}`;
+    // 🔥 MUDANÇA AQUI: Agora leva direto para a tela de cadastro dentro do site!
+    router.push("/cadastro");
   };
 
   return (
@@ -72,7 +68,7 @@ export default function HomePage() {
               <h2 className="text-lg font-black uppercase text-[#FFD700] mb-1 text-center leading-tight">Quer ser uma<br/>modelo parceira?</h2>
               <p className="text-[11px] text-white/50 mb-6 font-medium uppercase tracking-widest text-center leading-relaxed">Faça parte da maior roleta sexy do brasil</p>
               <button onClick={handleModelClick} className="w-full bg-transparent border-2 border-[#FFD700] text-[#FFD700] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-[#FFD700] hover:text-black transition-all active:scale-95">
-                <MessageCircle size={18} /> Quero ser parceira
+                <Crown size={18} /> Quero ser parceira
               </button>
             </div>
           </div>
