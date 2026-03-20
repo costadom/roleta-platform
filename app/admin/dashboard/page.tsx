@@ -46,6 +46,9 @@ function DashboardContent() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // 🔥 ESTADO DA VITRINE
+  const [showcaseVisible, setShowcaseVisible] = useState(false);
+
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -115,6 +118,8 @@ function DashboardContent() {
         setCurrentBg(dataConfig[0].bg_url); 
         setModelName(dataConfig[0].model_name || ""); 
         setSpinCost(dataConfig[0].spin_cost || 2); 
+        // 🔥 LENDO DO BANCO SE A VITRINE TÁ LIGADA
+        setShowcaseVisible(dataConfig[0].showcase_visible === true);
       }
       
       if (Array.isArray(dataMyHist)) setHistory(dataMyHist);
@@ -198,6 +203,21 @@ function DashboardContent() {
     }).catch(err => console.error(err));
   };
 
+  // 🔥 FUNÇÃO DE ATIVAR/DESATIVAR A VITRINE
+  const toggleShowcase = async () => {
+    const newVal = !showcaseVisible;
+    setShowcaseVisible(newVal);
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, {
+        method: "PATCH",
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ showcase_visible: newVal })
+      });
+    } catch(err) {
+      alert("Erro ao alterar vitrine.");
+    }
+  };
+
   const handleWithdraw = async () => {
     if (modelBalance < 20) return alert("O saque mínimo é de R$ 20,00.");
     if (!pixKey1) return alert("Por favor, cadastre sua Chave PIX Principal.");
@@ -230,7 +250,6 @@ function DashboardContent() {
     } catch (err) { alert("Erro ao solicitar saque."); } finally { setIsWithdrawing(false); }
   };
 
-  // 🔥 MÁGICA DA REORDENAÇÃO MATEMÁTICA
   const checkIsFake = (prize: any) => {
     const upper = String(prize.name).toUpperCase();
     return Number(prize.weight) <= 0.05 || upper.includes("PIX") || upper.includes("PRESENCIAL") || upper.includes("100") || upper.includes("R$");
@@ -241,31 +260,27 @@ function DashboardContent() {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
     if (targetIndex < 0 || targetIndex >= newPrizes.length) return;
-    if (checkIsFake(newPrizes[index]) || checkIsFake(newPrizes[targetIndex])) return; // Impede mexer nas Iscas
+    if (checkIsFake(newPrizes[index]) || checkIsFake(newPrizes[targetIndex])) return; 
 
-    // Troca a posição visualmente
     [newPrizes[index], newPrizes[targetIndex]] = [newPrizes[targetIndex], newPrizes[index]];
 
-    // Recalcula os pesos matemáticos APENAS para os não-iscas (Ex: 10, 20, 30, 40...)
     let currentWeight = 10;
     const updates: any[] = [];
 
     const finalPrizes = newPrizes.map((p) => {
       if (!checkIsFake(p)) {
         p.weight = currentWeight;
-        currentWeight += 10; // Quanto mais pra baixo (maior index), maior o peso (mais fácil de sair)
+        currentWeight += 10; 
         updates.push({ id: p.id, weight: p.weight });
       }
       return p;
     });
 
-    setPrizes(finalPrizes); // Atualiza a tela instantaneamente
+    setPrizes(finalPrizes); 
 
-    // Salva a nova matemática invisível no banco de dados
     Promise.all(updates.map(u => 
       fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${u.id}`, {
-        method: "PATCH",
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ weight: u.weight })
       })
     )).catch(err => console.error("Erro ao reordenar pesos", err));
@@ -286,11 +301,7 @@ function DashboardContent() {
       {!termsAccepted && !isSuper && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-[#0f0f0f] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex items-center gap-3 mb-6 shrink-0">
-              <div className="h-12 w-12 bg-[#FF1493]/20 text-[#FF1493] rounded-full flex items-center justify-center border border-[#FF1493]/30"><FileText size={24}/></div>
-              <div><h2 className="text-xl font-black uppercase text-white italic">Termos de Parceria</h2><p className="text-[10px] text-white/50 uppercase font-black tracking-widest">Savanah Labz</p></div>
-            </div>
-
+            <div className="flex items-center gap-3 mb-6 shrink-0"><div className="h-12 w-12 bg-[#FF1493]/20 text-[#FF1493] rounded-full flex items-center justify-center border border-[#FF1493]/30"><FileText size={24}/></div><div><h2 className="text-xl font-black uppercase text-white italic">Termos de Parceria</h2><p className="text-[10px] text-white/50 uppercase font-black tracking-widest">Savanah Labz</p></div></div>
             <div className="flex-1 overflow-y-auto pr-4 space-y-4 text-[11px] text-white/70 leading-relaxed mb-8 scrollbar-thin scrollbar-thumb-white/10">
               <p>Bem-vinda à <strong>LabzSexy Roll (Savanah Labz)</strong>. Este termo garante a sua segurança, seus direitos autorais e a transparência total dos seus ganhos.</p>
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">1. O Formato do Negócio:</h3>
@@ -304,15 +315,11 @@ function DashboardContent() {
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">5. Indique e Ganhe:</h3>
               <p>Durante os 3 primeiros meses de operação de uma modelo indicada por você, você receberá <strong>5%</strong> sobre o faturamento gerado por ela na plataforma, como um bônus vitalício pelo recrutamento (O bônus sai da parte da plataforma, não afeta os 70% dela).</p>
             </div>
-
-            <button onClick={handleAcceptTerms} disabled={acceptingTerms} className="w-full shrink-0 bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-[0_0_20px_rgba(255,20,147,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-              {acceptingTerms ? <Loader2 className="animate-spin" size={18}/> : <><CheckCircle2 size={18} /> Eu Li e Aceito os Termos</>}
-            </button>
+            <button onClick={handleAcceptTerms} disabled={acceptingTerms} className="w-full shrink-0 bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-[0_0_20px_rgba(255,20,147,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">{acceptingTerms ? <Loader2 className="animate-spin" size={18}/> : <><CheckCircle2 size={18} /> Eu Li e Aceito os Termos</>}</button>
           </div>
         </div>
       )}
 
-      {/* PAINEL NORMAL */}
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
@@ -326,7 +333,7 @@ function DashboardContent() {
           </div>
         </div>
 
-        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex items-center justify-between shadow-2xl gap-4">
+        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
           <div className="flex items-center gap-4 w-full">
             <div className="h-10 w-10 bg-amber-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.5)]"><Gift size={20}/></div>
             <div>
@@ -334,7 +341,7 @@ function DashboardContent() {
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Indique amigas e ganhe <strong className="text-amber-400">5% das vendas delas</strong> por 3 meses.</p>
             </div>
           </div>
-          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga."); }} className="hidden sm:block bg-amber-500 text-black text-[9px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">Copiar Link de Indicação</button>
+          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga no Whatsapp."); }} className="w-full sm:w-auto bg-amber-500 text-black text-[10px] font-black uppercase px-6 py-4 sm:py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">Copiar Link Indicação</button>
         </div>
 
         {globalAnnouncement && (
@@ -357,7 +364,6 @@ function DashboardContent() {
           {showRankTab && <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-[#FFD700]/20 text-[#FFD700] shadow-lg shadow-[#FFD700]/10 border border-[#FFD700]/30" : "text-white/30"}`}><Trophy size={12} className="inline mr-1" /> Desafios</button>}
         </div>
 
-        {/* ABA 1: FINANCEIRO */}
         {activeTab === "finance" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -395,6 +401,18 @@ function DashboardContent() {
         {/* ABA 2: ROLETA E PRÊMIOS */}
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
+            
+            {/* 🔥 O NOVO BOTÃO DA VITRINE */}
+            <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <h3 className="text-[11px] font-black uppercase text-[#FFD700] mb-1">Exibir meu perfil na Vitrine</h3>
+                <p className="text-[9px] text-white/50 font-bold uppercase tracking-widest">Ative essa opção apenas quando sua roleta estiver configurada e pronta para receber clientes.</p>
+              </div>
+              <button onClick={toggleShowcase} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors shrink-0 ${showcaseVisible ? 'bg-[#FF1493]' : 'bg-white/20'}`}>
+                <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showcaseVisible ? 'translate-x-7' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col sm:flex-row gap-6 items-center">
               <div className="w-full sm:w-40 h-24 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative shrink-0">{(previewUrl || currentBg) ? <img src={(previewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}</div>
               <div className="flex-1 text-center sm:text-left"><p className="text-[10px] font-black uppercase text-white/40 mb-3 tracking-widest">Fundo (Máx 2MB | JPEG)</p><label className="bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer hover:bg-white/10 transition-all">Trocar Foto <input type="file" accept="image/jpeg, image/png" onChange={handleFileChange} className="hidden" /></label>{selectedFile && <button onClick={handleSaveImage} className="bg-[#FF1493] text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase ml-2">Salvar</button>}</div>
@@ -417,34 +435,19 @@ function DashboardContent() {
                   return (
                     <div key={p.id} className={`flex items-center justify-between p-5 rounded-2xl transition-all text-left border ${isFakePrize ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80 cursor-not-allowed' : 'bg-black/40 border-white/5 hover:border-[#FF1493]/30'}`}>
                       <div className="flex items-center gap-2">
-                        
-                        {/* OS BOTÕES DE ORDENAÇÃO */}
                         {!isFakePrize && (
                           <div className="flex flex-col gap-1 mr-2">
-                            <button onClick={() => movePrize(index, 'up')} disabled={!canMoveUp} className={`p-1 rounded-md transition-all ${canMoveUp ? 'bg-white/5 hover:bg-[#FF1493] text-white' : 'text-white/10 cursor-not-allowed'}`} title="Deixar mais difícil (Sobe)">
-                              <ChevronUp size={14}/>
-                            </button>
-                            <button onClick={() => movePrize(index, 'down')} disabled={!canMoveDown} className={`p-1 rounded-md transition-all ${canMoveDown ? 'bg-white/5 hover:bg-[#FF1493] text-white' : 'text-white/10 cursor-not-allowed'}`} title="Deixar mais fácil (Desce)">
-                              <ChevronDown size={14}/>
-                            </button>
+                            <button onClick={() => movePrize(index, 'up')} disabled={!canMoveUp} className={`p-1 rounded-md transition-all ${canMoveUp ? 'bg-white/5 hover:bg-[#FF1493] text-white' : 'text-white/10 cursor-not-allowed'}`} title="Deixar mais difícil (Sobe)"><ChevronUp size={14}/></button>
+                            <button onClick={() => movePrize(index, 'down')} disabled={!canMoveDown} className={`p-1 rounded-md transition-all ${canMoveDown ? 'bg-white/5 hover:bg-[#FF1493] text-white' : 'text-white/10 cursor-not-allowed'}`} title="Deixar mais fácil (Desce)"><ChevronDown size={14}/></button>
                           </div>
                         )}
-
                         <div className="h-6 w-1.5 rounded-full ml-1" style={{ backgroundColor: p.color }} />
                         <div className="ml-2">
-                          <p className={`text-xs font-black uppercase flex items-center gap-2 ${isFakePrize ? 'text-indigo-400' : 'text-white'}`}>
-                            {isFakePrize && <Lock size={12}/>}
-                            {p.name}
-                          </p>
-                          <p className="text-[8px] font-bold text-white/30 uppercase mt-1">
-                            {index === 0 ? "🏆 MAIS DIFÍCIL (TOPO)" : index === prizes.length - 1 ? "🎯 MAIS FÁCIL (BASE)" : "Nível Intermediário"}
-                          </p>
+                          <p className={`text-xs font-black uppercase flex items-center gap-2 ${isFakePrize ? 'text-indigo-400' : 'text-white'}`}>{isFakePrize && <Lock size={12}/>} {p.name}</p>
+                          <p className="text-[8px] font-bold text-white/30 uppercase mt-1">{index === 0 ? "🏆 MAIS DIFÍCIL (TOPO)" : index === prizes.length - 1 ? "🎯 MAIS FÁCIL (BASE)" : "Nível Intermediário"}</p>
                         </div>
                       </div>
-                      
-                      {!isFakePrize && (
-                        <button onClick={() => setEditingPrize(p)} className="p-3 bg-white/5 rounded-xl text-white/40 hover:text-[#FF1493] transition-all"><Edit3 size={18}/></button>
-                      )}
+                      {!isFakePrize && (<button onClick={() => setEditingPrize(p)} className="p-3 bg-white/5 rounded-xl text-white/40 hover:text-[#FF1493] transition-all"><Edit3 size={18}/></button>)}
                     </div>
                   );
                 })}
@@ -453,10 +456,8 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ABA 3: JOGADORES */}
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
         
-        {/* ABA 4: ENTREGAS */}
         {activeTab === "history" && (
           <div className="grid gap-3 animate-in fade-in duration-500">
             {history.map((h, i) => (
@@ -472,7 +473,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ABA 5: RANKING */}
         {showRankTab && activeTab === "ranking" && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="text-center py-6">
@@ -513,7 +513,6 @@ function DashboardContent() {
 
       </div>
 
-      {/* MODAL DE EDIÇÃO DO PRÊMIO */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveEditPrize} className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -524,7 +523,6 @@ function DashboardContent() {
                 <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Nome na Roleta</label>
                 <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none focus:border-[#FF1493]" />
               </div>
-              
               <div>
                 <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Cor da Fatia</label>
                 <div className="flex items-center gap-3 bg-black border border-white/10 p-4 rounded-2xl h-[56px]"><Palette size={16} className="text-white/30 shrink-0" /><input type="color" value={editingPrize.color} onChange={e => setEditingPrize({...editingPrize, color: e.target.value})} className="w-full h-8 bg-transparent border-none cursor-pointer" /></div>
@@ -541,20 +539,8 @@ function DashboardContent() {
                   <option value="credit">💰 Créditos Automáticos (Jogar mais)</option>
                 </select>
               </div>
-
-              {editingPrize.delivery_type === 'link' && (
-                <div className="animate-in fade-in zoom-in duration-300">
-                   <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Link de Acesso</label>
-                   <input type="url" placeholder="https://..." value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-emerald-500/50 p-4 rounded-xl text-xs text-white outline-none focus:border-emerald-500" />
-                </div>
-              )}
-
-              {editingPrize.delivery_type === 'credit' && (
-                <div className="animate-in fade-in zoom-in duration-300">
-                   <label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Quantos CR?</label>
-                   <input type="number" placeholder="10" value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-amber-500/50 p-4 rounded-xl text-xs text-white outline-none focus:border-amber-500" />
-                </div>
-              )}
+              {editingPrize.delivery_type === 'link' && (<div className="animate-in fade-in zoom-in duration-300"><label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Link de Acesso</label><input type="url" placeholder="https://..." value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-emerald-500/50 p-4 rounded-xl text-xs text-white outline-none focus:border-emerald-500" /></div>)}
+              {editingPrize.delivery_type === 'credit' && (<div className="animate-in fade-in zoom-in duration-300"><label className="text-[9px] font-black text-white/40 uppercase mb-2 block">Quantos CR?</label><input type="number" placeholder="10" value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-amber-500/50 p-4 rounded-xl text-xs text-white outline-none focus:border-amber-500" /></div>)}
             </div>
 
             <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase mt-8 shadow-xl hover:scale-[1.02] transition-all">Salvar Alterações</button>
