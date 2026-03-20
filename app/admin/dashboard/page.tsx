@@ -57,6 +57,8 @@ function DashboardContent() {
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
   const [savingSettings, setSavingSettings] = useState(false);
+  
+  // VOLTAMOS COM O CARREGAMENTO PROTETOR PRA NÃO DAR SUSTO NA MODELO
   const [dashboardLoading, setDashboardLoading] = useState(true);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -72,12 +74,22 @@ function DashboardContent() {
 
   const loadData = async () => {
     if (!modelId) return;
+    setDashboardLoading(true);
     const timeoutId = setTimeout(() => setDashboardLoading(false), 5000); 
 
     try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
-      // O SEGREDO DO CACHE-BUSTER CORRETO (Sem quebrar o Supabase):
-      const fetchOpts: RequestInit = { headers, cache: 'no-store' };
+      // 🔥 A MARRETA NO CACHE: O X-Time-Buster muda a cada milissegundo. 
+      // Isso obriga o Next.js a sempre ir buscar o saldo fresco e atualizado!
+      const fetchOpts: RequestInit = { 
+        headers: { 
+          apikey: supabaseKey!, 
+          Authorization: `Bearer ${supabaseKey}`, 
+          "Cache-Control": "no-cache, no-store, must-revalidate", 
+          "Pragma": "no-cache",
+          "X-Time-Buster": Date.now().toString()
+        }, 
+        cache: 'no-store' 
+      };
       
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -168,7 +180,6 @@ function DashboardContent() {
     setSavingPix(false); alert("Chaves PIX salvas com sucesso!");
   };
 
-  // UPLOAD DA FOTO DE FUNDO
   const handleBgFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -186,7 +197,6 @@ function DashboardContent() {
     setCurrentBg(publicUrl); setSelectedBgFile(null); setBgPreviewUrl(null); setUploading(false); alert("Fundo da Roleta Atualizado!");
   };
 
-  // UPLOAD DA FOTO DA VITRINE
   const handleProfileFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -306,8 +316,9 @@ function DashboardContent() {
 
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
+  // AQUI É ONDE FICA A TELA DE BLOQUEIO PROTETORA
   if (dashboardLoading) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-sans">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-sans fixed inset-0 z-[9999]">
       <Loader2 className="animate-spin text-[#FF1493] mb-4" size={40}/>
       <h1 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 animate-pulse">Sincronizando Sistema...</h1>
     </div>
@@ -345,7 +356,7 @@ function DashboardContent() {
           ) : (
             <button onClick={handleLogout} className="flex items-center gap-2 text-[10px] font-black uppercase text-red-500/50 hover:text-red-500 bg-red-500/5 px-4 py-2 rounded-xl transition-all"><LogOut size={14}/> Sair</button>
           )}
-          <div className="text-right">
+          <div className="text-right flex flex-col items-end">
             <h1 className="text-2xl font-black uppercase tracking-tighter text-[#FF1493]">Painel VIP</h1>
             <p className="text-[#FFD700] text-[9px] font-bold uppercase tracking-[0.2em]">{modelName || "Modelo"}</p>
           </div>
@@ -426,7 +437,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ABA 2: ROLETA E PRÊMIOS */}
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             
