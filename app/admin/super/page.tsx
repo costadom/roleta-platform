@@ -130,13 +130,47 @@ export default function SuperAdmin() {
       const generatedEmail = `${app.nickname}@admin.com`;
       const generatedPass = `${capNick}Admin26`;
 
+      // 🚀 INÍCIO DA MÁGICA: LENDO O BASE64 E TRANSFORMANDO EM LINK DE IMAGEM
+      let finalBgUrl = app.bg_url;
+
+      if (finalBgUrl && finalBgUrl.startsWith('data:image')) {
+        try {
+          const base64Data = finalBgUrl.split(',')[1];
+          const mimeType = finalBgUrl.split(';')[0].split(':')[1];
+          const ext = mimeType.split('/')[1] || 'jpeg';
+          
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: mimeType });
+          
+          const fileName = `bg_app_${app.id}_${Date.now()}.${ext}`;
+
+          const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, {
+            method: "POST",
+            headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": mimeType },
+            body: blob
+          });
+
+          if (uploadRes.ok) {
+            finalBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
+          }
+        } catch (uploadError) {
+          console.error("Erro ao converter e subir a foto do cadastro:", uploadError);
+        }
+      }
+      // FIM DA MÁGICA
+
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ 
           slug: app.nickname, email: generatedEmail, password: generatedPass,
           full_name: app.full_name, whatsapp: app.whatsapp, cpf: app.cpf, birth_date: app.birth_date,
           pix_key_1: app.pix_1, pix_key_2: app.pix_2, 
-          referred_by: app.referred_by || null, // PUXANDO A INDICAÇÃO AUTOMATICAMENTE!
+          referred_by: app.referred_by || null, 
           created_at: now 
         }),
       });
@@ -145,7 +179,7 @@ export default function SuperAdmin() {
 
       await fetch(`${supabaseUrl}/rest/v1/Configs`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, created_at: now }),
+        body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: finalBgUrl, created_at: now }),
       });
 
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
