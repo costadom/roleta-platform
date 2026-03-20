@@ -17,14 +17,27 @@ export default function CadastroModelo() {
     cpf: "",
     birth_date: "",
     pix_1: "",
-    bg_url: "",
   });
+  
+  const [base64Image, setBase64Image] = useState<string | null>(null);
 
   useEffect(() => {
     // 🚀 Pega o ID de indicação salvo invisivelmente
     const savedRef = localStorage.getItem("savanah_referral_id");
     if (savedRef) setReferralId(savedRef);
   }, []);
+
+  // Mágica para converter foto em texto leve
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB!");
+      if (!['image/jpeg', 'image/png'].includes(file.type)) return alert("Apenas JPEG ou PNG!");
+      const reader = new FileReader();
+      reader.onloadend = () => setBase64Image(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,9 +49,10 @@ export default function CadastroModelo() {
     try {
       const payload = {
         ...formData,
+        bg_url: base64Image, // Enviando a foto convertida em texto (Base64)
         prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Surpresa", "Acesso VIP"]), // Prêmios genéricos iniciais
         status: "pendente",
-        referred_by: referralId, // 🔥 ENVIANDO O ID DE INDICAÇÃO AQUI!
+        referred_by: referralId,
         created_at: new Date().toISOString()
       };
 
@@ -100,7 +114,8 @@ export default function CadastroModelo() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Apelido / Nome Artístico</label>
-                <div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Ex: anascorpion" /></div>
+                {/* EXEMPLO AJUSTADO AQUI */}
+                <div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Ex: rainhasexy" /></div>
               </div>
               <div>
                 <label className="text-[9px] font-black text-white/40 uppercase block mb-2">WhatsApp</label>
@@ -114,8 +129,14 @@ export default function CadastroModelo() {
                 <input type="text" required value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="000.000.000-00" />
               </div>
               <div>
-                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Data de Nascimento</label>
-                <input type="date" required value={formData.birth_date} onChange={e => setFormData({...formData, birth_date: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white/70 outline-none focus:border-[#FFD700] transition-all" />
+                {/* DATA DE NASCIMENTO BLINDADA E SIMPLES AQUI */}
+                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Data de Nascimento (DD/MM/YYYY)</label>
+                <input type="text" required maxLength={10} value={formData.birth_date} onChange={e => {
+                   let v = e.target.value.replace(/\D/g, "");
+                   if (v.length > 2 && v.length <= 4) v = `${v.slice(0,2)}/${v.slice(2)}`;
+                   if (v.length > 4) v = `${v.slice(0,2)}/${v.slice(2,4)}/${v.slice(4,8)}`;
+                   setFormData({...formData, birth_date: v});
+                }} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white/70 outline-none focus:border-[#FFD700] transition-all" placeholder="00/00/0000" />
               </div>
             </div>
           </div>
@@ -125,12 +146,14 @@ export default function CadastroModelo() {
           <div className="space-y-4">
             <div>
               <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Chave PIX Principal</label>
-              <div className="relative"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.pix_1} onChange={e => setFormData({...formData, pix_1: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Para receber seus lucros (Obrigatório)" /></div>
+              <div className="relative"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.pix_1} onChange={e => setFormData({...formData, pix_1: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="CPF, E-mail ou Celular" /></div>
             </div>
 
             <div>
-              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Link de uma Foto Sua (Para o fundo da Roleta)</label>
-              <div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="url" value={formData.bg_url} onChange={e => setFormData({...formData, bg_url: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Cole o link do seu Instagram ou Drive" /></div>
+              {/* UPLOAD DE FOTO AJUSTADO AQUI */}
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Sua Foto de Fundo (Upload JPEG/PNG)</label>
+              <div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="file" required accept="image/jpeg, image/png" onChange={handleFileChange} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white/60 outline-none focus:border-[#FFD700] cursor-pointer" /></div>
+              <p className="text-[8px] text-white/20 uppercase font-black mt-1">Essa foto aparecerá no fundo da sua roleta sexy.</p>
             </div>
           </div>
 
