@@ -15,6 +15,7 @@ export default function SuperAdmin() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
+  const [abandoned, setAbandoned] = useState<any[]>([]); // 🔥 O ESTADO DOS CARRINHOS ABANDONADOS
   const [totalPlayers, setTotalPlayers] = useState(0); 
   
   const [loading, setLoading] = useState(false);
@@ -35,14 +36,15 @@ export default function SuperAdmin() {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       
-      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers] = await Promise.all([
+      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers, resAbandon] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?select=*&order=created_at.asc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })) 
+        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?status=eq.pendente&order=created_at.desc&limit=50`, { headers }) // 🔥 Puxa os carrinhos!
       ]);
 
       const dataHist = resHist.ok ? await resHist.json() : [];
@@ -52,6 +54,7 @@ export default function SuperAdmin() {
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
       if (resApp.ok) setApplications(await resApp.json());
+      if (resAbandon.ok) setAbandoned(await resAbandon.json()); // 🔥 Grava os carrinhos na memória
 
       if (resGlob.ok) {
         const dataGlob = await resGlob.json();
@@ -96,6 +99,7 @@ export default function SuperAdmin() {
       await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
       await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers }); // Limpa abandonos antigos
       
       await fetch(`${supabaseUrl}/rest/v1/Models?id=not.is.null`, { 
         method: 'PATCH', headers: { ...headers, "Content-Type": "application/json" },
@@ -123,17 +127,14 @@ export default function SuperAdmin() {
     const nextVal = !rankVisible; setRankVisible(nextVal); await handleSaveGlobal(nextVal);
   };
 
-  // 🔥 A MÁGICA DO WHATSAPP ACONTECE AQUI
   const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
     if (!confirm(`Confirmar o pagamento de R$ ${amount.toFixed(2)} para ${modelName}?`)) return;
     try {
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
         method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        // is_read: false é o que faz o aviso acender no painel dela!
         body: JSON.stringify({ status: 'pago', is_read: false })
       });
 
-      // Abre o WhatsApp com a mensagem pronta
       if (modelPhone) {
         const msg = `Oii, ${modelName}! Amor, seu PIX de R$ ${amount.toFixed(2)} acabou de ser feito com sucesso! 💸✨\n\nSegue o comprovante abaixo:`;
         const zapLink = `https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
@@ -273,6 +274,34 @@ export default function SuperAdmin() {
           <div className="flex flex-wrap items-center gap-3"><button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button><button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button><button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button></div>
         </div>
 
+        {/* 🔥 ABA VERMELHA: RECUPERAÇÃO DE PIX 🔥 */}
+        {abandoned.length > 0 && (
+          <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
+            <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {abandoned.map(cart => (
+                <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                  <div className="mb-4">
+                    <p className="text-[12px] text-white uppercase font-black">{cart.player_name}</p>
+                    <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
+                    <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => {
+                      const msg = `Oii ${cart.player_name}! Vi aqui que você tentou comprar os créditos na roleta da ${cart.model_name}, mas o PIX não concluiu.\n\nA roleta dela tá pegando fogo hoje! 🔥 Quer que eu te mande a chave PIX de novo pra você não perder os bônus?`;
+                      window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+                    }} className="flex-1 bg-emerald-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1"><MessageCircle size={14}/> Chamar no Zap</button>
+                    <button onClick={async () => {
+                      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
+                      fetchData();
+                    }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all" title="Ignorar / Limpar"><X size={14}/></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {pendingWithdrawals.length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Saques (PIX) Solicitados</h2>
@@ -283,7 +312,6 @@ export default function SuperAdmin() {
                   <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                       <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
-                      {/* BOTAO ATUALIZADO AQUI COM DADOS DA MODELO */}
                       <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, model?.slug || 'Modelo', model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
                     </div>
                     <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
