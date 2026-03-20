@@ -15,7 +15,7 @@ export default function SuperAdmin() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
-  const [totalPlayers, setTotalPlayers] = useState(0); // 🔥 NOVO: Estado para clientes
+  const [totalPlayers, setTotalPlayers] = useState(0); 
   
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -42,7 +42,7 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })) // Busca os clientes
+        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })) 
       ]);
 
       const dataHist = resHist.ok ? await resHist.json() : [];
@@ -63,12 +63,10 @@ export default function SuperAdmin() {
         }
       }
 
-      // 🔥 LÓGICA DOS CLIENTES CADASTRADOS
       if (resPlayers && resPlayers.ok) {
         const pData = await resPlayers.json();
         setTotalPlayers(pData.length);
       } else {
-        // Fallback: Se não tiver a tabela Players, ele conta os números de telefone únicos no histórico
         const uniquePlayers = new Set(dataHist.map((h: any) => h.player_phone).filter(Boolean)).size;
         setTotalPlayers(uniquePlayers);
       }
@@ -191,10 +189,13 @@ export default function SuperAdmin() {
         body: JSON.stringify({ status: 'aprovada' }),
       });
 
+      // 🐛 BUG 1 RESOLVIDO: Trocando api.whatsapp.com por wa.me e usando location.href
       const firstName = app.full_name.split(" ")[0];
       const msg = `Oi, ${firstName} (${capNick}) ! Que alegria ter você com a gente 💖\nA sua Roleta Sexy exclusiva já está 100% configurada e pronta pra você faturar muito. Tudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar o link da sua roleta e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance quase zero, pra aumentar ainda mais suas vendas.\nSe alguém ganhar, a gente resolve tudo pra você — pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
-      const zapLink = `https://api.whatsapp.com/send?phone=${app.whatsapp.replace(/\D/g, '')}&text=${encodeURIComponent(msg)}`;
-      window.open(zapLink, '_blank');
+      const zapLink = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+      
+      // Abre o app nativamente na mesma aba (o mobile não bloqueia isso)
+      window.location.href = zapLink;
 
       setSelectedApp(null); fetchData();
     } catch (err) { alert("Erro ao criar."); } finally { setLoading(false); }
@@ -262,7 +263,6 @@ export default function SuperAdmin() {
           <div className="flex flex-wrap items-center gap-3"><button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button><button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button><button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button></div>
         </div>
 
-        {/* ALERTA DE SAQUES PENDENTES */}
         {pendingWithdrawals.length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Saques (PIX) Solicitados</h2>
@@ -287,7 +287,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* NOVAS CANDIDATURAS */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
@@ -306,7 +305,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* 🔥 FINANCEIRO E NOVAS ESTATÍSTICAS QUE TINHAM SUMIDO */}
         <div className="mb-12">
           <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
           
@@ -329,7 +327,6 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* FRANQUIAS E COMUNICADOS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
@@ -343,7 +340,7 @@ export default function SuperAdmin() {
                       <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
                       
                       {m.whatsapp && (
-                        <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=${m.whatsapp.replace(/\D/g, '')}`, '_blank')} className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-500 hover:bg-emerald-500 hover:text-white transition-all" title="Falar no WhatsApp"><MessageCircle size={16}/></button>
+                        <button onClick={() => window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}`, '_blank')} className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-500 hover:bg-emerald-500 hover:text-white transition-all" title="Falar no WhatsApp"><MessageCircle size={16}/></button>
                       )}
 
                       <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
@@ -366,7 +363,6 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* MODAL DE APROVAÇÃO */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
