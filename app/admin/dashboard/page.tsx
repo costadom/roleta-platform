@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, HelpCircle } from "lucide-react";
+import { Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, HelpCircle, ChevronUp, ChevronDown } from "lucide-react";
 import PlayersManager from "./players";
 
 function DashboardContent() {
@@ -44,6 +44,7 @@ function DashboardContent() {
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
@@ -52,6 +53,7 @@ function DashboardContent() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const CENTRAL_WHATSAPP = "5515996587248";
 
   useEffect(() => {
     setIsMounted(true);
@@ -62,8 +64,6 @@ function DashboardContent() {
 
   const loadData = async () => {
     if (!modelId) return;
-    
-    // Trava de segurança para não ficar carregando infinitamente se o banco piscar
     const timeoutId = setTimeout(() => setDashboardLoading(false), 5000); 
 
     try {
@@ -71,7 +71,6 @@ function DashboardContent() {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
-      // Consultas Otimizadas (Mais Leves e Rápidas)
       const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resMyHist, resRankHist, resAllMod] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers }),
@@ -79,9 +78,7 @@ function DashboardContent() {
         fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }),
-        // Pega só os últimos 50 giros da modelo pra aba Entregas (LEVE)
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&select=*&order=created_at.desc&limit=50`, { headers }),
-        // Pega só o ID do modelo dos últimos 2000 giros globais pro Ranking (LEVE)
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=model_id&limit=2000`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers })
       ]);
@@ -111,7 +108,7 @@ function DashboardContent() {
       if (Array.isArray(dataTrans)) setAccumulatedEarnings(dataTrans.reduce((acc, curr) => acc + (Number(curr.model_cut) || 0), 0));
       
       if (Array.isArray(dataPrizes)) {
-        setPrizes(dataPrizes.sort((a: any, b: any) => a.weight - b.weight));
+        setPrizes(dataPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
       }
       
       if (dataConfig[0]) { 
@@ -233,14 +230,45 @@ function DashboardContent() {
     } catch (err) { alert("Erro ao solicitar saque."); } finally { setIsWithdrawing(false); }
   };
 
-  const markAsRead = async (notifId: string) => {
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${notifId}`, { 
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-        body: JSON.stringify({ is_read: true }) 
-      });
-      setNotifications(prev => prev.filter(n => n.id !== notifId));
-    } catch (err) {}
+  // 🔥 MÁGICA DA REORDENAÇÃO MATEMÁTICA
+  const checkIsFake = (prize: any) => {
+    const upper = String(prize.name).toUpperCase();
+    return Number(prize.weight) <= 0.05 || upper.includes("PIX") || upper.includes("PRESENCIAL") || upper.includes("100") || upper.includes("R$");
+  };
+
+  const movePrize = async (index: number, direction: 'up' | 'down') => {
+    const newPrizes = [...prizes];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= newPrizes.length) return;
+    if (checkIsFake(newPrizes[index]) || checkIsFake(newPrizes[targetIndex])) return; // Impede mexer nas Iscas
+
+    // Troca a posição visualmente
+    [newPrizes[index], newPrizes[targetIndex]] = [newPrizes[targetIndex], newPrizes[index]];
+
+    // Recalcula os pesos matemáticos APENAS para os não-iscas (Ex: 10, 20, 30, 40...)
+    let currentWeight = 10;
+    const updates: any[] = [];
+
+    const finalPrizes = newPrizes.map((p) => {
+      if (!checkIsFake(p)) {
+        p.weight = currentWeight;
+        currentWeight += 10; // Quanto mais pra baixo (maior index), maior o peso (mais fácil de sair)
+        updates.push({ id: p.id, weight: p.weight });
+      }
+      return p;
+    });
+
+    setPrizes(finalPrizes); // Atualiza a tela instantaneamente
+
+    // Salva a nova matemática invisível no banco de dados
+    Promise.all(updates.map(u => 
+      fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${u.id}`, {
+        method: "PATCH",
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ weight: u.weight })
+      })
+    )).catch(err => console.error("Erro ao reordenar pesos", err));
   };
 
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
@@ -265,19 +293,14 @@ function DashboardContent() {
 
             <div className="flex-1 overflow-y-auto pr-4 space-y-4 text-[11px] text-white/70 leading-relaxed mb-8 scrollbar-thin scrollbar-thumb-white/10">
               <p>Bem-vinda à <strong>LabzSexy Roll (Savanah Labz)</strong>. Este termo garante a sua segurança, seus direitos autorais e a transparência total dos seus ganhos.</p>
-              
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">1. O Formato do Negócio:</h3>
               <p>A Plataforma fornece a tecnologia de uma "Roleta Sexy". O seu público comprará Créditos (CR) para girar a roleta e concorrer aos seus conteúdos.</p>
-              
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">2. Divisão de Lucros:</h3>
               <p>A parceria é estruturada em <strong>70% para a Modelo e 30% para a Plataforma</strong>. Você não paga nenhuma taxa mensal.</p>
-
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">3. Saques e Pagamentos:</h3>
               <p>Os seus lucros (70%) ficam disponíveis em tempo real. Você tem direito a <strong>1 (um) saque por dia</strong> (mínimo R$ 20,00), descontada a taxa fixa bancária de R$ 1,00 por transação PIX exigida pelo banco.</p>
-
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">4. Prêmios Iscas:</h3>
               <p>A Plataforma adiciona prêmios impossíveis/iscas (R$ 100 PIX e Encontro Presencial). Caso o cliente ganhe o PIX, a plataforma pagará do próprio bolso. Caso ganhe o Encontro, ele será convertido em um Pack Digital Premium por questões de segurança.</p>
-
               <h3 className="text-white font-black uppercase text-[10px] mt-4 mb-1">5. Indique e Ganhe:</h3>
               <p>Durante os 3 primeiros meses de operação de uma modelo indicada por você, você receberá <strong>5%</strong> sobre o faturamento gerado por ela na plataforma, como um bônus vitalício pelo recrutamento (O bônus sai da parte da plataforma, não afeta os 70% dela).</p>
             </div>
@@ -289,6 +312,7 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* PAINEL NORMAL */}
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           {isSuper ? (
@@ -302,7 +326,7 @@ function DashboardContent() {
           </div>
         </div>
 
-        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
+        <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex items-center justify-between shadow-2xl gap-4">
           <div className="flex items-center gap-4 w-full">
             <div className="h-10 w-10 bg-amber-500 text-black rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.5)]"><Gift size={20}/></div>
             <div>
@@ -310,10 +334,7 @@ function DashboardContent() {
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">Indique amigas e ganhe <strong className="text-amber-400">5% das vendas delas</strong> por 3 meses.</p>
             </div>
           </div>
-          {/* BOTÃO MOBILE REPARADO AQUI */}
-          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga no Whatsapp."); }} className="w-full sm:w-auto bg-amber-500 text-black text-[10px] font-black uppercase px-6 py-4 sm:py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">
-            Copiar Link Indicação
-          </button>
+          <button onClick={() => { navigator.clipboard.writeText(`Amiga, entra pra Savanah Labz por esse link que você ganha a sua roleta e a gente fatura juntas: ${referralUrl}`); alert("Texto de indicação copiado! Mande para sua amiga."); }} className="hidden sm:block bg-amber-500 text-black text-[9px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0">Copiar Link de Indicação</button>
         </div>
 
         {globalAnnouncement && (
@@ -333,10 +354,7 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "prizes" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Roleta</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "players" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Jogadores</button>
           <button onClick={() => setActiveTab("history")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-white/10 text-[#FF1493]" : "text-white/30"}`}>Entregas</button>
-          
-          {showRankTab && (
-            <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-[#FFD700]/20 text-[#FFD700] shadow-lg shadow-[#FFD700]/10 border border-[#FFD700]/30" : "text-white/30"}`}><Trophy size={12} className="inline mr-1" /> Desafios</button>
-          )}
+          {showRankTab && <button onClick={() => setActiveTab("ranking")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "ranking" ? "bg-[#FFD700]/20 text-[#FFD700] shadow-lg shadow-[#FFD700]/10 border border-[#FFD700]/30" : "text-white/30"}`}><Trophy size={12} className="inline mr-1" /> Desafios</button>}
         </div>
 
         {/* ABA 1: FINANCEIRO */}
@@ -347,42 +365,28 @@ function DashboardContent() {
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Wallet size={120} className="text-emerald-500" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (70%)</h2>
                 <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Pronto para saque na sua conta.</p>
-                <div className="text-5xl font-black text-white mb-8 tracking-tighter">
-                  {modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </div>
+                <div className="text-5xl font-black text-white mb-8 tracking-tighter">{modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl mb-6">
                   <p className="text-[10px] text-emerald-400 font-bold uppercase text-center leading-relaxed tracking-widest">⚠️ Mínimo de saque: R$ 20,00.</p>
                   <p className="text-[8px] text-emerald-500/60 font-bold uppercase text-center mt-1">Taxa bancária: R$ 1,00 por transação.</p>
                 </div>
-                <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">
-                  {isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}
-                </button>
+                <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">{isWithdrawing ? "Processando..." : "Solicitar Saque (PIX)"}</button>
               </div>
 
               <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col justify-center">
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Calendar size={120} className="text-[#FFD700]" /></div>
                 <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Lucro Acumulado</h2>
                 <p className="text-[10px] text-white/40 uppercase font-black mb-6 tracking-widest max-w-xs">Total de comissões ganhas (6 meses).</p>
-                <div className="text-5xl font-black text-white tracking-tighter">
-                  {accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </div>
+                <div className="text-5xl font-black text-white tracking-tighter">{accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
               </div>
 
               <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl col-span-1 md:col-span-2">
                 <h2 className="text-xs font-black uppercase mb-4 text-[#FF1493] tracking-widest flex items-center gap-2"><DollarSign size={16}/> Suas Chaves PIX</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label>
-                    <input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="CPF, Celular, E-mail..." />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Secundária (Opcional)</label>
-                    <input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="Chave reserva" />
-                  </div>
+                  <div><label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label><input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="CPF, Celular, E-mail..." /></div>
+                  <div><label className="text-[9px] font-black text-white/30 uppercase block mb-2">Chave PIX Secundária (Opcional)</label><input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" placeholder="Chave reserva" /></div>
                 </div>
-                <button onClick={handleSavePix} disabled={savingPix} className="w-full md:w-auto bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-xl transition-all active:scale-95">
-                  {savingPix ? "Salvando..." : "Salvar Minhas Chaves PIX"}
-                </button>
+                <button onClick={handleSavePix} disabled={savingPix} className="w-full md:w-auto bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-xl transition-all active:scale-95">{savingPix ? "Salvando..." : "Salvar Minhas Chaves PIX"}</button>
               </div>
             </div>
           </div>
@@ -399,22 +403,35 @@ function DashboardContent() {
             <div className="bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/30 p-6 rounded-3xl relative overflow-hidden">
                <HelpCircle size={60} className="absolute -right-4 -bottom-4 text-blue-500/20" />
                <h3 className="text-[11px] font-black uppercase text-blue-400 flex items-center gap-2 mb-3 tracking-widest"><HelpCircle size={14}/> Dica de Mestre: Como montar sua roleta!</h3>
-               <p className="text-[10px] text-white/70 leading-relaxed font-bold">A lista de prêmios abaixo funciona como uma pirâmide. <strong>O prêmio que está no topo é o mais difícil de sair. O prêmio que está lá embaixo é o mais fácil.</strong><br/><br/>Para lucrar muito e deixar os fãs viciados, deixe os "Kits Completos" e "VIPs" no topo, e os "Mimos Simples" e "Descontos" na base!</p>
+               <p className="text-[10px] text-white/70 leading-relaxed font-bold">A lista de prêmios abaixo funciona como uma pirâmide. <strong>O prêmio que está no topo é o mais difícil de sair. O prêmio que está lá embaixo é o mais fácil.</strong><br/><br/>Para organizar as chances, clique nas setinhas de ⬆️ SUBIR ou ⬇️ DESCER para alterar a posição dos prêmios matematicamente.</p>
             </div>
 
             <div className="bg-white/5 border border-white/10 p-6 rounded-3xl">
                <div className="flex justify-between items-center mb-6"><h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2></div>
                <div className="grid gap-3">
                 {prizes.map((p, index) => {
-                  const upperName = String(p.name).toUpperCase();
-                  // TRAVA ABSOLUTA E BLINDADA: Peso baixo OU palavras iscas
-                  const isFakePrize = Number(p.weight) <= 0.05 || upperName.includes("PIX") || upperName.includes("PRESENCIAL") || upperName.includes("100") || upperName.includes("R$"); 
-                  
+                  const isFakePrize = checkIsFake(p); 
+                  const canMoveUp = index > 0 && !isFakePrize && !checkIsFake(prizes[index - 1]);
+                  const canMoveDown = index < prizes.length - 1 && !isFakePrize && !checkIsFake(prizes[index + 1]);
+
                   return (
                     <div key={p.id} className={`flex items-center justify-between p-5 rounded-2xl transition-all text-left border ${isFakePrize ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80 cursor-not-allowed' : 'bg-black/40 border-white/5 hover:border-[#FF1493]/30'}`}>
-                      <div className="flex items-center gap-4">
-                        <div className="h-6 w-1.5 rounded-full" style={{ backgroundColor: p.color }} />
-                        <div>
+                      <div className="flex items-center gap-2">
+                        
+                        {/* OS BOTÕES DE ORDENAÇÃO */}
+                        {!isFakePrize && (
+                          <div className="flex flex-col gap-1 mr-2">
+                            <button onClick={() => movePrize(index, 'up')} disabled={!canMoveUp} className={`p-1 rounded-md transition-all ${canMoveUp ? 'bg-white/5 hover:bg-[#FF1493] text-white' : 'text-white/10 cursor-not-allowed'}`} title="Deixar mais difícil (Sobe)">
+                              <ChevronUp size={14}/>
+                            </button>
+                            <button onClick={() => movePrize(index, 'down')} disabled={!canMoveDown} className={`p-1 rounded-md transition-all ${canMoveDown ? 'bg-white/5 hover:bg-[#FF1493] text-white' : 'text-white/10 cursor-not-allowed'}`} title="Deixar mais fácil (Desce)">
+                              <ChevronDown size={14}/>
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="h-6 w-1.5 rounded-full ml-1" style={{ backgroundColor: p.color }} />
+                        <div className="ml-2">
                           <p className={`text-xs font-black uppercase flex items-center gap-2 ${isFakePrize ? 'text-indigo-400' : 'text-white'}`}>
                             {isFakePrize && <Lock size={12}/>}
                             {p.name}
