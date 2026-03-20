@@ -14,26 +14,12 @@ function TridenteIcon({ className }: { className?: string }) {
 
 export default function HomePage() {
   const router = useRouter();
-  const whatsappNumber = "5515996587248";
   
   useEffect(() => {
-    // 🚀 SALVA A INDICAÇÃO DE FORMA INVISÍVEL
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
-    if (ref) {
-      localStorage.setItem("savanah_referral_id", ref);
-    }
+    if (ref) localStorage.setItem("savanah_referral_id", ref);
   }, []);
-
-  const handlePlayerClick = () => {
-    const text = encodeURIComponent("Olá, gostaria de conhecer as modelos parceiras da Labz Sexy Roll");
-    window.location.href = `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${text}`;
-  };
-
-  const handleModelClick = () => {
-    // 🔥 MUDANÇA AQUI: Agora leva direto para a tela de cadastro dentro do site!
-    router.push("/cadastro");
-  };
 
   return (
     <div className="min-h-screen bg-black text-white relative font-sans overflow-x-hidden selection:bg-[#FF1493] selection:text-white">
@@ -46,7 +32,6 @@ export default function HomePage() {
             <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tighter text-white">Savanah <span className="text-[#FF1493]">Labz</span></h1>
             <TridenteIcon className="w-9 h-9 sm:w-11 sm:h-11 text-[#FFD700] drop-shadow-[0_0_10px_rgba(255,215,0,0.7)]" />
           </div>
-
           <p className="text-[10px] sm:text-[11px] text-[#FFD700] uppercase font-black tracking-[0.2em] mb-12 flex items-center gap-2 justify-center text-center">
             <Sparkles size={12} className="text-[#FF1493] shrink-0" />
             <span>De criadora de conteúdos para criadoras de conteúdos</span>
@@ -58,8 +43,9 @@ export default function HomePage() {
               <Heart className="text-[#FF1493] mb-3" size={28} />
               <h2 className="text-lg font-black uppercase text-white mb-1">Quer curtir, amor?</h2>
               <p className="text-[11px] text-white/50 mb-6 font-medium uppercase tracking-widest leading-relaxed text-center">Procure uma modelo parceira clicando aqui</p>
-              <button onClick={handlePlayerClick} className="w-full bg-gradient-to-r from-[#FF1493] to-[#9c0a58] text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-[#FF1493]/20 hover:scale-[1.02] transition-transform active:scale-95">
-                <MessageCircle size={18} /> Ver Modelos Parceiras
+              
+              <button onClick={() => router.push("/vitrine")} className="w-full bg-gradient-to-r from-[#FF1493] to-[#9c0a58] text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-[#FF1493]/20 hover:scale-[1.02] transition-transform active:scale-95">
+                <Heart size={18} /> Conheça as modelos em nossa vitrine de musas
               </button>
             </div>
 
@@ -67,13 +53,12 @@ export default function HomePage() {
               <Crown className="text-[#FFD700] mb-3" size={28} />
               <h2 className="text-lg font-black uppercase text-[#FFD700] mb-1 text-center leading-tight">Quer ser uma<br/>modelo parceira?</h2>
               <p className="text-[11px] text-white/50 mb-6 font-medium uppercase tracking-widest text-center leading-relaxed">Faça parte da maior roleta sexy do brasil</p>
-              <button onClick={handleModelClick} className="w-full bg-transparent border-2 border-[#FFD700] text-[#FFD700] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-[#FFD700] hover:text-black transition-all active:scale-95">
+              <button onClick={() => router.push("/cadastro")} className="w-full bg-transparent border-2 border-[#FFD700] text-[#FFD700] py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-[#FFD700] hover:text-black transition-all active:scale-95">
                 <Crown size={18} /> Quero ser parceira
               </button>
             </div>
           </div>
         </div>
-
         <div className="flex flex-col items-center justify-center mt-12 opacity-50 animate-bounce">
           <span className="text-[8px] uppercase tracking-[0.3em] font-black text-white/50 mb-2">Role para baixo</span>
           <ChevronDown size={20} className="text-white/50" />
@@ -84,18 +69,15 @@ export default function HomePage() {
         <h2 className="text-2xl font-black uppercase text-white tracking-tighter flex items-center gap-3 italic"><TridenteIcon className="w-6 h-6 text-[#FF1493]" /> Muito Além do Jogo</h2>
         <div className="w-full bg-black/40 border border-[#FF1493]/20 p-8 rounded-[2.5rem] text-left shadow-2xl backdrop-blur-md">
           <h3 className="text-[#FF1493] font-black uppercase text-sm mb-4 flex items-center gap-2">Para quem quer se divertir</h3>
-          <p className="text-white/70 text-[12px] leading-relaxed font-medium">Sabe aquela safadeza e intimidade que você sempre teve com a Rapha e com nossas parceiras? Ela continua aqui, mas agora com muito mais adrenalina! A Labz Sexy Roll foi criada para te colocar mais perto das suas modelos favoritas através de um jogo viciante. É o melhor custo-benefício do mercado: com apenas alguns créditos, você gira a roleta e garante conteúdos exclusivos, mimos, fotos e vídeos quentíssimos.</p>
+          <p className="text-white/70 text-[12px] leading-relaxed font-medium">Sabe aquela safadeza e intimidade que você sempre teve com a Rapha e com nossas parceiras? Ela continua aqui, mas agora com muito mais adrenalina! A Labz Sexy Roll foi criada para te colocar mais perto das suas modelos favoritas através de um jogo viciante. É o melhor custo-benefício do mercado.</p>
         </div>
 
         <div className="w-full bg-black/40 border border-[#FFD700]/20 p-8 rounded-[2.5rem] text-left shadow-2xl backdrop-blur-md">
           <h3 className="text-[#FFD700] font-black uppercase text-sm mb-4 flex items-center gap-2">Para quem cria o desejo</h3>
-          <p className="text-white/70 text-[12px] leading-relaxed font-medium">Idealizada por <strong className="text-white font-black">Rapha Savanah (Savanah Cos)</strong>, a Savanah Labz nasceu de uma vivência real: a necessidade de ferramentas inovadoras que realmente valorizem o nosso trabalho. A Roleta Sexy é uma novidade explosiva para engajar seu público, multiplicar seus ganhos e ditar as suas próprias regras. Afinal, somos de criadora de conteúdos para criadoras de conteúdos.</p>
+          <p className="text-white/70 text-[12px] leading-relaxed font-medium">Idealizada por <strong className="text-white font-black">Rapha Savanah (Savanah Cos)</strong>, a Savanah Labz nasceu de uma vivência real. A Roleta Sexy é uma novidade explosiva para engajar seu público, multiplicar seus ganhos e ditar as suas próprias regras. Afinal, somos de criadora de conteúdos para criadoras de conteúdos.</p>
         </div>
       </div>
-
-      <div className="relative z-10 w-full text-center pb-8 shrink-0">
-        <div className="text-[8px] text-white/20 uppercase font-black tracking-[0.3em]">Powered by Savanah Labz © 2026</div>
-      </div>
+      <div className="relative z-10 w-full text-center pb-8 shrink-0"><div className="text-[8px] text-white/20 uppercase font-black tracking-[0.3em]">Powered by Savanah Labz © 2026</div></div>
     </div>
   );
 }
