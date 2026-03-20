@@ -35,7 +35,6 @@ export default function SuperAdmin() {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       
-      // 🔥 O LIMITADOR FOI APLICADO AQUI: &limit=100 nas tabelas pesadas
       const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?select=*&order=created_at.asc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc&limit=100`, { headers }),
@@ -124,13 +123,25 @@ export default function SuperAdmin() {
     const nextVal = !rankVisible; setRankVisible(nextVal); await handleSaveGlobal(nextVal);
   };
 
-  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string) => {
-    if (!confirm(`Confirmar pagamento?`)) return;
+  // 🔥 A MÁGICA DO WHATSAPP ACONTECE AQUI
+  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
+    if (!confirm(`Confirmar o pagamento de R$ ${amount.toFixed(2)} para ${modelName}?`)) return;
     try {
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
         method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        // is_read: false é o que faz o aviso acender no painel dela!
         body: JSON.stringify({ status: 'pago', is_read: false })
       });
+
+      // Abre o WhatsApp com a mensagem pronta
+      if (modelPhone) {
+        const msg = `Oii, ${modelName}! Amor, seu PIX de R$ ${amount.toFixed(2)} acabou de ser feito com sucesso! 💸✨\n\nSegue o comprovante abaixo:`;
+        const zapLink = `https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+        window.open(zapLink, '_blank');
+      } else {
+        alert("Pagamento registrado! (Modelo não possui WhatsApp cadastrado)");
+      }
+
       fetchData();
     } catch (err) { alert("Erro ao aprovar."); }
   };
@@ -272,7 +283,8 @@ export default function SuperAdmin() {
                   <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                       <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
-                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id)} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
+                      {/* BOTAO ATUALIZADO AQUI COM DADOS DA MODELO */}
+                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, model?.slug || 'Modelo', model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
                     </div>
                     <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
                       <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves PIX:</p>
