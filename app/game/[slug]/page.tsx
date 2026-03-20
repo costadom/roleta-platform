@@ -55,7 +55,8 @@ export default function GamePage() {
   const [pixLoading, setPixLoading] = useState(false);
   const [pixPaid, setPixPaid] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(900); // 15 minutos em segundos
+  const [timeLeft, setTimeLeft] = useState(900);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); // NOVO: 10 Minutos para pagar o PIX gerado
 
   const [showProfile, setShowProfile] = useState(false);
 
@@ -140,18 +141,25 @@ export default function GamePage() {
     return () => { if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current); };
   }, [autoSpin, isSpinning]);
 
-  // Efeito do Cronômetro de Escassez
+  // Cronômetro de Bônus (15 Minutos)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (showDeposit && timeLeft > 0 && !pixData) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
+      timer = setInterval(() => { setTimeLeft((prev) => prev - 1); }, 1000);
     } else if (!showDeposit) {
-      setTimeLeft(900); // Reseta o tempo se fechar a tela
+      setTimeLeft(900); 
     }
     return () => clearInterval(timer);
   }, [showDeposit, timeLeft, pixData]);
+
+  // NOVO: Cronômetro do Pagamento PIX (10 Minutos)
+  useEffect(() => {
+    let pixTimer: NodeJS.Timeout;
+    if (pixData && !pixPaid && pixTimeLeft > 0) {
+      pixTimer = setInterval(() => { setPixTimeLeft((prev) => prev - 1); }, 1000);
+    }
+    return () => clearInterval(pixTimer);
+  }, [pixData, pixPaid, pixTimeLeft]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -168,8 +176,20 @@ export default function GamePage() {
         body: JSON.stringify({ amount: valorPago, userId: player.id }),
       });
       const data = await response.json();
-      if (data.qr_code_base64) setPixData(data);
-      else alert("Erro ao gerar PIX. Tente novamente.");
+      if (data.qr_code_base64) {
+        setPixData(data);
+        setPixTimeLeft(600); // Reseta o tempo do PIX para 10 minutos ao gerar
+        
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+          method: 'POST',
+          headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_id: player.id, player_name: player.name, player_phone: player.whatsapp,
+            model_id: modelId, model_name: modelName, amount: valorPago, status: 'pendente'
+          })
+        }).catch(()=>{});
+
+      } else alert("Erro ao gerar PIX. Tente novamente.");
     } catch (error) { console.error("Erro PIX:", error); }
     setPixLoading(false);
   };
@@ -185,6 +205,13 @@ export default function GamePage() {
             setPixPaid(true); clearInterval(intervalo);
             const creditosGanhos = depositOption || 0;
             setPlayer((prev: any) => ({ ...prev, credits: prev.credits + creditosGanhos }));
+
+            fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?player_id=eq.${player.id}&status=eq.pendente`, {
+              method: 'PATCH',
+              headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ status: 'pago_sozinho' })
+            }).catch(()=>{});
+
             setTimeout(() => { setShowDeposit(false); setPixData(null); setPixPaid(false); setDepositOption(null); }, 3000);
           }
         } catch (error) { console.error("Erro radar:", error); }
@@ -403,13 +430,20 @@ export default function GamePage() {
               <div className="py-8 animate-bounce"><CheckCircle2 size={70} className="text-[#00ff00] mx-auto mb-4" /><h2 className="text-[#00ff00] text-xl font-black uppercase mb-2">Aprovado!</h2><p className="text-white/70 text-[10px] uppercase font-bold">Voltando para o jogo...</p></div>
             ) : pixData ? (
               <div className="mt-6">
+                {/* NOVO: CRONÔMETRO DO PIX GERADO */}
+                <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-2xl mb-4 flex items-center justify-center gap-2 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                  <Timer className="text-red-500" size={16} />
+                  <p className="text-red-500 text-[11px] font-black uppercase tracking-widest">
+                    🔥 Esse PIX expira em {formatTime(pixTimeLeft)}
+                  </p>
+                </div>
+
                 <div className="bg-black/80 border border-[#FFD700]/20 p-6 rounded-3xl mb-4 shadow-inner"><p className="text-[10px] text-white/40 uppercase font-black mb-4">Escaneie para pagar</p><div className="bg-white p-2 rounded-xl inline-block mb-4"><img src={pixData.qr_code_base64} alt="QR Code" className="w-40 h-40" /></div><p className="text-[9px] text-white/40 uppercase font-black mb-2 mt-2">Ou Pix Copia e Cola:</p><input readOnly value={pixData.qr_code} className="w-full bg-[#0a0a0a] border border-white/5 p-3 rounded-xl text-[9px] font-mono text-[#FFD700] mb-4 text-center" /><button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase bg-[#FF1493] text-white py-4 rounded-xl">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copiado!" : "Copiar Chave"}</button></div>
                 <p className="text-[9px] text-[#FF1493] font-bold uppercase animate-pulse mb-4">Aguardando confirmação...</p>
                 <button onClick={() => { setPixData(null); setDepositOption(null); }} className="text-[10px] text-white/20 uppercase font-black">Voltar</button>
               </div>
             ) : (
               <>
-                {/* O GATILHO DE ESCASSEZ AQUI */}
                 <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-2xl mb-6 flex items-center justify-center gap-2 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.2)]">
                   <Timer className="text-red-500" size={16} />
                   <p className="text-red-500 text-[11px] font-black uppercase tracking-widest">
