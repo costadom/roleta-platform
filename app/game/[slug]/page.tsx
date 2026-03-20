@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, KeyRound, Zap } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Eye, EyeOff, Sparkles, Loader2, KeyRound, Zap, Timer } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -55,6 +55,7 @@ export default function GamePage() {
   const [pixLoading, setPixLoading] = useState(false);
   const [pixPaid, setPixPaid] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(900); // 15 minutos em segundos
 
   const [showProfile, setShowProfile] = useState(false);
 
@@ -85,14 +86,9 @@ export default function GamePage() {
   useEffect(() => {
     async function fetchData() {
       if (!slug || !supabaseUrl) return;
-      
-      const timeoutId = setTimeout(() => setLoading(false), 3000); // Reduzi o tempo máximo de espera
-
+      const timeoutId = setTimeout(() => setLoading(false), 3000); 
       try {
-        // 🔥 A MÁGICA DA VELOCIDADE ESTÁ AQUI 🔥
-        // headersFast permite o celular salvar o design na memória
         const headersFast = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        // headersFresh obriga a buscar o saldo do cliente ao vivo, sem atrasos
         const headersFresh = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-store" };
 
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers: headersFast });
@@ -143,6 +139,25 @@ export default function GamePage() {
     autoSpinTimerRef.current = setTimeout(() => { if (autoSpinRef.current && runSpinRef.current) runSpinRef.current(true, false); }, 1500); 
     return () => { if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current); };
   }, [autoSpin, isSpinning]);
+
+  // Efeito do Cronômetro de Escassez
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showDeposit && timeLeft > 0 && !pixData) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (!showDeposit) {
+      setTimeLeft(900); // Reseta o tempo se fechar a tela
+    }
+    return () => clearInterval(timer);
+  }, [showDeposit, timeLeft, pixData]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   const handleGeneratePix = async (valorPago: number, creditosDoPacote: number) => {
     if (!player || !player.id) return;
@@ -379,7 +394,9 @@ export default function GamePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-lg p-4">
           <div className="bg-[#0f0f0f] border border-[#FFD700]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-2xl text-center animate-in zoom-in duration-300">
             {!pixLoading && !pixPaid && <button onClick={() => { setShowDeposit(false); setPixData(null); setDepositOption(null); }} className="absolute top-6 right-6 text-white/30"><X size={24} /></button>}
+            
             <h2 className="text-2xl font-black uppercase text-[#FFD700] mb-2 italic">Recarregar</h2>
+
             {pixLoading ? (
               <div className="py-12"><Loader2 className="animate-spin text-[#FF1493] mx-auto mb-4" size={50} /><p className="text-[#FFD700] uppercase font-black text-[10px]">Conectando...</p></div>
             ) : pixPaid ? (
@@ -392,10 +409,18 @@ export default function GamePage() {
               </div>
             ) : (
               <>
-                <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-8">Escolha um pacote</p>
+                {/* O GATILHO DE ESCASSEZ AQUI */}
+                <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-2xl mb-6 flex items-center justify-center gap-2 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                  <Timer className="text-red-500" size={16} />
+                  <p className="text-red-500 text-[11px] font-black uppercase tracking-widest">
+                    🔥 Bônus expira em {formatTime(timeLeft)}
+                  </p>
+                </div>
+
+                <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-6">Escolha um pacote</p>
                 <div className="space-y-4">
                   {[ { cr: 20, rs: 15, bonus: "+5 BÔNUS" }, { cr: 30, rs: 25, bonus: "+5 BÔNUS" }, { cr: 40, rs: 35, bonus: "+5 BÔNUS" }, { cr: 60, rs: 55, bonus: "+5 BÔNUS" } ].map((p) => (
-                    <button key={p.rs} onClick={() => handleGeneratePix(p.rs, p.cr)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl active:scale-95 relative overflow-hidden">{p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}<div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div><span className="bg-[#FF1493] text-white font-black text-[9px] px-3 py-1.5 rounded-lg shadow-lg">COMPRAR</span></button>
+                    <button key={p.rs} onClick={() => handleGeneratePix(p.rs, p.cr)} className="w-full flex justify-between items-center p-5 bg-white/5 border border-white/10 rounded-2xl active:scale-95 relative overflow-hidden transition-all hover:bg-white/10">{p.bonus && <span className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">{p.bonus}</span>}<div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">R$ {p.rs},00</span></div><span className="bg-[#FF1493] text-white font-black text-[9px] px-3 py-1.5 rounded-lg shadow-lg">COMPRAR</span></button>
                   ))}
                 </div>
               </>
