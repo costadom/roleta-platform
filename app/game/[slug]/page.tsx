@@ -86,11 +86,16 @@ export default function GamePage() {
     async function fetchData() {
       if (!slug || !supabaseUrl) return;
       
-      const timeoutId = setTimeout(() => setLoading(false), 4000);
+      const timeoutId = setTimeout(() => setLoading(false), 3000); // Reduzi o tempo máximo de espera
 
       try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
+        // 🔥 A MÁGICA DA VELOCIDADE ESTÁ AQUI 🔥
+        // headersFast permite o celular salvar o design na memória
+        const headersFast = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        // headersFresh obriga a buscar o saldo do cliente ao vivo, sem atrasos
+        const headersFresh = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-store" };
+
+        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers: headersFast });
         const dataMod = await resMod.json();
         if (!dataMod || !dataMod[0]) { setLoading(false); return; }
         const mId = dataMod[0].id;
@@ -98,12 +103,12 @@ export default function GamePage() {
 
         const savedPlayerName = localStorage.getItem(`player_${slug}`);
         const fetchPromises = [
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }),
-          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers })
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers: headersFast }),
+          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers: headersFast })
         ];
 
         if (savedPlayerName) {
-          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers }));
+          fetchPromises.push(fetch(`${supabaseUrl}/rest/v1/Players?name=eq.${encodeURIComponent(savedPlayerName)}&model_id=eq.${mId}&select=*`, { headers: headersFresh }));
         }
 
         const responses = await Promise.all(fetchPromises);
@@ -210,7 +215,7 @@ export default function GamePage() {
   const deductCredits = async (cost: number) => {
     if (!player || !player.id || !modelId) return false;
     try {
-      const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }, cache: 'no-store' });
+      const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-store" }});
       const data = await res.json();
       const currentCredits = data?.[0]?.credits || 0;
       if (currentCredits < cost) { setShowDeposit(true); setAutoSpin(false); autoSpinRef.current = false; return false; }
@@ -276,7 +281,7 @@ export default function GamePage() {
         const bonusAmount = Number(wonPrize.delivery_value) || 0;
         if (bonusAmount > 0) {
           setPlayer((prev: any) => ({ ...prev, credits: prev.credits + bonusAmount }));
-          fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers: { apikey: supabaseKey! } })
+          fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers: { apikey: supabaseKey!, "Cache-Control": "no-store" } })
             .then(r => r.json()).then(d => {
                fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, "Content-Type": "application/json" }, body: JSON.stringify({ credits: (d?.[0]?.credits || 0) + bonusAmount }) });
             });
@@ -294,7 +299,7 @@ export default function GamePage() {
   );
 
   return (
-    <div className="min-h-[100dvh] font-sans text-white bg-[#0a0a0a] flex items-center justify-center sm:p-4">
+    <div className="min-h-[100dvh] font-sans text-white bg-[#0a0a0a] flex items-center justify-center overflow-hidden sm:p-4">
       <div className="relative w-full h-[100dvh] sm:h-[95vh] max-w-[430px] mx-auto bg-black flex flex-col overflow-y-auto overflow-x-hidden sm:rounded-[2.5rem] sm:border sm:border-white/10 shadow-2xl">
         <div className="absolute inset-0 z-0"><div className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat" style={ bgUrl ? { backgroundImage: `url(${bgUrl})` } : { backgroundColor: "#120008" } } />{bgUrl && <div className="absolute inset-0 bg-black/55" />}</div>
 
