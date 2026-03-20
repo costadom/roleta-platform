@@ -21,7 +21,7 @@ export default function CadastroModelo() {
   });
 
   useEffect(() => {
-    // Pega o ID de indicação salvo invisivelmente
+    // 🚀 Pega o ID de indicação salvo invisivelmente
     const savedRef = localStorage.getItem("savanah_referral_id");
     if (savedRef) setReferralId(savedRef);
   }, []);
@@ -36,9 +36,9 @@ export default function CadastroModelo() {
     try {
       const payload = {
         ...formData,
-        prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Supresa", "Acesso VIP"]), // Prêmios genéricos iniciais
+        prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Surpresa", "Acesso VIP"]), // Prêmios genéricos iniciais
         status: "pendente",
-        referred_by: referralId, // ENVIANDO O ID DE INDICAÇÃO PARA A TABELA APPLICATIONS!
+        referred_by: referralId, // 🔥 ENVIANDO O ID DE INDICAÇÃO AQUI!
         created_at: new Date().toISOString()
       };
 
