@@ -121,6 +121,7 @@ export default function SuperAdmin() {
     } catch (err) { alert("Erro ao aprovar."); }
   };
 
+  // 🔥 APROVAÇÃO COM UPLOAD DUPLO DE BASE64
   const handleApproveApplication = async (app: any) => {
     if (!confirm(`Deseja aprovar e criar a roleta de ${app.nickname}?`)) return;
     setLoading(true);
@@ -133,21 +134,28 @@ export default function SuperAdmin() {
       let finalBgUrl = app.bg_url;
       let finalProfileUrl = app.profile_url || app.bg_url;
 
-      if (finalBgUrl && finalBgUrl.startsWith('data:image')) {
+      // Função ajudante para processar as imagens
+      const uploadBase64 = async (base64Str: string, prefix: string) => {
+        if (!base64Str || !base64Str.startsWith('data:image')) return base64Str;
         try {
-          const base64Data = finalBgUrl.split(',')[1];
-          const mimeType = finalBgUrl.split(';')[0].split(':')[1];
+          const base64Data = base64Str.split(',')[1];
+          const mimeType = base64Str.split(';')[0].split(':')[1];
           const ext = mimeType.split('/')[1] || 'jpeg';
           const byteCharacters = atob(base64Data);
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
           const byteArray = new Uint8Array(byteNumbers);
           const blob = new Blob([byteArray], { type: mimeType });
-          const fileName = `bg_app_${app.id}_${Date.now()}.${ext}`;
+          const fileName = `${prefix}_app_${app.id}_${Date.now()}.${ext}`;
           const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": mimeType }, body: blob });
-          if (uploadRes.ok) finalBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
-        } catch (uploadError) { console.error("Erro foto", uploadError); }
-      }
+          if (uploadRes.ok) return `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
+        } catch (e) { console.error("Erro upload:", e); }
+        return base64Str;
+      };
+
+      // Roda o processo de upload para as duas fotos!
+      finalBgUrl = await uploadBase64(finalBgUrl, 'bg');
+      finalProfileUrl = await uploadBase64(finalProfileUrl, 'profile');
 
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
@@ -156,7 +164,6 @@ export default function SuperAdmin() {
       const dataMod = await resMod.json();
       const mId = dataMod[0].id;
 
-      // 🔥 CRIANDO COM SHOWCASE_VISIBLE: FALSE (DESLIGADA)
       await fetch(`${supabaseUrl}/rest/v1/Configs`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: finalBgUrl, profile_url: finalProfileUrl, showcase_visible: false, created_at: now }),
@@ -194,7 +201,6 @@ export default function SuperAdmin() {
       const dataMod = await resMod.json();
       const mId = dataMod[0].id;
       
-      // 🔥 CRIANDO MANUAL TAMBÉM COM SHOWCASE_VISIBLE: FALSE
       await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, showcase_visible: false, created_at: now }), });
       
       const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
