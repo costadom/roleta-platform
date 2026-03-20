@@ -76,19 +76,23 @@ function DashboardContent() {
 
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache", "Pragma": "no-cache" };
+      // O SEGREDO DO CACHE-BUSTER ESTÁ AQUI:
+      const fetchOpts: RequestInit = { headers, cache: 'no-store' };
+      const t = Date.now(); // Timestamp matador de cache
+      
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
       const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resMyHist, resRankHist, resAllMod] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&select=*&order=created_at.desc&limit=50`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=model_id&limit=2000`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=balance,last_withdrawal,pix_key_1,pix_key_2,terms_accepted&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&created_at=gte.${sixMonthsAgo.toISOString()}&select=model_cut&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&select=*&order=created_at.desc&limit=50&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=model_id&limit=2000&t=${t}`, fetchOpts),
+        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug&t=${t}`, fetchOpts)
       ]);
 
       const [dataGlob, dataModel, dataNotif, dataTrans, dataPrizes, dataConfig, dataMyHist, dataRankHist, allModData] = await Promise.all([
@@ -366,7 +370,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* 🔥 VISUAL DO LINK CORRIGIDO PARA NÃO ESTOURAR NA TELA 🔥 */}
         <div className="mb-8 bg-white/5 border border-white/10 p-5 rounded-3xl flex flex-col sm:flex-row items-center gap-4 shadow-xl">
           <div className="flex items-center gap-4 w-full">
             <div className="p-3 bg-[#FFD700] text-black rounded-2xl shadow-[0_0_15px_rgba(255,215,0,0.3)] shrink-0">
@@ -438,7 +441,6 @@ function DashboardContent() {
               </button>
             </div>
 
-            {/* 🔥 ÁREA DUPLA DE FOTOS (PERFIL E FUNDO) 🔥 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* FOTO DO PERFIL (VITRINE) */}
               <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col items-center text-center">
