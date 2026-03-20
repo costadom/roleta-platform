@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Crown, User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Crown, User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, CheckCircle2, AlertTriangle } from "lucide-react";
 
 export default function CadastroModelo() {
   const router = useRouter();
@@ -11,36 +11,20 @@ export default function CadastroModelo() {
   const [referralId, setReferralId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    full_name: "",
-    nickname: "",
-    whatsapp: "",
-    cpf: "",
-    birth_date: "",
-    pix_1: "",
+    full_name: "", nickname: "", whatsapp: "", cpf: "", birth_date: "", pix_1: "", bg_url: "", profile_url: "",
   });
-  
-  const [base64Image, setBase64Image] = useState<string | null>(null);
 
   useEffect(() => {
-    // 🚀 Pega o ID de indicação salvo invisivelmente
     const savedRef = localStorage.getItem("savanah_referral_id");
     if (savedRef) setReferralId(savedRef);
   }, []);
 
-  // Mágica para converter foto em texto leve
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB!");
-      if (!['image/jpeg', 'image/png'].includes(file.type)) return alert("Apenas JPEG ou PNG!");
-      const reader = new FileReader();
-      reader.onloadend = () => setBase64Image(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.bg_url || !formData.profile_url) {
+      alert("ATENÇÃO: Você precisa preencher os DOIS links de foto para continuar!");
+      return;
+    }
     setLoading(true);
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -49,124 +33,60 @@ export default function CadastroModelo() {
     try {
       const payload = {
         ...formData,
-        bg_url: base64Image, // Enviando a foto convertida em texto (Base64)
-        prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Surpresa", "Acesso VIP"]), // Prêmios genéricos iniciais
-        status: "pendente",
-        referred_by: referralId,
-        created_at: new Date().toISOString()
+        prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Surpresa", "Acesso VIP"]),
+        status: "pendente", referred_by: referralId, created_at: new Date().toISOString()
       };
 
       await fetch(`${supabaseUrl}/rest/v1/Applications`, {
-        method: "POST",
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        method: "POST", headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
-
       setSuccess(true);
-    } catch (error) {
-      alert("Erro ao enviar cadastro. Tente novamente.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { alert("Erro ao enviar cadastro. Tente novamente."); } finally { setLoading(false); }
   };
 
-  if (success) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center text-white font-sans selection:bg-[#FFD700] selection:text-black">
-        <CheckCircle2 size={80} className="text-[#FFD700] mb-6 animate-bounce" />
-        <h1 className="text-3xl font-black uppercase text-[#FFD700] mb-4 italic">Cadastro Enviado!</h1>
-        <p className="text-white/60 text-xs font-bold uppercase tracking-widest max-w-sm mb-8 leading-relaxed">
-          Nossa equipe vai analisar o seu perfil. Fique de olho no seu WhatsApp, entraremos em contato em breve com a sua aprovação!
-        </p>
-        <button onClick={() => router.push("/")} className="bg-white/10 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-white/20 transition-all">
-          Voltar para o Início
-        </button>
-      </div>
-    );
-  }
+  if (success) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center text-white font-sans selection:bg-[#FFD700] selection:text-black"><CheckCircle2 size={80} className="text-[#FFD700] mb-6 animate-bounce" /><h1 className="text-3xl font-black uppercase text-[#FFD700] mb-4 italic">Cadastro Enviado!</h1><p className="text-white/60 text-xs font-bold uppercase tracking-widest max-w-sm mb-8 leading-relaxed">Nossa equipe vai analisar o seu perfil. Fique de olho no seu WhatsApp, entraremos em contato em breve!</p><button onClick={() => router.push("/")} className="bg-white/10 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-white/20 transition-all">Voltar para o Início</button></div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans relative selection:bg-[#FFD700] selection:text-black">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,215,0,0.1)_0%,rgba(0,0,0,1)_100%)] z-0 pointer-events-none" />
-      
       <div className="max-w-xl mx-auto relative z-10">
-        <button onClick={() => router.push("/")} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/40 hover:text-white mb-8 transition-all">
-          <ArrowLeft size={16} /> Voltar
-        </button>
+        <button onClick={() => router.push("/")} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/40 hover:text-white mb-8 transition-all"><ArrowLeft size={16} /> Voltar</button>
 
-        <div className="text-center mb-10">
-          <div className="mx-auto bg-[#FFD700]/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-[#FFD700]/30 shadow-[0_0_30px_rgba(255,215,0,0.15)]">
-            <Crown size={36} className="text-[#FFD700]" />
-          </div>
-          <h1 className="text-3xl font-black uppercase text-white mb-2 italic tracking-tighter">Seja uma <span className="text-[#FFD700]">Parceira</span></h1>
-          <p className="text-[10px] text-white/50 uppercase font-black tracking-[0.2em]">Crie sua roleta sexy e multiplique seus ganhos</p>
-        </div>
+        <div className="text-center mb-10"><div className="mx-auto bg-[#FFD700]/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-[#FFD700]/30"><Crown size={36} className="text-[#FFD700]" /></div><h1 className="text-3xl font-black uppercase text-white mb-2 italic tracking-tighter">Seja uma <span className="text-[#FFD700]">Parceira</span></h1></div>
 
         <form onSubmit={handleSubmit} className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl space-y-6">
-          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4">Seus Dados Pessoais</h2>
-          
+          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4">Dados Pessoais</h2>
           <div className="space-y-4">
-            <div>
-              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Completo</label>
-              <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Digite seu nome real" /></div>
-            </div>
-            
+            <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Completo</label><div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Seu nome real" /></div></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Apelido / Nome Artístico</label>
-                {/* EXEMPLO AJUSTADO AQUI */}
-                <div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Ex: rainhasexy" /></div>
-              </div>
-              <div>
-                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">WhatsApp</label>
-                <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="tel" required value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="(00) 00000-0000" /></div>
-              </div>
+              <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Artístico</label><div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Ex: anascorpion" /></div></div>
+              <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">WhatsApp</label><div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="tel" required value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="(00) 00000-0000" /></div></div>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">CPF</label>
-                <input type="text" required value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="000.000.000-00" />
-              </div>
-              <div>
-                {/* DATA DE NASCIMENTO BLINDADA E SIMPLES AQUI */}
-                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Data de Nascimento (DD/MM/YYYY)</label>
-                <input type="text" required maxLength={10} value={formData.birth_date} onChange={e => {
-                   let v = e.target.value.replace(/\D/g, "");
-                   if (v.length > 2 && v.length <= 4) v = `${v.slice(0,2)}/${v.slice(2)}`;
-                   if (v.length > 4) v = `${v.slice(0,2)}/${v.slice(2,4)}/${v.slice(4,8)}`;
-                   setFormData({...formData, birth_date: v});
-                }} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white/70 outline-none focus:border-[#FFD700] transition-all" placeholder="00/00/0000" />
-              </div>
+              <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">CPF</label><input type="text" required value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="000.000.000-00" /></div>
+              <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nascimento</label><input type="date" required value={formData.birth_date} onChange={e => setFormData({...formData, birth_date: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white/70 outline-none focus:border-[#FFD700]" /></div>
             </div>
           </div>
 
-          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4 pt-6">Financeiro e Design</h2>
-
-          <div className="space-y-4">
-            <div>
-              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Chave PIX Principal</label>
-              <div className="relative"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.pix_1} onChange={e => setFormData({...formData, pix_1: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="CPF, E-mail ou Celular" /></div>
+          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4 pt-6">Mídia & Design (Obrigatório)</h2>
+          <div className="space-y-6">
+            <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl">
+              <p className="text-[9px] text-red-400 uppercase font-black tracking-widest flex items-center gap-2 mb-1"><AlertTriangle size={14}/> ATENÇÃO: REGRAS PARA FOTOS</p>
+              <p className="text-[9px] text-white/60 uppercase font-bold leading-relaxed">Fotos sensuais são permitidas e incentivadas! Mas NUDEZ EXPLÍCITA nas fotos da plataforma é estritamente proibida e causará a reprovação imediata do seu perfil.</p>
             </div>
 
-            <div>
-              {/* UPLOAD DE FOTO AJUSTADO AQUI */}
-              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Sua Foto de Fundo (Upload JPEG/PNG)</label>
-              <div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="file" required accept="image/jpeg, image/png" onChange={handleFileChange} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white/60 outline-none focus:border-[#FFD700] cursor-pointer" /></div>
-              <p className="text-[8px] text-white/20 uppercase font-black mt-1">Essa foto aparecerá no fundo da sua roleta sexy.</p>
-            </div>
+            <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">1. Link da Foto para a VITRINE (Seu Perfil Principal)</label><div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FFD700]" size={16}/><input type="url" required value={formData.profile_url} onChange={e => setFormData({...formData, profile_url: e.target.value})} className="w-full bg-black border border-[#FFD700]/30 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Cole o link do Drive ou Instagram aqui" /></div></div>
+            <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">2. Link da Foto para o FUNDO DA ROLETA (Ambientação)</label><div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="url" required value={formData.bg_url} onChange={e => setFormData({...formData, bg_url: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Cole o link do Drive ou Instagram aqui" /></div></div>
           </div>
 
-          {referralId && (
-            <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
-              <p className="text-[9px] text-amber-500 uppercase font-black tracking-widest flex items-center gap-2"><Crown size={12}/> Indicação Ativada!</p>
-              <p className="text-[8px] text-white/50 uppercase mt-1">Você está se cadastrando através de um convite VIP.</p>
-            </div>
-          )}
+          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4 pt-6">Recebimento</h2>
+          <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label><div className="relative"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.pix_1} onChange={e => setFormData({...formData, pix_1: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Onde vamos mandar seus ganhos" /></div></div>
 
-          <button type="submit" disabled={loading} className="w-full bg-[#FFD700] text-black py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(255,215,0,0.2)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 mt-8">
-            {loading ? <Loader2 className="animate-spin" size={18} /> : "Enviar Minha Candidatura"}
-          </button>
+          {referralId && (<div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl"><p className="text-[9px] text-amber-500 uppercase font-black flex items-center gap-2"><Crown size={12}/> Indicação Ativada!</p></div>)}
+
+          <button type="submit" disabled={loading} className="w-full bg-[#FFD700] text-black py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(255,215,0,0.2)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 mt-8">{loading ? <Loader2 className="animate-spin" size={18} /> : "Enviar Minha Candidatura"}</button>
         </form>
       </div>
     </div>
