@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     const rawText = await req.text();
     
-    // PEGANDO O ID DIRETO DO ENDEREÇO DA URL (O Truque)
+    // PEGANDO O ID DIRETO DO ENDEREÇO DA URL
     const { searchParams } = new URL(req.url);
     const userIdDaUrl = searchParams.get('userId');
 
@@ -59,15 +59,15 @@ export async function POST(req: Request) {
         .update({ credits: novoSaldo })
         .eq('id', userId);
 
-      // --- A MÁGICA FINANCEIRA QUE FALTAVA --- //
+      // --- A MATEMÁTICA FINANCEIRA --- //
       if (modelId) {
-        const modelCut = amountPaid * 0.70; // 70% pra Rapha
+        const modelCut = amountPaid * 0.70; // 70% pra Modelo
         const platformCut = amountPaid * 0.30; // 30% pra Savanah Labz
 
-        // 5. Registra a venda no Painel Super Admin (Tabela Transactions)
+        // 5. Registra a venda na tabela (Agora com o telefone do cliente!)
         await supabase.from('Transactions').insert({
           model_id: modelId,
-          player_id: userId,
+          player_phone: userId, // Salva quem pagou
           amount: creditosGanhos,
           real_amount: amountPaid,
           model_cut: modelCut,
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
           status: 'aprovado'
         });
 
-        // 6. Busca o saldo atual da Modelo para somar a comissão dela
+        // 6. Busca o saldo atual da Modelo para somar
         const { data: modelData } = await supabase
           .from('Models')
           .select('balance')
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
           .eq('id', modelId);
       }
 
-      console.log(`💰 SUCESSO ABSOLUTO! Saldo atualizado e comissão da modelo gerada!`);
+      console.log(`💰 SUCESSO ABSOLUTO! Saldo da modelo e da plataforma atualizados!`);
     }
 
     return NextResponse.json({ status: 'ok' });
