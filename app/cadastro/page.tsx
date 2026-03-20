@@ -1,176 +1,149 @@
 "use client";
 
-import { useState } from "react";
-import { Camera, CheckCircle2, ChevronRight, Loader2, Sparkles, ShieldCheck } from "lucide-react";
-
-const formatCPF = (v: string) => {
-  v = v.replace(/\D/g, "");
-  if (v.length <= 11) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  return v;
-};
-
-const formatPhone = (v: string) => {
-  v = v.replace(/\D/g, "");
-  if (v.length > 11) v = v.slice(0, 11);
-  if (v.length > 2 && v.length <= 7) return `(${v.slice(0, 2)}) ${v.slice(2)}`;
-  if (v.length > 7) return `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
-  return v;
-};
-
-const formatDate = (v: string) => {
-  v = v.replace(/\D/g, "");
-  if (v.length > 8) v = v.slice(0, 8);
-  if (v.length >= 5) return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
-  if (v.length >= 3) return `${v.slice(0, 2)}/${v.slice(2)}`;
-  return v;
-};
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Crown, User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 
 export default function CadastroModelo() {
-  const [step, setStep] = useState(1);
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [referralId, setReferralId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    nickname: "", fullName: "", whatsapp: "", cpf: "", birthDate: "", pix1: "", pix2: ""
+    full_name: "",
+    nickname: "",
+    whatsapp: "",
+    cpf: "",
+    birth_date: "",
+    pix_1: "",
+    bg_url: "",
   });
-  
-  const [prizes, setPrizes] = useState(["", "", "", "", "", ""]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert("⚠️ A imagem é muito pesada! Escolha uma foto de até 2MB para não travar o seu cadastro.");
-      return;
-    }
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
-
-  const handlePrizeChange = (index: number, value: string) => {
-    const newPrizes = [...prizes];
-    newPrizes[index] = value;
-    setPrizes(newPrizes);
-  };
+  useEffect(() => {
+    // Pega o ID de indicação salvo invisivelmente
+    const savedRef = localStorage.getItem("savanah_referral_id");
+    if (savedRef) setReferralId(savedRef);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (prizes.some(p => p.trim() === "")) return alert("Preencha os 6 prêmios para a sua roleta!");
-    if (!selectedFile) return alert("Envie uma foto de fundo bem bonita para a sua roleta!");
-    
     setLoading(true);
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
     try {
-      const slug = formData.nickname.toLowerCase().replace(/\s/g, '');
+      const payload = {
+        ...formData,
+        prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Supresa", "Acesso VIP"]), // Prêmios genéricos iniciais
+        status: "pendente",
+        referred_by: referralId, // ENVIANDO O ID DE INDICAÇÃO PARA A TABELA APPLICATIONS!
+        created_at: new Date().toISOString()
+      };
 
-      const fileName = `bg_candidata_${slug}_${Date.now()}.jpeg`;
-      const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "image/jpeg" }, body: selectedFile 
-      });
-      
-      if (!uploadRes.ok) throw new Error("Erro ao subir a imagem");
-      
-      const publicBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
-
-      const res = await fetch(`${supabaseUrl}/rest/v1/Applications`, {
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          nickname: slug, 
-          full_name: formData.fullName,
-          whatsapp: formData.whatsapp.replace(/\D/g, ""),
-          cpf: formData.cpf.replace(/\D/g, ""),
-          birth_date: formData.birthDate,
-          pix_1: formData.pix1,
-          pix_2: formData.pix2,
-          prizes: prizes,
-          bg_url: publicBgUrl
-        }),
+      await fetch(`${supabaseUrl}/rest/v1/Applications`, {
+        method: "POST",
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error("Erro ao enviar candidatura");
       setSuccess(true);
-
-    } catch (err) {
-      alert("Erro ao enviar seus dados. Verifique sua internet e tente novamente.");
+    } catch (error) {
+      alert("Erro ao enviar cadastro. Tente novamente.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (success) return (
-    <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 text-white font-sans">
-      <div className="bg-[#0a0a0a] border border-[#FF1493]/30 p-10 rounded-[3rem] w-full max-w-md text-center shadow-[0_0_40px_rgba(255,20,147,0.15)] animate-in zoom-in duration-500">
-        <div className="h-20 w-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/30">
-          <CheckCircle2 className="text-emerald-500" size={40} />
-        </div>
-        <h1 className="text-2xl font-black uppercase italic text-[#FF1493] mb-4 tracking-tighter">Candidatura Enviada!</h1>
-        <p className="text-[12px] text-white/80 uppercase font-black tracking-widest leading-relaxed mb-6">
-          Boa sorte! Nossa diretoria irá analisar o seu perfil. <br/><br/>Se você for aprovada, a nossa equipe entrará em contato em breve com o seu link de vendas e dados de acesso.
+  if (success) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center text-white font-sans selection:bg-[#FFD700] selection:text-black">
+        <CheckCircle2 size={80} className="text-[#FFD700] mb-6 animate-bounce" />
+        <h1 className="text-3xl font-black uppercase text-[#FFD700] mb-4 italic">Cadastro Enviado!</h1>
+        <p className="text-white/60 text-xs font-bold uppercase tracking-widest max-w-sm mb-8 leading-relaxed">
+          Nossa equipe vai analisar o seu perfil. Fique de olho no seu WhatsApp, entraremos em contato em breve com a sua aprovação!
         </p>
-        <button onClick={() => window.location.reload()} className="w-full bg-white/5 border border-white/10 text-white/50 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 transition-all">Voltar ao Início</button>
+        <button onClick={() => router.push("/")} className="bg-white/10 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-white/20 transition-all">
+          Voltar para o Início
+        </button>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4 sm:p-6 text-white font-sans relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-[#FF1493]/10 to-transparent pointer-events-none" />
-      <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#FFD700]/5 blur-[100px] rounded-full pointer-events-none" />
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans relative selection:bg-[#FFD700] selection:text-black">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,215,0,0.1)_0%,rgba(0,0,0,1)_100%)] z-0 pointer-events-none" />
+      
+      <div className="max-w-xl mx-auto relative z-10">
+        <button onClick={() => router.push("/")} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/40 hover:text-white mb-8 transition-all">
+          <ArrowLeft size={16} /> Voltar
+        </button>
 
-      <div className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-12 rounded-[3rem] w-full max-w-2xl relative shadow-2xl z-10">
         <div className="text-center mb-10">
-          <h1 className="text-3xl sm:text-4xl font-black uppercase italic flex justify-center items-center gap-2"><span className="text-white">LabzSexy</span> <span className="text-[#FF1493]">Roll</span></h1>
-          <p className="text-[10px] text-[#FFD700] uppercase font-black tracking-[0.3em] mt-2 flex items-center justify-center gap-1"><Sparkles size={12}/> Cadastro Oficial de Parceira</p>
+          <div className="mx-auto bg-[#FFD700]/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-[#FFD700]/30 shadow-[0_0_30px_rgba(255,215,0,0.15)]">
+            <Crown size={36} className="text-[#FFD700]" />
+          </div>
+          <h1 className="text-3xl font-black uppercase text-white mb-2 italic tracking-tighter">Seja uma <span className="text-[#FFD700]">Parceira</span></h1>
+          <p className="text-[10px] text-white/50 uppercase font-black tracking-[0.2em]">Crie sua roleta sexy e multiplique seus ganhos</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {step === 1 && (
-            <div className="animate-in slide-in-from-right duration-300">
-              <h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest"><ShieldCheck size={16}/> Dados Pessoais</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input required type="text" placeholder="NOME ARTÍSTICO (Sem espaços)" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.replace(/\s/g, '')})} />
-                <input required type="text" placeholder="NOME COMPLETO" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} />
-                <input required type="tel" placeholder="WHATSAPP" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: formatPhone(e.target.value)})} />
-                <input required type="text" placeholder="CPF" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.cpf} onChange={e => setFormData({...formData, cpf: formatCPF(e.target.value)})} />
-                <input required type="text" placeholder="DATA DE NASCIMENTO" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-[#FF1493] text-white" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: formatDate(e.target.value)})} />
+        <form onSubmit={handleSubmit} className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl space-y-6">
+          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4">Seus Dados Pessoais</h2>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Completo</label>
+              <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Digite seu nome real" /></div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Apelido / Nome Artístico</label>
+                <div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Ex: anascorpion" /></div>
               </div>
-              <h2 className="text-xs font-black uppercase text-emerald-400 mt-8 mb-6 flex items-center gap-2 tracking-widest"> Dados Bancários (Para Saque)</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input required type="text" placeholder="CHAVE PIX PRINCIPAL" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-emerald-500 text-white" value={formData.pix1} onChange={e => setFormData({...formData, pix1: e.target.value})} />
-                <input type="text" placeholder="CHAVE PIX SECUNDÁRIA (Opcional)" className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs outline-none focus:border-emerald-500 text-white" value={formData.pix2} onChange={e => setFormData({...formData, pix2: e.target.value})} />
+              <div>
+                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">WhatsApp</label>
+                <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="tel" required value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="(00) 00000-0000" /></div>
               </div>
-              <button type="button" onClick={() => setStep(2)} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase mt-8 shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">Próxima Etapa <ChevronRight size={16}/></button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">CPF</label>
+                <input type="text" required value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Data de Nascimento</label>
+                <input type="date" required value={formData.birth_date} onChange={e => setFormData({...formData, birth_date: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white/70 outline-none focus:border-[#FFD700] transition-all" />
+              </div>
+            </div>
+          </div>
+
+          <h2 className="text-[11px] font-black uppercase text-[#FFD700] tracking-widest mb-4 border-b border-white/10 pb-4 pt-6">Financeiro e Design</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Chave PIX Principal</label>
+              <div className="relative"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.pix_1} onChange={e => setFormData({...formData, pix_1: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Para receber seus lucros (Obrigatório)" /></div>
+            </div>
+
+            <div>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Link de uma Foto Sua (Para o fundo da Roleta)</label>
+              <div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="url" value={formData.bg_url} onChange={e => setFormData({...formData, bg_url: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all" placeholder="Cole o link do seu Instagram ou Drive" /></div>
+            </div>
+          </div>
+
+          {referralId && (
+            <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+              <p className="text-[9px] text-amber-500 uppercase font-black tracking-widest flex items-center gap-2"><Crown size={12}/> Indicação Ativada!</p>
+              <p className="text-[8px] text-white/50 uppercase mt-1">Você está se cadastrando através de um convite VIP.</p>
             </div>
           )}
 
-          {step === 2 && (
-            <div className="animate-in slide-in-from-right duration-300">
-              <h2 className="text-xs font-black uppercase text-[#FFD700] mb-2 flex items-center gap-2 tracking-widest"><Sparkles size={16}/> Sua Roleta</h2>
-              <p className="text-[9px] text-white/40 uppercase font-black tracking-widest mb-6">Escolha 6 prêmios que seus clientes irão ganhar.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                {prizes.map((p, index) => (
-                  <input key={index} type="text" required placeholder={`PRÊMIO ${index + 1}`} className="w-full bg-black border border-[#FFD700]/30 p-4 rounded-xl text-xs outline-none focus:border-[#FFD700] text-white" value={p} onChange={e => handlePrizeChange(index, e.target.value)} />
-                ))}
-              </div>
-              <h2 className="text-xs font-black uppercase text-white/50 mb-4 tracking-widest">Foto de Fundo da Roleta (Máx 2MB)</h2>
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-[#FF1493]/50 hover:bg-[#FF1493]/5 transition-all relative overflow-hidden">
-                {previewUrl ? <img src={previewUrl} className="absolute inset-0 w-full h-full object-cover opacity-50" /> : (
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6 text-white/30"><Camera size={32} className="mb-2" /><p className="text-[10px] uppercase font-black tracking-widest">Tocar para enviar (JPG/PNG)</p></div>
-                )}
-                <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={handleFileChange} />
-              </label>
-              <div className="flex gap-4 mt-8">
-                <button type="button" onClick={() => setStep(1)} className="px-6 py-5 bg-white/5 text-white/50 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 transition-all">Voltar</button>
-                <button type="submit" disabled={loading} className="flex-1 bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
-                  {loading ? <Loader2 className="animate-spin" size={16}/> : "Enviar Candidatura"}
-                </button>
-              </div>
-            </div>
-          )}
+          <button type="submit" disabled={loading} className="w-full bg-[#FFD700] text-black py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(255,215,0,0.2)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 mt-8">
+            {loading ? <Loader2 className="animate-spin" size={18} /> : "Enviar Minha Candidatura"}
+          </button>
         </form>
       </div>
     </div>
