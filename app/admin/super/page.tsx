@@ -35,11 +35,12 @@ export default function SuperAdmin() {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       
+      // 🔥 O LIMITADOR FOI APLICADO AQUI: &limit=100 nas tabelas pesadas
       const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?select=*&order=created_at.asc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })) 
@@ -189,12 +190,10 @@ export default function SuperAdmin() {
         body: JSON.stringify({ status: 'aprovada' }),
       });
 
-      // 🐛 BUG 1 RESOLVIDO: Trocando api.whatsapp.com por wa.me e usando location.href
       const firstName = app.full_name.split(" ")[0];
       const msg = `Oi, ${firstName} (${capNick}) ! Que alegria ter você com a gente 💖\nA sua Roleta Sexy exclusiva já está 100% configurada e pronta pra você faturar muito. Tudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar o link da sua roleta e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance quase zero, pra aumentar ainda mais suas vendas.\nSe alguém ganhar, a gente resolve tudo pra você — pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
       const zapLink = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
       
-      // Abre o app nativamente na mesma aba (o mobile não bloqueia isso)
       window.location.href = zapLink;
 
       setSelectedApp(null); fetchData();
