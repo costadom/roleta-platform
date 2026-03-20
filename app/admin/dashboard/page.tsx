@@ -41,12 +41,10 @@ function DashboardContent() {
   const [pixKey2, setPixKey2] = useState("");
   const [savingPix, setSavingPix] = useState(false);
 
-  // FOTO DO FUNDO
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [selectedBgFile, setSelectedBgFile] = useState<File | null>(null);
   const [bgPreviewUrl, setBgPreviewUrl] = useState<string | null>(null);
 
-  // FOTO DE PERFIL (VITRINE)
   const [currentProfile, setCurrentProfile] = useState<string | null>(null);
   const [selectedProfileFile, setSelectedProfileFile] = useState<File | null>(null);
   const [profilePreviewUrl, setProfilePreviewUrl] = useState<string | null>(null);
@@ -58,7 +56,6 @@ function DashboardContent() {
   const [spinCost, setSpinCost] = useState<number>(2);
   const [savingSettings, setSavingSettings] = useState(false);
   
-  // VOLTAMOS COM O CARREGAMENTO PROTETOR PRA NÃO DAR SUSTO NA MODELO
   const [dashboardLoading, setDashboardLoading] = useState(true);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -78,8 +75,6 @@ function DashboardContent() {
     const timeoutId = setTimeout(() => setDashboardLoading(false), 5000); 
 
     try {
-      // 🔥 A MARRETA NO CACHE: O X-Time-Buster muda a cada milissegundo. 
-      // Isso obriga o Next.js a sempre ir buscar o saldo fresco e atualizado!
       const fetchOpts: RequestInit = { 
         headers: { 
           apikey: supabaseKey!, 
@@ -316,7 +311,6 @@ function DashboardContent() {
 
   if (!modelId) return <div className="min-h-screen bg-black flex items-center justify-center text-white uppercase font-black">Carregando...</div>;
 
-  // AQUI É ONDE FICA A TELA DE BLOQUEIO PROTETORA
   if (dashboardLoading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-sans fixed inset-0 z-[9999]">
       <Loader2 className="animate-spin text-[#FF1493] mb-4" size={40}/>
@@ -361,6 +355,24 @@ function DashboardContent() {
             <p className="text-[#FFD700] text-[9px] font-bold uppercase tracking-[0.2em]">{modelName || "Modelo"}</p>
           </div>
         </div>
+
+        {/* 🔥 O AVISO DE PIX PAGO APARECE AQUI 🔥 */}
+        {notifications.length > 0 && (
+          <div className="mb-6 bg-emerald-500/10 border border-emerald-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between shadow-[0_0_20px_rgba(16,185,129,0.2)] gap-4 animate-in slide-in-from-top-4">
+            <div className="flex items-center gap-4 w-full">
+              <div className="h-12 w-12 bg-emerald-500 text-black rounded-full flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.5)]"><CheckCircle2 size={24}/></div>
+              <div>
+                <h2 className="text-sm font-black uppercase text-emerald-500">PIX NA CONTA! 💸</h2>
+                <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-1">Seu último saque foi pago com sucesso.</p>
+              </div>
+            </div>
+            <button onClick={async () => {
+              // Marca como lido no banco e tira da tela
+              await Promise.all(notifications.map(n => fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${n.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ is_read: true }) })));
+              setNotifications([]);
+            }} className="w-full sm:w-auto bg-emerald-500 text-black text-[10px] font-black uppercase px-6 py-3 rounded-xl shadow-lg active:scale-95 transition-all shrink-0 hover:scale-[1.02]">Ok, Entendi!</button>
+          </div>
+        )}
 
         <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
           <div className="flex items-center gap-4 w-full">
@@ -437,6 +449,7 @@ function DashboardContent() {
           </div>
         )}
 
+        {/* ABA 2: ROLETA E PRÊMIOS */}
         {activeTab === "prizes" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             
