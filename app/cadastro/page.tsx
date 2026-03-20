@@ -19,7 +19,7 @@ export default function CadastroModelo() {
     if (savedRef) setReferralId(savedRef);
   }, []);
 
-  // 🔥 SISTEMA DE UPLOAD (BASE64)
+  // 🔥 SISTEMA DE UPLOAD (PEGANDO A FOTO DA GALERIA)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'bg_url' | 'profile_url') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -78,7 +78,7 @@ export default function CadastroModelo() {
           <div className="space-y-4">
             <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Completo</label><div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Seu nome real" /></div></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Artístico</label><div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Ex: anascorpion" /></div></div>
+              <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nome Artístico</label><div className="relative"><Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="text" required value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="Ex: seunomeartistico" /></div></div>
               <div><label className="text-[9px] font-black text-white/40 uppercase block mb-2">WhatsApp</label><div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/><input type="tel" required value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700]" placeholder="(00) 00000-0000" /></div></div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -91,26 +91,26 @@ export default function CadastroModelo() {
           <div className="space-y-6">
             <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl">
               <p className="text-[9px] text-red-400 uppercase font-black tracking-widest flex items-center gap-2 mb-2"><AlertTriangle size={14}/> ATENÇÃO: REGRAS DE NUDEZ</p>
-              <p className="text-[9px] text-white/70 uppercase font-bold leading-relaxed">Você pode vender seus conteúdos explícitos normalmente. MAS, nestas <strong>duas fotos abaixo</strong> (Vitrine e Roleta) a nudez explícita é <strong>PROIBIDA</strong>. Use fotos sensuais (biquíni, lingerie). Nudez aqui causará a reprovação do seu perfil.</p>
+              <p className="text-[9px] text-white/70 uppercase font-bold leading-relaxed">Fotos sensuais (biquíni/lingerie) são super bem-vindas! Mas NUDEZ EXPLÍCITA é estritamente proibida <strong>SOMENTE nestas duas fotos de exibição</strong> (Vitrine e Fundo). Nos seus conteúdos pagos na roleta, está tudo liberado!</p>
             </div>
 
             <div>
-              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">1. Foto para a VITRINE (Seu Perfil Principal)</label>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">1. Foto para a VITRINE (Seu Perfil Principal - Máx 2MB)</label>
               <label className="w-full bg-black border border-[#FFD700]/30 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] flex items-center justify-between cursor-pointer hover:bg-white/5 transition-all">
                 <span className="flex items-center gap-2 truncate">
                   <ImageIcon size={16} className={formData.profile_url ? "text-emerald-500 shrink-0" : "text-[#FFD700] shrink-0"} />
-                  {formData.profile_url ? <span className="text-emerald-500 font-bold">✅ Foto da Vitrine carregada!</span> : <span className="text-white/50">Clique para escolher a imagem...</span>}
+                  {formData.profile_url ? <span className="text-emerald-500 font-bold">✅ Foto da Vitrine selecionada!</span> : <span className="text-white/50">Clique para abrir a galeria...</span>}
                 </span>
                 <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={e => handleFileChange(e, 'profile_url')} />
               </label>
             </div>
 
             <div>
-              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">2. Foto para o FUNDO DA ROLETA (Ambientação)</label>
+              <label className="text-[9px] font-black text-white/40 uppercase block mb-2">2. Foto para o FUNDO DA ROLETA (Ambientação - Máx 2MB)</label>
               <label className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] flex items-center justify-between cursor-pointer hover:bg-white/10 transition-all">
                 <span className="flex items-center gap-2 truncate">
                   <ImageIcon size={16} className={formData.bg_url ? "text-emerald-500 shrink-0" : "text-white/20 shrink-0"} />
-                  {formData.bg_url ? <span className="text-emerald-500 font-bold">✅ Foto da Roleta carregada!</span> : <span className="text-white/50">Clique para escolher a imagem...</span>}
+                  {formData.bg_url ? <span className="text-emerald-500 font-bold">✅ Foto da Roleta selecionada!</span> : <span className="text-white/50">Clique para abrir a galeria...</span>}
                 </span>
                 <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={e => handleFileChange(e, 'bg_url')} />
               </label>
