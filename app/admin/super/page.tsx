@@ -15,7 +15,7 @@ export default function SuperAdmin() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
-  const [abandoned, setAbandoned] = useState<any[]>([]); // 🔥 O ESTADO DOS CARRINHOS ABANDONADOS
+  const [abandoned, setAbandoned] = useState<any[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0); 
   
   const [loading, setLoading] = useState(false);
@@ -28,6 +28,9 @@ export default function SuperAdmin() {
   const [goalAmount, setGoalAmount] = useState(1000);
   const [goalReward, setGoalReward] = useState("");
   const [savingGlobal, setSavingGlobal] = useState(false);
+
+  // 🔥 NOVO ESTADO: Guarda as mensagens personalizadas para cada modelo (usando o ID da modelo como chave)
+  const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -44,7 +47,7 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?status=eq.pendente&order=created_at.desc&limit=50`, { headers }) // 🔥 Puxa os carrinhos!
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?status=eq.pendente&order=created_at.desc&limit=50`, { headers })
       ]);
 
       const dataHist = resHist.ok ? await resHist.json() : [];
@@ -54,7 +57,7 @@ export default function SuperAdmin() {
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
       if (resApp.ok) setApplications(await resApp.json());
-      if (resAbandon.ok) setAbandoned(await resAbandon.json()); // 🔥 Grava os carrinhos na memória
+      if (resAbandon.ok) setAbandoned(await resAbandon.json());
 
       if (resGlob.ok) {
         const dataGlob = await resGlob.json();
@@ -99,7 +102,7 @@ export default function SuperAdmin() {
       await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
       await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
       await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
-      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers }); // Limpa abandonos antigos
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers });
       
       await fetch(`${supabaseUrl}/rest/v1/Models?id=not.is.null`, { 
         method: 'PATCH', headers: { ...headers, "Content-Type": "application/json" },
@@ -373,24 +376,55 @@ export default function SuperAdmin() {
               {models.map(m => (
                 <div key={m.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] hover:border-[#FF1493]/30 transition-all shadow-xl group relative overflow-hidden">
                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#FF1493]/5 rounded-full blur-[40px] pointer-events-none" />
+                  
                   <div className="flex justify-between items-start mb-4 relative z-10">
                     <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
                     <div className="flex gap-2">
                       <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
                       
-                      {m.whatsapp && (
-                        <button onClick={() => window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}`, '_blank')} className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-500 hover:bg-emerald-500 hover:text-white transition-all" title="Falar no WhatsApp"><MessageCircle size={16}/></button>
-                      )}
-
+                      {/* 🔥 O SEU NOVO BOTÃO DE WHATSAPP 🔥 */}
                       <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
                       <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                     </div>
                   </div>
+
                   <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
                   <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                   
                   {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por: {m.referred_by.split('-')[0]}</span></div>)}
-                  <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10"><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div></div>
+                  
+                  <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10 mb-4"><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div></div>
+
+                  {/* 🔥 CAMPO DE MENSAGEM RÁPIDA INJETADO AQUI 🔥 */}
+                  {m.whatsapp && (
+                    <div className="relative z-10 mt-2 bg-[#141414] border border-white/10 rounded-2xl p-2 flex flex-col gap-2">
+                      <p className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-2">Mandar mensagem rápida:</p>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Ex: Amor, tudo bem com a sua roleta?"
+                          className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50"
+                          value={customMessages[m.id] || ""}
+                          onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}
+                        />
+                        <button 
+                          onClick={() => {
+                            const userMsg = customMessages[m.id];
+                            const defaultMsg = `Oii ${m.slug}!`;
+                            const finalMsg = userMsg ? userMsg : defaultMsg;
+                            window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
+                            // Limpa o campo após enviar
+                            setCustomMessages({ ...customMessages, [m.id]: "" });
+                          }} 
+                          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" 
+                          title="Falar no WhatsApp"
+                        >
+                          <MessageCircle size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               ))}
             </div>
