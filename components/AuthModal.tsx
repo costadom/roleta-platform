@@ -64,7 +64,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     return regex.test(pass);
   };
 
-  // --- SUBMITS ---
+  // --- SUBMITS E GRAVAÇÃO DE LOGIN ---
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { [key: string]: string } = {};
@@ -81,7 +81,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
 
     setErrors({});
-    alert("Validação passou! Pronto para plugar no banco.");
+    
+    // Grava o login no navegador do cliente (Local Storage)
+    localStorage.setItem("labz_player_logged", "true");
+    localStorage.setItem("labz_player_phone", phone);
+    
+    // Redireciona de imediato para a vitrine
+    window.location.href = "/vitrine";
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -89,7 +95,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     const newErrors: { [key: string]: string } = {};
 
     if (phone.length < 14) newErrors.phone = "Telefone inválido.";
-    if (password.length < 1) newErrors.password = "Digite sua senha.";
+    if (password.length < 1) newErrors.password = "Digite a sua senha.";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -97,10 +103,16 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
 
     setErrors({});
-    alert("Pronto para logar!");
+    
+    // Grava o login no navegador do cliente (Local Storage)
+    localStorage.setItem("labz_player_logged", "true");
+    localStorage.setItem("labz_player_phone", phone);
+    
+    // Redireciona de imediato para a vitrine
+    window.location.href = "/vitrine";
   };
 
-  // Link do WhatsApp com o seu número
+  // Link do WhatsApp de Suporte configurado
   const whatsappSupportLink = "https://wa.me/5515996587248?text=Esqueci%20minha%20senha%20e%20preciso%20redefini-la";
 
   return (
@@ -123,7 +135,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             Savanah <span className="text-[#D946EF]">Labz</span>
           </h2>
           <p className="text-[10px] text-white/50 uppercase font-bold tracking-widest mt-1">
-            {isLoginView ? "Acesse sua carteira" : "Crie sua conta VIP"}
+            {isLoginView ? "Aceda à sua carteira" : "Crie a sua conta VIP"}
           </p>
         </div>
 
@@ -139,7 +151,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             onClick={() => { setIsLoginView(false); setErrors({}); }}
             className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${!isLoginView ? 'bg-[#D946EF] text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
           >
-            Cadastrar
+            Registar
           </button>
         </div>
 
@@ -170,7 +182,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
             <div className="flex justify-end">
               <a href={whatsappSupportLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#D946EF] hover:text-white transition-colors font-bold uppercase tracking-wide">
-                Esqueci minha senha
+                Esqueci-me da senha
               </a>
             </div>
 
@@ -186,7 +198,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40"><Phone size={16} /></div>
                 <input 
-                  type="tel" placeholder="WhatsApp (Será seu login)" value={phone} onChange={handlePhoneChange}
+                  type="tel" placeholder="WhatsApp (Será o seu login)" value={phone} onChange={handlePhoneChange}
                   className="w-full bg-[#141414] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#D946EF] transition-colors"
                 />
               </div>
@@ -223,7 +235,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   className="w-full bg-[#141414] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#D946EF] transition-colors"
                 />
               </div>
-              <p className="text-[8px] text-white/40 mt-1 ml-1">Mín. 8 caracteres, 1 maiúscula, 1 número e 1 caractere especial (@$!%*?&)</p>
+              <p className="text-[8px] text-white/40 mt-1 ml-1">Mín. 8 caracteres, 1 maiúscula, 1 número e 1 especial (@$!%*?&)</p>
               {errors.password && <p className="text-red-500 text-[9px] mt-1 ml-1 uppercase font-bold">{errors.password}</p>}
             </div>
 
