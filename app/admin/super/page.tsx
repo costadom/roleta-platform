@@ -46,10 +46,9 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        // 🔥 CORREÇÃO AQUI: Removemos o filtro da URL para tratar no código
+        // 🔥 REMOVEMOS A TRAVA DA URL PARA FILTRAR TUDO NO CÓDIGO
         fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
-        // 🔥 CORREÇÃO AQUI: Removemos o filtro da URL para tratar no código
         fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers })
       ]);
 
@@ -60,13 +59,12 @@ export default function SuperAdmin() {
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
       
-      // 🔥 CORREÇÃO AQUI: Filtramos os status ignorando maiúsculas/minúsculas
+      // 🔥 FILTRO FORÇADO IGNORANDO LETRA MAIÚSCULA/MINÚSCULA
       if (resApp.ok) {
         const apps = await resApp.json();
         setApplications(apps.filter((a: any) => a.status?.toLowerCase() === 'pendente'));
       }
       
-      // 🔥 CORREÇÃO AQUI: Filtramos os status ignorando maiúsculas/minúsculas
       if (resAbandon.ok) {
         const carts = await resAbandon.json();
         setAbandoned(carts.filter((c: any) => c.status?.toLowerCase() === 'pendente'));
@@ -251,7 +249,7 @@ export default function SuperAdmin() {
           <div className="flex gap-3"><button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase">ZERAR SISTEMA</button><button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30"><Lock size={18}/></button></div>
         </div>
 
-        {/* PIX ABANDONADOS - RESTAURADO */}
+        {/* PIX ABANDONADOS */}
         {abandoned.length > 0 && (
           <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem]">
             <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados</h2>
@@ -276,7 +274,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* SOLICITAÇÕES DE SAQUE - RESTAURADO */}
+        {/* SOLICITAÇÕES DE SAQUE */}
         {pendingWithdrawals.length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2"><AlertCircle size={16}/> Saques Pendentes</h2>
@@ -292,7 +290,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* NOVAS CANDIDATURAS - RESTAURADO */}
+        {/* NOVAS CANDIDATURAS */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2"><UserPlus size={16}/> Novas Musas</h2>
@@ -322,16 +320,9 @@ export default function SuperAdmin() {
               <div className="flex justify-between items-start mb-6">
                 <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
                 <div className="flex gap-2">
-                  
-                  {/* 🔥 BOTÃO DOURADO: GERENCIAR CLIENTES DA MODELO 🔥 */}
-                  <button 
-                    onClick={() => router.push(`/admin/models/${m.id}/players`)} 
-                    className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all" 
-                    title="Ver Carteira de Clientes"
-                  >
+                  <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all" title="Ver Carteira de Clientes">
                     <Users size={16}/>
                   </button>
-
                   <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
                   <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                 </div>
