@@ -6,7 +6,7 @@ import {
   Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -18,52 +18,44 @@ function DashboardContent() {
 
   const [isMounted, setIsMounted] = useState(false);
   const [modelUrl, setModelUrl] = useState("");
-  const [referralUrl, setReferralUrl] = useState("");
   const [isSuper, setIsSuper] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [acceptingTerms, setAcceptingTerms] = useState(false);
-  const [globalAnnouncement, setGlobalAnnouncement] = useState("");
-  const [showRankTab, setShowRankTab] = useState(false); 
-  const [metaValue, setMetaValue] = useState(0);
-  const [metaPrize, setMetaPrize] = useState("");
-
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "video_requests" | "prizes" | "players" | "history">("finance");
-  
+
+  // Dados do Banco
+  const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
-  const [allModels, setAllModels] = useState<any[]>([]);
-  const [rankHistory, setRankHistory] = useState<any[]>([]);
-  const [editingPrize, setEditingPrize] = useState<any | null>(null);
-
-  const [modelBalance, setModelBalance] = useState<number>(0);
-  const [lastWithdrawal, setLastWithdrawal] = useState<string | null>(null);
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
   const [notifications, setNotifications] = useState<any[]>([]);
-  
+  const [mediaList, setMediaList] = useState<any[]>([]);
+  const [videoRequests, setVideoRequests] = useState<any[]>([]);
+
+  // Financeiro
+  const [modelBalance, setModelBalance] = useState<number>(0);
+  const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
   const [pixKey1, setPixKey1] = useState("");
   const [pixKey2, setPixKey2] = useState("");
   const [savingPix, setSavingPix] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  const [currentBg, setCurrentBg] = useState<string | null>(null);
-  const [selectedBgFile, setSelectedBgFile] = useState<File | null>(null);
-  const [bgPreviewUrl, setBgPreviewUrl] = useState<string | null>(null);
-
-  const [currentProfile, setCurrentProfile] = useState<string | null>(null);
-  const [selectedProfileFile, setSelectedProfileFile] = useState<File | null>(null);
-  const [profilePreviewUrl, setProfilePreviewUrl] = useState<string | null>(null);
-
-  const [uploading, setUploading] = useState(false);
-  const [showcaseVisible, setShowcaseVisible] = useState(false);
+  // Configurações Roleta
   const [modelName, setModelName] = useState("");
-  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [currentBg, setCurrentBg] = useState<string | null>(null);
+  const [currentProfile, setCurrentProfile] = useState<string | null>(null);
+  const [showcaseVisible, setShowcaseVisible] = useState(false);
+  const [editingPrize, setEditingPrize] = useState<any | null>(null);
+  const [uploading, setUploading] = useState(false);
 
+  // Galeria & Hub
   const [bio, setBio] = useState("");
   const [savingHub, setSavingHub] = useState(false);
-  const [mediaList, setMediaList] = useState<any[]>([]);
-  const [newMediaPrice, setNewMediaPrice] = useState(0);
   const [newMediaCaption, setNewMediaCaption] = useState("");
-  const [videoRequests, setVideoRequests] = useState<any[]>([]);
+  const [isPaidMedia, setIsPaidMedia] = useState(false);
+  const [rawPrice, setRawPrice] = useState(""); // Valor em centavos para a máscara
+  const [selectedProfileFile, setSelectedProfileFile] = useState<File | null>(null);
+  const [selectedBgFile, setSelectedBgFile] = useState<File | null>(null);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -71,67 +63,62 @@ function DashboardContent() {
   useEffect(() => {
     setIsMounted(true);
     setIsSuper(localStorage.getItem("super_admin_auth") === "true");
-    if (modelId) setReferralUrl(`${window.location.origin}/?ref=${modelId}`);
     if (modelSlug) setModelUrl(`${window.location.origin}/game/${modelSlug}`);
-  }, [modelSlug, modelId]);
+  }, [modelSlug]);
 
   const loadData = async () => {
     if (!modelId) return;
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-      const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      
-      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resMyHist, resRankHist, resAllMod, resMedia, resVideos] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
+      const [resMod, resNotif, resTrans, resPrizes, resConfig, resMyHist, resMedia, resVideos] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&order=created_at.desc&limit=50`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=model_id&limit=2000`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
-      if (resGlob[0]) { setGlobalAnnouncement(resGlob[0].announcement_msg); setShowRankTab(resGlob[0].ranking_visible === true); setMetaValue(resGlob[0].goal_amount); setMetaPrize(resGlob[0].goal_reward); }
-      if (resModel[0]) { setModelBalance(resModel[0].balance || 0); setLastWithdrawal(resModel[0].last_withdrawal); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setTermsAccepted(resModel[0].terms_accepted === true); setBio(resModel[0].bio || ""); }
+      if (resMod[0]) {
+        setModelData(resMod[0]);
+        setModelBalance(resMod[0].balance || 0);
+        setPixKey1(resMod[0].pix_key_1 || "");
+        setPixKey2(resMod[0].pix_key_2 || "");
+        setTermsAccepted(resMod[0].terms_accepted === true);
+        setBio(resMod[0].bio || "");
+      }
+      if (resConfig[0]) {
+        setCurrentBg(resConfig[0].bg_url);
+        setCurrentProfile(resConfig[0].profile_url);
+        setModelName(resConfig[0].model_name || "");
+        setShowcaseVisible(resConfig[0].showcase_visible === true);
+      }
       setAccumulatedEarnings(resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0));
       setPrizes(resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
-      setNotifications(resNotif); setHistory(resMyHist); setRankHistory(resRankHist); setAllModels(resAllMod); setMediaList(resMedia); setVideoRequests(resVideos);
-      if (resConfig[0]) { setCurrentBg(resConfig[0].bg_url); setCurrentProfile(resConfig[0].profile_url); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true); }
+      setNotifications(resNotif); setHistory(resMyHist); setMediaList(resMedia); setVideoRequests(resVideos);
     } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // --- HANDLERS ---
+  // --- MÁSCARA FINANCEIRA R$ ---
+  const handlePriceInput = (e: any) => {
+    const value = e.target.value.replace(/\D/g, "");
+    setRawPrice(value);
+  };
+  const formattedPrice = useMemo(() => {
+    const numericValue = Number(rawPrice) / 100;
+    return numericValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }, [rawPrice]);
+
+  // --- FINANCEIRO ---
   const handleSavePix = async () => {
     setSavingPix(true);
     await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ pix_key_1: pixKey1, pix_key_2: pixKey2 }) });
-    setSavingPix(false); alert("Salvo!");
-  };
-
-  const handleSaveHub = async () => {
-    setSavingHub(true);
-    await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bio }) });
-    setSavingHub(false); alert("Hub Atualizado!");
-  };
-
-  const handleUploadPhoto = async (e: any) => {
-    const file = e.target.files[0];
-    if (!file || file.size > 10 * 1024 * 1024) return alert("Arquivo maior que 10MB!");
-    setUploading(true);
-    const fileName = `${modelId}/gal_${Date.now()}_${file.name.replace(/\s/g, '_')}`;
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file });
-    if (uploadRes.ok) {
-        const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
-        await fetch(`${supabaseUrl}/rest/v1/Media`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId, url, price: newMediaPrice, caption: newMediaCaption }) });
-        setNewMediaCaption(""); setNewMediaPrice(0); loadData(); alert("Foto publicada!");
-    }
-    setUploading(false);
+    setSavingPix(false); alert("Chaves PIX salvas!");
   };
 
   const handleWithdraw = async () => {
@@ -142,6 +129,27 @@ function DashboardContent() {
     setModelBalance(0); setIsWithdrawing(false); alert("Solicitado!");
   };
 
+  // --- GALERIA ---
+  const handleUploadPhoto = async (e: any) => {
+    const file = e.target.files[0];
+    const numericPrice = Number(rawPrice) / 100;
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return alert("Máximo 10MB!");
+    if (isPaidMedia && numericPrice < 10) return alert("O valor mínimo para fotos pagas é R$ 10,00");
+    
+    setUploading(true);
+    const fileName = `${modelId}/gal_${Date.now()}_${file.name.replace(/\s/g, '_')}`;
+    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file });
+    
+    if (uploadRes.ok) {
+        const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
+        await fetch(`${supabaseUrl}/rest/v1/Media`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId, url, price: isPaidMedia ? numericPrice : 0, caption: newMediaCaption }) });
+        setNewMediaCaption(""); setRawPrice(""); setIsPaidMedia(false); loadData(); alert("Foto publicada!");
+    }
+    setUploading(false);
+  };
+
+  // --- ROLETA ---
   const checkIsFake = (prize: any) => {
     const name = String(prize.name).toUpperCase();
     return Number(prize.weight) <= 0.05 || name.includes("PIX") || name.includes("PRESENCIAL") || name.includes("100") || name.includes("R$");
@@ -166,21 +174,18 @@ function DashboardContent() {
           <button onClick={() => isSuper ? router.push('/admin/super') : (localStorage.clear(), router.push('/admin'))} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 bg-white/5 px-4 py-2 rounded-xl">{isSuper ? "Voltar Master" : "Sair"}</button>
           <div className="text-right flex flex-col items-end">
             <h1 className="text-2xl font-black uppercase text-[#FF1493]">Painel VIP</h1>
-            <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} onBlur={async () => { await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName }) }); }} className="bg-transparent text-[#FFD700] text-[9px] font-bold uppercase text-right outline-none w-full" />
+            <p className="text-[#FFD700] text-[9px] font-bold uppercase">{modelSlug}</p>
           </div>
         </div>
 
+        {/* NAVEGAÇÃO */}
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
-          <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-white/30"}`}>Ganhos</button>
-          <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/30" : "text-white/30"}`}>Hub</button>
-          <button onClick={() => setActiveTab("gallery")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "gallery" ? "bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/30" : "text-white/30"}`}>Galeria</button>
-          <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/30" : "text-white/30"}`}>Vídeos</button>
-          <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "prizes" ? "bg-white/10 text-white" : "text-white/30"}`}>Roleta</button>
-          <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-white/10 text-white" : "text-white/30"}`}>Fãs</button>
+          {["finance", "hub", "gallery", "video_requests", "prizes", "players"].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === tab ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>{tab.replace('_',' ')}</button>
+          ))}
         </div>
 
-        {/* --- CONTEÚDO DAS ABAS --- */}
-
+        {/* FINANCEIRO */}
         {activeTab === "finance" && (
             <div className="space-y-6 animate-in fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -205,32 +210,46 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "hub" && (
-            <div className="max-w-3xl mx-auto bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-4">
-                <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Editar Hub Público</h2>
-                <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-40 resize-none mb-6" placeholder="Sua frase de impacto..."/>
-                <button onClick={handleSaveHub} disabled={savingHub} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-lg">{savingHub ? "Salvando..." : "Salvar Hub"}</button>
-            </div>
-        )}
-
+        {/* GALERIA - NOVO LAYOUT EXATO */}
         {activeTab === "gallery" && (
             <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-black border border-white/10 p-10 rounded-[3rem] mb-12 shadow-2xl grid md:grid-cols-2 gap-10">
-                    <textarea value={newMediaCaption} onChange={e => setNewMediaCaption(e.target.value.slice(0, 500))} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-32" placeholder="Legenda da foto... 🔥"/>
-                    <div className="flex flex-col justify-between">
-                        <input type="number" value={newMediaPrice} onChange={e => setNewMediaPrice(Number(e.target.value))} className="w-full bg-black border border-white/10 rounded-full py-5 px-8 text-white font-black text-2xl mb-4" placeholder="Preço (0=Grátis)"/>
-                        <label className="w-full bg-[#FF1493] text-white py-6 rounded-2xl cursor-pointer hover:scale-[1.02] flex items-center justify-center gap-3 font-black uppercase text-[10px] shadow-xl">
-                            {uploading ? <Loader2 className="animate-spin" size={18}/> : "Publicar Foto"}
-                            <input type="file" hidden accept="image/*" onChange={handleUploadPhoto} disabled={uploading}/>
-                        </label>
+                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl">
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black uppercase text-[#FF1493] ml-2">Legenda da Foto</label>
+                            <textarea value={newMediaCaption} onChange={e => setNewMediaCaption(e.target.value.slice(0, 500))} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-32" placeholder="O que tem na foto? 🔥"/>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-[9px] text-white/40 leading-relaxed uppercase font-black">
+                                <p>⚠️ Regras: Fotos de nudez somente na categoria PAGA (Mín. R$ 10). Fotos gratuitas não podem conter nudez explícita.</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col justify-between">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
+                                    <input type="checkbox" checked={isPaidMedia} onChange={(e) => setIsPaidMedia(e.target.checked)} className="w-5 h-5 accent-[#FF1493]" />
+                                    <span className="text-[10px] font-black uppercase">Conteúdo Pago (Blur)</span>
+                                </div>
+                                {isPaidMedia && (
+                                    <div className="animate-in zoom-in duration-300">
+                                        <label className="text-[10px] font-black text-white/40 mb-2 block ml-2">Definir Valor (Mín. R$ 10,00)</label>
+                                        <input type="text" value={formattedPrice} onChange={handlePriceInput} className="w-full bg-black border border-[#FF1493] rounded-full py-5 px-8 text-white font-black text-2xl text-center outline-none" />
+                                    </div>
+                                )}
+                            </div>
+                            <label className="w-full bg-[#FF1493] text-white py-6 rounded-2xl cursor-pointer hover:scale-[1.02] flex items-center justify-center gap-3 font-black uppercase text-[10px] shadow-xl mt-6">
+                                {uploading ? <Loader2 className="animate-spin" size={18}/> : <><Camera size={20}/> Escolher e Publicar</>}
+                                <input type="file" hidden accept="image/*" onChange={handleUploadPhoto} disabled={uploading}/>
+                            </label>
+                        </div>
                     </div>
                 </div>
+                
+                <h3 className="text-xs font-black uppercase text-white/30 mb-6 ml-4">Fotos Publicadas</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {mediaList.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all"/>
                             <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                                <button onClick={async () => { if(confirm("Deletar?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-3 bg-red-500 rounded-full"><Trash2 size={20}/></button>
+                                <button onClick={async () => { if(confirm("Apagar esta foto permanentemente?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-3 bg-red-500 rounded-full"><Trash2 size={20}/></button>
                             </div>
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price}`}</div>
                         </div>
@@ -239,42 +258,14 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "video_requests" && (
-            <div className="grid gap-6 animate-in slide-in-from-bottom-4">
-                <div className="bg-blue-500/10 border border-blue-500/20 p-6 rounded-3xl mb-4"><p className="text-[10px] font-black uppercase text-blue-400">Regras: Aceitar o vídeo credita 70% do valor no seu saldo na hora. Você tem 2 dias para entregar o link do Drive.</p></div>
-                {videoRequests.length > 0 ? videoRequests.map((req) => (
-                    <div key={req.id} className="bg-black border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-8 shadow-2xl relative overflow-hidden">
-                        <div className="flex-1">
-                            <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mb-4 inline-block ${req.status === 'pago' ? 'bg-blue-500 text-white' : req.status === 'aceito' ? 'bg-amber-500 text-black' : 'bg-emerald-500'}`}>{req.status === 'pago' ? 'Aguardando sua Aprovação' : req.status}</span>
-                            <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{req.description}"</p>
-                            <p className="text-[10px] text-[#FFD700] font-black mt-2 uppercase">{req.duration} MINUTOS - R$ {req.price}</p>
-                        </div>
-                        <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl flex flex-col justify-center gap-3">
-                            {req.status === 'pago' && (
-                                <>
-                                <button onClick={async () => { if(!confirm("Aceitar?")) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aceito', accepted_at: new Date().toISOString() }) }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ balance: modelBalance + (req.price * 0.7) }) }); loadData(); }} className="w-full bg-emerald-500 text-black py-4 rounded-xl font-black uppercase text-[10px]">Aceitar e Receber R$ {(req.price * 0.7).toFixed(2)}</button>
-                                <button onClick={async () => { if(!confirm("Recusar?")) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'recusado' }) }); loadData(); }} className="w-full bg-red-500/10 text-red-500 py-4 rounded-xl font-black uppercase text-[10px]">Recusar</button>
-                                </>
-                            )}
-                            {req.status === 'aceito' && (
-                                <div className="space-y-2">
-                                    <input type="text" placeholder="Link do Drive/Mega" className="w-full bg-black border border-white/10 rounded-xl p-4 text-xs text-white" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ drive_link: e.target.value, status: 'entregue' }) }); loadData(); } }} />
-                                    <p className="text-[8px] text-white/30 text-center font-black">Link e Aperte Enter</p>
-                                </div>
-                            )}
-                            {req.status === 'entregue' && <div className="text-emerald-500 text-[10px] font-black uppercase text-center flex items-center justify-center gap-2"><CheckCircle size={14}/> Entregue</div>}
-                        </div>
-                    </div>
-                )) : <div className="py-20 text-center text-white/10 italic">Nenhum pedido recebido.</div>}
-            </div>
-        )}
-
+        {/* ROLETA - CONFIGURAÇÕES DE IMAGEM RESTAURADAS */}
         {activeTab === "prizes" && (
             <div className="space-y-6 animate-in fade-in">
                 <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex items-center justify-between">
                     <div><h3 className="text-[11px] font-black uppercase text-[#FFD700]">Exibir na Vitrine</h3></div>
                     <button onClick={async () => { const n = !showcaseVisible; setShowcaseVisible(n); await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ showcase_visible: n }) }); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${showcaseVisible ? 'bg-[#FF1493]' : 'bg-white/20'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showcaseVisible ? 'translate-x-7' : 'translate-x-1'}`} /></button>
                 </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center text-center">
                         <div className="w-32 h-32 mb-4 bg-black/50 border border-white/10 rounded-full overflow-hidden flex items-center justify-center">{(profilePreviewUrl || currentProfile) ? <img src={(profilePreviewUrl || currentProfile) as string} className="w-full h-full object-cover" /> : <User className="text-white/10" size={40} />}</div>
@@ -287,13 +278,14 @@ function DashboardContent() {
                         {selectedBgFile && <button onClick={async () => { setUploading(true); const fn=`bg_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedBgFile.type}, body:selectedBgFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: url }) }); setCurrentBg(url); setSelectedBgFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FF1493] text-white py-3 rounded-xl text-[10px] font-black uppercase">Salvar Fundo Roleta</button>}
                     </div>
                 </div>
+
                 <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
                     <h2 className="text-xs font-black uppercase text-white/50 tracking-widest mb-6">Slots da Roleta</h2>
                     <div className="grid gap-3">
                         {prizes.map((p, index) => {
                             const isFake = checkIsFake(p);
                             return (
-                                <div key={p.id} className={`flex items-center justify-between p-5 rounded-3xl transition-all border ${isFake ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80' : 'bg-black/40 border-white/5 hover:border-[#FF1493]/30'}`}>
+                                <div key={p.id} className={`flex items-center justify-between p-5 rounded-3xl transition-all border ${isFake ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80' : 'bg-white/5 border-white/10 hover:border-[#FF1493]/30'}`}>
                                     <div className="flex items-center gap-2">
                                         {!isFake && (<div className="flex flex-col gap-1 mr-2"><button onClick={() => movePrize(index, 'up')} className="p-1 rounded-md bg-white/5 hover:bg-[#FF1493] text-white"><ChevronUp size={14}/></button><button onClick={() => movePrize(index, 'down')} className="p-1 rounded-md bg-white/5 hover:bg-[#FF1493] text-white"><ChevronDown size={14}/></button></div>)}
                                         <div className="h-6 w-1.5 rounded-full" style={{ backgroundColor: p.color }} />
@@ -308,15 +300,53 @@ function DashboardContent() {
             </div>
         )}
 
+        {/* OUTRAS ABAS MANTIDAS */}
+        {activeTab === "hub" && (
+            <div className="max-w-3xl mx-auto bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-4">
+                <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Hub Público</h2>
+                <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-40 resize-none mb-6" placeholder="Frase de impacto..."/>
+                <button onClick={handleSaveHub} disabled={savingHub} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-xs">{savingHub ? "Salvando..." : "Salvar Hub"}</button>
+            </div>
+        )}
+
+        {activeTab === "video_requests" && (
+            <div className="grid gap-6 animate-in slide-in-from-bottom-4">
+                {videoRequests.map((req) => (
+                    <div key={req.id} className="bg-black border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-8 shadow-2xl relative overflow-hidden">
+                        <div className="flex-1">
+                            <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mb-4 inline-block ${req.status === 'pago' ? 'bg-blue-500 text-white' : req.status === 'aceito' ? 'bg-amber-500 text-black' : 'bg-emerald-500'}`}>{req.status}</span>
+                            <p className="text-sm italic text-white/80 leading-relaxed">"{req.description}"</p>
+                        </div>
+                        <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl flex flex-col justify-center gap-3">
+                            {req.status === 'pago' && (
+                                <>
+                                <button onClick={async () => { if(!confirm("Aceitar?")) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aceito', accepted_at: new Date().toISOString() }) }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ balance: modelBalance + (req.price * 0.7) }) }); loadData(); }} className="w-full bg-emerald-500 text-black py-4 rounded-xl font-black uppercase text-[10px]">Aceitar e Receber</button>
+                                </>
+                            )}
+                            {req.status === 'aceito' && <input type="text" placeholder="Link do Drive" className="w-full bg-black border border-white/10 rounded-xl p-4 text-xs text-white" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ drive_link: e.target.value, status: 'entregue' }) }); loadData(); } }} />}
+                            {req.status === 'entregue' && <div className="text-emerald-500 text-[10px] font-black uppercase text-center flex items-center justify-center gap-2"><CheckCircle size={14}/> Entregue</div>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
+
       </div>
 
+      {/* MODAL EDITAR SLOT - REGRAS DE ENTREGA ORIGINAIS */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <form onSubmit={async (e) => { e.preventDefault(); await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value }) }); setEditingPrize(null); loadData(); }} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl">
+          <form onSubmit={async (e) => { 
+              e.preventDefault(); 
+              const payload = { name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value };
+              await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+              setEditingPrize(null); loadData();
+          }} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-black uppercase mb-8 text-[#FF1493] italic text-center">Editar Slot</h2>
             <div className="space-y-4">
-                <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" />
+                <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" />
                 <input type="color" value={editingPrize.color} onChange={e => setEditingPrize({...editingPrize, color: e.target.value})} className="w-full h-12 bg-transparent cursor-pointer" />
                 <div className="bg-white/5 p-4 rounded-2xl space-y-3">
                     <p className="text-[10px] font-black uppercase text-white/40">Entrega do Conteúdo</p>
@@ -329,6 +359,8 @@ function DashboardContent() {
           </form>
         </div>
       )}
+
+      <style jsx global>{` .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }`}</style>
     </div>
   );
 }
