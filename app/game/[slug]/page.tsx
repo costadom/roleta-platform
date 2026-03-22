@@ -1,316 +1,401 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle } from "lucide-react";
-import confetti from "canvas-confetti";
-import { RouletteWheel } from "@/components/RouletteWheel";
-import { PrizeModal } from "@/components/PrizeModal";
-import AuthModal from "@/components/AuthModal";
+import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2 } from "lucide-react";
 
-const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
-const SPIN_DURATION = 4000;
-
-export default function GamePage() {
-  const params = useParams();
+export default function SuperAdmin() {
   const router = useRouter();
-  const slug = params.slug;
-
-  const [prizes, setPrizes] = useState<any[]>([]);
-  const [bgUrl, setBgUrl] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [modelName, setModelName] = useState("");
-
-  const [player, setPlayer] = useState<any | null>(null);
-  const [allAssociations, setAllAssociations] = useState<any[]>([]);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isLogged, setIsLogged] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [adminUser, setAdminUser] = useState("");
+  const [adminPass, setAdminPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
   
-  const [showDeposit, setShowDeposit] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [pixData, setPixData] = useState<any>(null);
-  const [pixLoading, setPixLoading] = useState(false);
-  const [pixPaid, setPixPaid] = useState(false); 
-  const [copied, setCopied] = useState(false);
+  const [models, setModels] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [abandoned, setAbandoned] = useState<any[]>([]); 
+  const [totalPlayers, setTotalPlayers] = useState(0); 
+  
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [newModel, setNewModel] = useState({ slug: "", email: "", password: "", referred_by: "" });
 
-  const [rotation, setRotation] = useState(0);
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<any | null>(null);
+  const [globalMsg, setGlobalMsg] = useState("");
+  const [rankVisible, setRankVisible] = useState(false);
+  const [goalAmount, setGoalAmount] = useState(1000);
+  const [goalReward, setGoalReward] = useState("");
+  const [savingGlobal, setSavingGlobal] = useState(false);
 
-  const spinAudioRef = useRef<HTMLAudioElement | null>(null);
-  const winAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  useEffect(() => {
-    async function fetchData() {
-      if (!slug || !supabaseUrl) return;
-      try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
-        const dataMod = await resMod.json();
-        const mId = dataMod[0]?.id;
-        if (!mId) return;
+  const fetchData = async () => {
+    try {
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+      
+      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers, resAbandon] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/Models?select=*&order=created_at.asc`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?select=*&order=created_at.desc&limit=100`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers })
+      ]);
 
-        const [resPrizes, resConfig] = await Promise.all([
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }),
-          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers })
-        ]);
+      const dataHist = resHist.ok ? await resHist.json() : [];
 
-        setPrizes(await resPrizes.json());
-        const dataConfig = await resConfig.json();
-        if (dataConfig?.[0]) {
-          setBgUrl(dataConfig[0].bg_url || "");
-          setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
-        }
-      } catch (e) { console.error(e); } finally { setLoading(false); }
-    }
-    fetchData();
-    if (typeof window !== "undefined") {
-      spinAudioRef.current = new Audio("/sounds/spin.mp3");
-      winAudioRef.current = new Audio("/sounds/gemido.mp3");
-    }
-  }, [slug]);
-
-  useEffect(() => {
-    async function checkAccess() {
-      const isLoggedIn = localStorage.getItem("labz_player_logged");
-      const savedWhatsapp = localStorage.getItem("labz_player_phone");
-
-      if (isLoggedIn === "true" && savedWhatsapp) {
-        try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
-          const mId = (await resMod.json())[0]?.id;
-
-          const resAll = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers });
-          const dataAll = await resAll.json();
-          setAllAssociations(dataAll);
-
-          const currentPlayer = dataAll.find((p: any) => p.model_id === mId);
-          if (currentPlayer && currentPlayer.full_name && currentPlayer.nickname) {
-            setPlayer(currentPlayer);
-            setIsAuthorized(true);
-            setShowAuthModal(false);
-          } else {
-            setIsAuthorized(false);
-          }
-        } catch (e) {}
+      if (resMod.ok) setModels(await resMod.json());
+      setHistory(dataHist);
+      if (resTrans.ok) setTransactions(await resTrans.json());
+      if (resWith.ok) setWithdrawals(await resWith.json());
+      
+      if (resApp.ok) {
+        const apps = await resApp.json();
+        setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
       }
-    }
-    if (prizes.length > 0) checkAccess();
-  }, [slug, prizes]);
+      
+      if (resAbandon.ok) {
+        const carts = await resAbandon.json();
+        // 🔥 REGRA DOS 3 MINUTOS: Só mostra se for 'pendente' E tiver mais de 3 minutos de vida
+        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
+        setAbandoned(carts.filter((c: any) => {
+          const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
+          const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
+          return isPendente && isOldEnough;
+        }));
+      }
+
+      if (resGlob.ok) {
+        const dataGlob = await resGlob.json();
+        if (dataGlob[0]) {
+          setGlobalMsg(dataGlob[0].announcement_msg);
+          setRankVisible(dataGlob[0].ranking_visible);
+          setGoalAmount(dataGlob[0].goal_amount);
+          setGoalReward(dataGlob[0].goal_reward);
+        }
+      }
+
+      if (resPlayers && resPlayers.ok) {
+        const pData = await resPlayers.json();
+        setTotalPlayers(pData.length);
+      } else {
+        const uniquePlayers = new Set(dataHist.map((h: any) => h.player_phone).filter(Boolean)).size;
+        setTotalPlayers(uniquePlayers);
+      }
+
+    } catch (err) { console.error("Erro no fetch", err); } finally { setInitialLoading(false); }
+  };
 
   useEffect(() => {
-    let interval: any;
-    if (pixData && !pixPaid && player) {
-      interval = setInterval(async () => {
+    if (localStorage.getItem("super_admin_auth") === "true") { setIsLogged(true); fetchData(); } else { setInitialLoading(false); }
+  }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
+      localStorage.setItem("super_admin_auth", "true");
+      setIsLogged(true); setInitialLoading(true); fetchData();
+    } else { alert("Acesso negado!"); }
+  };
+
+  const handleResetSystem = async () => {
+    const confirmText = prompt("ATENÇÃO: Você está prestes a ZERAR todo o financeiro, histórico de giros e saques do sistema.\n\nIsso limpará tudo para o lançamento oficial. \n\nDigite ZERARTUDO para confirmar:");
+    if (confirmText !== "ZERARTUDO") return alert("Cancelado.");
+
+    setInitialLoading(true);
+    try {
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+      await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers });
+      
+      await fetch(`${supabaseUrl}/rest/v1/Models?id=not.is.null`, { 
+        method: 'PATCH', headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ balance: 0, terms_accepted: false }) 
+      });
+
+      alert("Sistema Restaurado! O financeiro foi limpo para o lançamento oficial.");
+      fetchData();
+    } catch (err) { alert("Erro ao tentar limpar o sistema."); }
+  };
+
+  const handleSaveGlobal = async (valRanking?: boolean) => {
+    setSavingGlobal(true);
+    const isVisible = typeof valRanking === 'boolean' ? valRanking : rankVisible;
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main`, {
+        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ announcement_msg: globalMsg, ranking_visible: isVisible, goal_amount: goalAmount, goal_reward: goalReward, updated_at: new Date().toISOString() })
+      });
+      if (typeof valRanking !== 'boolean') alert("Configurações salvas!");
+    } catch (err) {} finally { setSavingGlobal(false); }
+  };
+
+  const toggleRankingVisibility = async () => {
+    const nextVal = !rankVisible; setRankVisible(nextVal); await handleSaveGlobal(nextVal);
+  };
+
+  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
+    if (!confirm(`Confirmar o pagamento de R$ ${amount.toFixed(2)} para ${modelName}?`)) return;
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
+        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: 'pago', is_read: false })
+      });
+
+      if (modelPhone) {
+        const msg = `Oii, ${modelName}! Amor, seu PIX de R$ ${amount.toFixed(2)} acabou de ser feito com sucesso! 💸✨\n\nSegue o comprovante abaixo:`;
+        const zapLink = `https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+        window.open(zapLink, '_blank');
+      } else {
+        alert("Pagamento registrado! (Modelo não possui WhatsApp cadastrado)");
+      }
+
+      fetchData();
+    } catch (err) { alert("Erro ao aprovar."); }
+  };
+
+  const handleApproveApplication = async (app: any) => {
+    if (!confirm(`Deseja aprovar e criar a roleta de ${app.nickname}?`)) return;
+    setLoading(true);
+    try {
+      const now = new Date().toISOString();
+      const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
+      const generatedEmail = `${app.nickname}@admin.com`;
+      const generatedPass = `${capNick}Admin26`;
+
+      let finalBgUrl = app.bg_url;
+      let finalProfileUrl = app.profile_url || app.bg_url;
+
+      if (finalBgUrl && finalBgUrl.startsWith('data:image')) {
         try {
-            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-            const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
-            const data = await res.json();
-            if (data[0]?.credits > player.credits) {
-              setPixPaid(true);
-              setPlayer({ ...player, credits: data[0].credits });
-              clearInterval(interval);
-            }
-        } catch(err) { console.error(err); }
-      }, 4000);
-    }
-    return () => clearInterval(interval);
-  }, [pixData, pixPaid, player]);
+          const base64Data = finalBgUrl.split(',')[1];
+          const mimeType = finalBgUrl.split(';')[0].split(':')[1];
+          const ext = mimeType.split('/')[1] || 'jpeg';
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: mimeType });
+          const fileName = `bg_app_${app.id}_${Date.now()}.${ext}`;
+          const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": mimeType }, body: blob });
+          if (uploadRes.ok) finalBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
+        } catch (uploadError) { console.error("Erro foto", uploadError); }
+      }
 
-  const handleGeneratePix = async (val: number) => {
-    if (!player) return;
-    setPixLoading(true);
-    setPixData(null);
-    setPixPaid(false);
-    
-    // 🔥 CORREÇÃO: Registra o carrinho abandonado no banco
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
-        method: 'POST',
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          player_name: player.nickname || player.full_name || "Cliente",
-          player_phone: player.whatsapp,
-          model_name: modelName || slug,
-          amount: val,
-          status: 'pendente'
-        })
+      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
+        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ slug: app.nickname, email: generatedEmail, password: generatedPass, full_name: app.full_name, whatsapp: app.whatsapp, cpf: app.cpf, birth_date: app.birth_date, pix_key_1: app.pix_1, pix_key_2: app.pix_2, referred_by: app.referred_by || null, created_at: now }),
       });
-    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
+      const dataMod = await resMod.json();
+      const mId = dataMod[0].id;
 
-    try {
-      const res = await fetch('/api/checkout/pix', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: val, userId: player.id }),
+      await fetch(`${supabaseUrl}/rest/v1/Configs`, {
+        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: finalBgUrl, profile_url: finalProfileUrl, showcase_visible: false, created_at: now }),
       });
-      const data = await res.json();
-      if (data.qr_code_base64) { setPixData(data); }
-    } catch (e) {
-        console.error("Erro Pix:", e);
-    } finally { setPixLoading(false); }
+
+      const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
+      const appPrizes = Array.isArray(app.prizes) ? app.prizes : JSON.parse(app.prizes || "[]");
+      const prizesToInsert = appPrizes.map((p: string, i: number) => ({
+        id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp'
+      }));
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "R$ 100 no PIX", shortLabel: "R$ 100\nNO PIX", type: "digital", weight: 0.02, color: "#10b981", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "Encontro Presencial", shortLabel: "ENCONTRO\nPRESENCIAL", type: "digital", weight: 0.02, color: "#6366f1", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+
+      await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
+
+      await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, {
+        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: 'aprovada' }),
+      });
+
+      const firstName = app.full_name.split(" ")[0];
+      const msg = `Oi, ${firstName} (${capNick}) ! Que alegria ter você com a gente 💖\nA sua Roleta Sexy exclusiva já está 100% configurada e pronta pra você faturar muito. Tudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar o link da sua roleta e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance quase zero, pra aumentar ainda mais suas vendas.\nSe alguém ganhar, a gente resolve tudo pra você — pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+      const zapLink = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+      
+      window.location.href = zapLink;
+
+      setSelectedApp(null); fetchData();
+    } catch (err) { alert("Erro ao criar."); } finally { setLoading(false); }
   };
 
-  const runSpin = async () => {
-    if (!isAuthorized) { setShowAuthModal(true); return; }
-    if (isSpinning || prizes.length === 0) return;
-    if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
-
-    setIsSpinning(true);
-    spinAudioRef.current?.play().catch(() => {});
-    const index = Math.floor(Math.random() * prizes.length); 
-    setRotation(prev => prev + 3600 + (360 - (index * (360/prizes.length))));
-
-    setTimeout(async () => {
-      setIsSpinning(false); setSelectedPrize(prizes[index]); setModalOpen(true);
-      const newBal = (player?.credits || 0) - 3;
-      setPlayer({ ...player, credits: newBal });
-      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: newBal }) });
-      winAudioRef.current?.play().catch(() => {});
-      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-    }, SPIN_DURATION + 100);
+  const handleDelete = async (id: string) => {
+    if (!confirm(`Remover franquia?`)) return;
+    await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+    fetchData();
   };
 
-  if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
+  const financialData = useMemo(() => {
+    let totalSales = 0, totalPlatform = 0, totalModels = 0;
+    const byModel: Record<string, number> = {};
+    transactions.forEach(t => {
+      totalSales += Number(t.real_amount) || 0;
+      totalPlatform += Number(t.platform_cut) || 0;
+      totalModels += Number(t.model_cut) || 0;
+      byModel[t.model_id] = (byModel[t.model_id] || 0) + (Number(t.real_amount) || 0);
+    });
+    return { totalSales, totalPlatform, totalModels, byModel };
+  }, [transactions]);
+
+  const pendingWithdrawals = withdrawals.filter(w => w.status === 'pendente');
+
+  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
+
+  if (!isLogged) return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl">
+      <ShieldCheck size={40} className="text-[#FF1493] mx-auto mb-6"/><h1 className="text-xl font-black uppercase text-white mb-8 italic">PAINEL MASTER</h1>
+      <form onSubmit={handleLogin} className="space-y-4 text-left">
+        <input type="email" placeholder="EMAIL MASTER" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminUser} onChange={e => setAdminUser(e.target.value)} />
+        <div className="relative"><input type={showPass ? "text" : "password"} placeholder="SENHA" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminPass} onChange={e => setAdminPass(e.target.value)} /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
+        <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase">Acessar</button>
+      </form>
+    </div></div>
+  );
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans">
-      <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
+      <div className="max-w-7xl mx-auto">
         
-        <div className="absolute inset-0 z-0">
-           <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${bgUrl})`, opacity: isAuthorized ? 0.45 : 0.25 }} />
-           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
+          <div><h1 className="text-4xl font-black uppercase italic"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1">SISTEMA MASTER</p></div>
+          <div className="flex gap-3"><button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase">ZERAR SISTEMA</button><button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30"><Lock size={18}/></button></div>
         </div>
 
-        <div className="relative z-10 flex flex-col h-full overflow-hidden">
-          <div className="p-4 flex flex-col gap-3 shrink-0">
-             <div className="flex justify-between items-center px-1">
-                <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><LayoutGrid size={12} /> Vitrine</button>
-                <div className="flex gap-2">
-                   <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
-                   <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all"><User size={18}/></button>
+        {/* PIX ABANDONADOS */}
+        {abandoned.length > 0 && (
+          <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem]">
+            <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Mais de 3 minutos)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {abandoned.map(cart => (
+                <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                  <div className="mb-4">
+                     <p className="text-[12px] text-white font-black uppercase">{cart.player_name}</p>
+                     <p className="text-[10px] text-red-400 font-bold mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
+                     <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
+                  </div>
+                  <div className="flex gap-2">
+                     <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi que o PIX na roleta da ${cart.model_name} não concluiu...`)}`, '_blank')} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase">Recuperar no Zap</button>
+                     <button onClick={async () => {
+                       await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
+                       fetchData();
+                     }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all"><X size={14}/></button>
+                  </div>
                 </div>
-             </div>
-             <div className="flex flex-col items-center"><span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span><span className="text-[10px] text-[#FFD700] font-black uppercase mt-0.5 tracking-widest italic">Musa {modelName}</span></div>
-          </div>
-
-          <div className="w-full h-9 bg-black/60 border-y border-white/5 backdrop-blur-sm overflow-hidden flex items-center relative shrink-0">
-            <div className="flex whitespace-nowrap animate-marquee">
-              { NAMES.map((name, i) => (
-                <div key={i} className="flex items-center gap-2 mx-8 text-[10px] font-black uppercase tracking-tighter"><Sparkles size={11} className="text-[#FFD700]" /><span className="text-white/60">{name}</span><span className="text-white">GANHOU</span><span className="text-[#D946EF]">PRÊMIO VIP</span></div>
               ))}
             </div>
           </div>
+        )}
 
-          <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
-             <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[3px] opacity-40 grayscale-[0.4]' : ''}`}>
-                <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin()} />
-             </div>
-             {!isAuthorized && (
-               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
-                  <div className="bg-black/80 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
-                    <h3 className="text-white font-black uppercase italic text-lg mb-2 tracking-tighter">Área Vip: {modelName}</h3>
-                    <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-6">Cadastre-se para ver os prêmios e jogar</p>
-                    <button onClick={() => setShowAuthModal(true)} className="bg-[#D946EF] text-white px-10 py-5 rounded-2xl font-black uppercase text-xs shadow-[0_0_30px_rgba(217,70,239,0.5)] active:scale-95 transition-all">Começar Agora</button>
-                  </div>
-               </div>
-             )}
-          </div>
-
-          <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0">
-            <div className="bg-[#111] border border-white/5 p-4 rounded-[1.5rem] flex justify-between items-center mb-4 shadow-2xl relative">
-               <div className="flex flex-col pl-2 z-10"><span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Seu Saldo em {modelName}</span><span className="text-xl font-black text-white italic tracking-tighter">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span></div>
-               <button onClick={() => isAuthorized ? setShowDeposit(true) : setShowAuthModal(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5"><ShoppingCart size={14}/> Depositar</button>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <button onClick={() => runSpin()} disabled={isSpinning} className="bg-[#D946EF] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 shadow-lg transition-all"><span className="text-xs font-black uppercase italic">Giro Normal</span><span className="text-[9px] font-bold text-white/60">3 CR</span></button>
-              <button onClick={() => runSpin()} disabled={isSpinning} className="bg-[#FFD700] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 text-black shadow-lg transition-all"><span className="text-xs font-black uppercase italic flex items-center gap-1"><Zap size={14}/> Super Giro</span><span className="text-[9px] font-bold text-black/60">6 CR</span></button>
+        {/* SOLICITAÇÕES DE SAQUE */}
+        {pendingWithdrawals.length > 0 && (
+          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem]">
+            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2"><AlertCircle size={16}/> Saques Pendentes</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {pendingWithdrawals.map(w => (
+                <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl">
+                  <p className="text-[10px] text-white/40 uppercase font-black">Modelo: {models.find(m => m.id === w.model_id)?.slug}</p>
+                  <p className="text-xl font-black mb-4">R$ {Number(w.amount).toFixed(2)}</p>
+                  <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, 'Modelo', '')} className="w-full bg-amber-500 text-black py-3 rounded-xl text-[9px] font-black uppercase">Marcar como Pago</button>
+                </div>
+              ))}
             </div>
           </div>
+        )}
+
+        {/* NOVAS CANDIDATURAS */}
+        {applications.length > 0 && (
+          <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem]">
+            <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2"><UserPlus size={16}/> Novas Musas</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {applications.map(app => (
+                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl cursor-pointer hover:border-indigo-400 transition-all">
+                  <p className="text-[12px] text-white uppercase font-black">{app.full_name}</p>
+                  <p className="text-[10px] text-indigo-400 font-bold uppercase">@{app.nickname}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* FINANCEIRO */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+          <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1">Faturamento Total</p><h3 className="text-4xl font-black">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+          <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-emerald-500 uppercase mb-1">Lucro Plataforma</p><h3 className="text-4xl font-black">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+          <div className="bg-blue-500/10 border border-blue-500/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-blue-500 uppercase mb-1">Clientes</p><h3 className="text-4xl font-black">{totalPlayers}</h3></div>
         </div>
 
-        {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
+        {/* LISTA DE MODELOS COM O NOVO BOTÃO DE USUÁRIOS */}
+        <h2 className="text-[11px] font-black uppercase text-white/40 mb-6 flex items-center gap-2"><Users size={14}/> Gestão de Unidades</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {models.map(m => (
+            <div key={m.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl relative group">
+              <div className="flex justify-between items-start mb-6">
+                <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
+                <div className="flex gap-2">
+                  <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all" title="Ver Carteira de Clientes">
+                    <Users size={16}/>
+                  </button>
+                  <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
+                  <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
+                </div>
+              </div>
+              <h3 className="font-black uppercase text-lg mb-1">{m.slug}</h3>
+              <p className="text-[10px] text-emerald-400 font-bold mb-4 uppercase">Ganhos: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+              <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5"><div className="flex items-center gap-2 text-[9px] text-white/50 uppercase"><Mail size={10}/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 uppercase"><Key size={10}/> {m.password}</div></div>
+              
+              {m.whatsapp && (
+                <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
+                   <input type="text" placeholder="Mensagem..." className="flex-1 bg-black border border-white/10 rounded-xl px-3 py-2 text-[10px] text-white outline-none" value={customMessages[m.id] || ""} onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })} />
+                   <button onClick={() => window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(customMessages[m.id] || `Oi ${m.slug}!`)}`, '_blank')} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl"><MessageCircle size={16}/></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* COMUNICADO GLOBAL */}
+        <div className="mt-12 bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
+          <h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest"><Megaphone size={14}/> Comunicado Global</h2>
+          <textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none h-24 mb-4 resize-none" />
+          <button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg transition-all">{savingGlobal ? "Salvando..." : "ENVIAR COMUNICADO"}</button>
+        </div>
+
       </div>
 
-      {showProfile && player && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl animate-in zoom-in duration-300">
-            <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[210]"><X size={24} /></button>
-            <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
-            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">{player.nickname}</h2>
-            <div className="mt-8 text-left space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-               <h3 className="text-[10px] text-white/40 uppercase font-black mb-1 flex items-center gap-2 tracking-widest"><Coins size={12} className="text-[#FFD700]"/> Seus Saldos</h3>
-                  {allAssociations.map((assoc: any) => (
-                    <div key={assoc.id} className="bg-white/5 border border-white/5 p-4 rounded-xl flex justify-between items-center hover:border-[#D946EF]/30 transition-all">
-                       <span className="text-[11px] font-black uppercase text-white/80">{assoc.Models?.slug}</span>
-                       <span className="text-xs font-black text-[#D946EF]">{assoc.credits} CR</span>
-                    </div>
-                  ))}
-            </div>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
-          </div>
-        </div>
-      )}
-
-      {showDeposit && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in duration-300">
-            <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[310]"><X size={24} /></button>
+      {/* MODAL DE ANÁLISE DE CANDIDATURA */}
+      {selectedApp && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
+            <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
+            <h2 className="text-2xl font-black uppercase mb-6 text-indigo-400 italic tracking-tighter">Analisar Perfil</h2>
             
-            {pixPaid ? (
-               <div className="py-10 text-center animate-in zoom-in">
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce">
-                    <CheckCircle className="text-emerald-500" size={40} />
-                  </div>
-                  <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
-                  <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
-                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar para a Roleta</button>
-               </div>
-            ) : pixLoading ? (
-              <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
-            ) : pixData ? (
-              <div className="mt-4 text-center">
-                 <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
-                 <div className="bg-white p-4 rounded-3xl inline-block mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
-                 
-                 <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
-                    <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
-                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Abra o app do seu banco.<br/>2. Escolha "Pagar com QR Code".<br/>3. Escaneie a imagem acima.<br/>4. O saldo cai automaticamente!</p>
-                 </div>
+            <div className="flex gap-6 mb-6">
+              <div className="w-32 h-40 bg-black border border-white/10 rounded-2xl overflow-hidden shrink-0"><img src={selectedApp.profile_url || selectedApp.bg_url} className="w-full h-full object-cover" /></div>
+              <div className="flex-1 space-y-2">
+                <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
+                <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
+              </div>
+            </div>
 
-                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
-                 </button>
-                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação do banco...</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
-                {[ 
-                  { rs: 20, cr: 25 }, 
-                  { rs: 30, cr: 35 }, 
-                  { rs: 40, cr: 45 }, 
-                  { rs: 50, cr: 55 } 
-                ].map((p) => (
-                  <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
-                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus} BÔNUS</div>
-                    <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
-                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-lg group-hover:shadow-[#D946EF]/20">Comprar</div>
-                  </button>
-                ))}
-              </div>
-            )}
+            <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
+              {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Criar Roleta</>}
+            </button>
+            <button onClick={async () => { if(!confirm('Rejeitar e excluir esta candidatura?')) return; await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }}); setSelectedApp(null); fetchData(); }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
           </div>
         </div>
       )}
-
-      <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
 }
