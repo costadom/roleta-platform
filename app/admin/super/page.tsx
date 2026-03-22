@@ -46,9 +46,11 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?status=eq.pendente&select=*`, { headers }),
+        // 🔥 CORREÇÃO AQUI: Removemos o filtro da URL para tratar no código
+        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?status=eq.pendente&order=created_at.desc&limit=50`, { headers })
+        // 🔥 CORREÇÃO AQUI: Removemos o filtro da URL para tratar no código
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers })
       ]);
 
       const dataHist = resHist.ok ? await resHist.json() : [];
@@ -57,8 +59,18 @@ export default function SuperAdmin() {
       setHistory(dataHist);
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
-      if (resApp.ok) setApplications(await resApp.json());
-      if (resAbandon.ok) setAbandoned(await resAbandon.json());
+      
+      // 🔥 CORREÇÃO AQUI: Filtramos os status ignorando maiúsculas/minúsculas
+      if (resApp.ok) {
+        const apps = await resApp.json();
+        setApplications(apps.filter((a: any) => a.status?.toLowerCase() === 'pendente'));
+      }
+      
+      // 🔥 CORREÇÃO AQUI: Filtramos os status ignorando maiúsculas/minúsculas
+      if (resAbandon.ok) {
+        const carts = await resAbandon.json();
+        setAbandoned(carts.filter((c: any) => c.status?.toLowerCase() === 'pendente'));
+      }
 
       if (resGlob.ok) {
         const dataGlob = await resGlob.json();
@@ -132,10 +144,74 @@ export default function SuperAdmin() {
   };
 
   const handleApproveApplication = async (app: any) => {
-    if (!confirm(`Criar roleta de ${app.nickname}?`)) return;
+    if (!confirm(`Deseja aprovar e criar a roleta de ${app.nickname}?`)) return;
     setLoading(true);
-    // ... (Logica de aprovação completa que você já tinha)
-    setLoading(false);
+    try {
+      const now = new Date().toISOString();
+      const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
+      const generatedEmail = `${app.nickname}@admin.com`;
+      const generatedPass = `${capNick}Admin26`;
+
+      let finalBgUrl = app.bg_url;
+      let finalProfileUrl = app.profile_url || app.bg_url;
+
+      if (finalBgUrl && finalBgUrl.startsWith('data:image')) {
+        try {
+          const base64Data = finalBgUrl.split(',')[1];
+          const mimeType = finalBgUrl.split(';')[0].split(':')[1];
+          const ext = mimeType.split('/')[1] || 'jpeg';
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: mimeType });
+          const fileName = `bg_app_${app.id}_${Date.now()}.${ext}`;
+          const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": mimeType }, body: blob });
+          if (uploadRes.ok) finalBgUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}?t=${Date.now()}`;
+        } catch (uploadError) { console.error("Erro foto", uploadError); }
+      }
+
+      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
+        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ slug: app.nickname, email: generatedEmail, password: generatedPass, full_name: app.full_name, whatsapp: app.whatsapp, cpf: app.cpf, birth_date: app.birth_date, pix_key_1: app.pix_1, pix_key_2: app.pix_2, referred_by: app.referred_by || null, created_at: now }),
+      });
+      const dataMod = await resMod.json();
+      const mId = dataMod[0].id;
+
+      await fetch(`${supabaseUrl}/rest/v1/Configs`, {
+        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: finalBgUrl, profile_url: finalProfileUrl, showcase_visible: false, created_at: now }),
+      });
+
+      const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
+      const appPrizes = Array.isArray(app.prizes) ? app.prizes : JSON.parse(app.prizes || "[]");
+      const prizesToInsert = appPrizes.map((p: string, i: number) => ({
+        id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp'
+      }));
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "R$ 100 no PIX", shortLabel: "R$ 100\nNO PIX", type: "digital", weight: 0.02, color: "#10b981", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "Encontro Presencial", shortLabel: "ENCONTRO\nPRESENCIAL", type: "digital", weight: 0.02, color: "#6366f1", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+
+      await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
+
+      await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, {
+        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: 'aprovada' }),
+      });
+
+      const firstName = app.full_name.split(" ")[0];
+      const msg = `Oi, ${firstName} (${capNick}) ! Que alegria ter você com a gente 💖\nA sua Roleta Sexy exclusiva já está 100% configurada e pronta pra você faturar muito. Tudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar o link da sua roleta e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance quase zero, pra aumentar ainda mais suas vendas.\nSe alguém ganhar, a gente resolve tudo pra você — pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+      const zapLink = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+      
+      window.location.href = zapLink;
+
+      setSelectedApp(null); fetchData();
+    } catch (err) { alert("Erro ao criar."); } finally { setLoading(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(`Remover franquia?`)) return;
+    await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+    fetchData();
   };
 
   const financialData = useMemo(() => {
@@ -159,7 +235,7 @@ export default function SuperAdmin() {
       <ShieldCheck size={40} className="text-[#FF1493] mx-auto mb-6"/><h1 className="text-xl font-black uppercase text-white mb-8 italic">PAINEL MASTER</h1>
       <form onSubmit={handleLogin} className="space-y-4 text-left">
         <input type="email" placeholder="EMAIL MASTER" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminUser} onChange={e => setAdminUser(e.target.value)} />
-        <input type={showPass ? "text" : "password"} placeholder="SENHA" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
+        <div className="relative"><input type={showPass ? "text" : "password"} placeholder="SENHA" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminPass} onChange={e => setAdminPass(e.target.value)} /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
         <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase">Acessar</button>
       </form>
     </div></div>
@@ -181,10 +257,19 @@ export default function SuperAdmin() {
             <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {abandoned.map(cart => (
-                <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl">
-                  <p className="text-[12px] text-white font-black uppercase">{cart.player_name}</p>
-                  <p className="text-[10px] text-red-400 font-bold mb-4">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
-                  <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi que o PIX na roleta da ${cart.model_name} não concluiu...`)}`, '_blank')} className="w-full bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase">Recuperar no Zap</button>
+                <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                  <div className="mb-4">
+                     <p className="text-[12px] text-white font-black uppercase">{cart.player_name}</p>
+                     <p className="text-[10px] text-red-400 font-bold mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
+                     <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
+                  </div>
+                  <div className="flex gap-2">
+                     <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi que o PIX na roleta da ${cart.model_name} não concluiu...`)}`, '_blank')} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase">Recuperar no Zap</button>
+                     <button onClick={async () => {
+                       await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
+                       fetchData();
+                     }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all"><X size={14}/></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -290,6 +375,7 @@ export default function SuperAdmin() {
             <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
               {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Criar Roleta</>}
             </button>
+            <button onClick={async () => { if(!confirm('Rejeitar e excluir esta candidatura?')) return; await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }}); setSelectedApp(null); fetchData(); }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
           </div>
         </div>
       )}
