@@ -12,6 +12,7 @@ const MODEL_PHOTOS = [
 export default function ScratchCardGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastVibeTime = useRef<number>(0);
 
   const [cardsRemaining, setCardsRemaining] = useState(0);
   const [isScratched, setIsScratched] = useState(false);
@@ -71,6 +72,17 @@ export default function ScratchCardGame() {
     }
   }, [cardsRemaining]);
 
+  // Função para disparar a vibração de forma controlada
+  const triggerVibration = (pattern: number | number[]) => {
+    if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+      try {
+        window.navigator.vibrate(pattern);
+      } catch (e) {
+        // Silencia erro no iOS
+      }
+    }
+  };
+
   const scratch = (x: number, y: number) => {
     const canvas = canvasRef.current;
     if (!canvas || isScratched) return;
@@ -78,8 +90,11 @@ export default function ScratchCardGame() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
-      window.navigator.vibrate(10);
+    // Vibração tátil otimizada (a cada 100ms para não travar o celular)
+    const now = Date.now();
+    if (now - lastVibeTime.current > 100) {
+      triggerVibration(10);
+      lastVibeTime.current = now;
     }
 
     ctx.globalCompositeOperation = "destination-out";
@@ -113,9 +128,8 @@ export default function ScratchCardGame() {
       setIsScratched(true);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
-        window.navigator.vibrate(result === "win" ? [200, 100, 200] : [50]);
-      }
+      // Vibração forte de vitória ou derrota
+      triggerVibration(result === "win" ? [100, 50, 100, 50, 200] : [50, 50]);
       
       if (result === "win") {
         setCollectionProgress((prev) => Math.min(prev + 1, 10));
@@ -126,6 +140,7 @@ export default function ScratchCardGame() {
   const handlePointerDown = (e: any) => {
     if (isScratched || cardsRemaining === 0) return;
     setIsDrawing(true);
+    triggerVibration(15); // Feedback de toque inicial
     handlePointerMove(e);
   };
 
@@ -159,7 +174,7 @@ export default function ScratchCardGame() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative font-sans">
+    <div className="w-full max-w-md mx-auto bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative font-sans">
       <div className="absolute -top-20 -left-20 w-40 h-40 bg-[#D946EF]/20 blur-[80px] pointer-events-none" />
       
       <div className="flex justify-between items-center mb-8 relative z-10">
@@ -167,13 +182,13 @@ export default function ScratchCardGame() {
           <h2 className="text-xl font-black uppercase text-white tracking-tight">Raspadinha <span className="text-[#D946EF]">VIP</span></h2>
           <p className="text-[10px] text-white/50 uppercase font-bold tracking-widest mt-1">Descubra o conteúdo escondido</p>
         </div>
-        <div className="bg-black border border-white/10 px-4 py-2 rounded-xl text-center">
+        <div className="bg-black/50 border border-white/10 px-4 py-2 rounded-xl text-center backdrop-blur-md">
           <p className="text-[9px] text-white/40 uppercase font-black">Coleção</p>
           <p className="text-sm font-black text-[#D946EF]">{collectionProgress}/10</p>
         </div>
       </div>
 
-      <div className="mb-8">
+      <div className="mb-8 relative z-10">
         <div className="flex justify-between items-center mb-3">
           <span className="text-xs font-bold text-white uppercase tracking-widest">
             {cardsRemaining > 0 ? `${cardsRemaining} Cartelas disponíveis` : "Compre para jogar"}
@@ -182,7 +197,7 @@ export default function ScratchCardGame() {
 
         <div 
           ref={containerRef}
-          className="relative w-full h-48 bg-black border-2 border-white/10 rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(217,70,239,0.1)]"
+          className="relative w-full h-48 bg-black border-2 border-white/10 rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(217,70,239,0.1)] cursor-pointer"
           onMouseDown={handlePointerDown}
           onMouseMove={handlePointerMove}
           onMouseUp={handlePointerUp}
@@ -210,7 +225,7 @@ export default function ScratchCardGame() {
           {cardsRemaining > 0 && (
             <canvas
               ref={canvasRef}
-              className="absolute inset-0 cursor-crosshair touch-none"
+              className="absolute inset-0 touch-none"
             />
           )}
 
@@ -241,7 +256,7 @@ export default function ScratchCardGame() {
         )}
       </div>
 
-      <div className="border-t border-white/10 pt-6">
+      <div className="border-t border-white/10 pt-6 relative z-10">
         <h3 className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
           <Sparkles size={14} className="text-[#D946EF]"/> Comprar Pacotes
         </h3>
