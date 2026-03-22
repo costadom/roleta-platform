@@ -6,8 +6,8 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-// NOME CORRIGIDO DE ACORDO COM SEU REPOSITÓRIO:
-import RouletteWheel from '@/components/RouletteWheel'; 
+// CORREÇÃO DO IMPORT: Agora com chaves { } porque não é default
+import { RouletteWheel } from '@/components/RouletteWheel'; 
 import AuthModal from "@/components/AuthModal";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
