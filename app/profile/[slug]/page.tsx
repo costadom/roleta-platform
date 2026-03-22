@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Loader2, Lock, Play, Sparkles, ArrowLeft, Camera, Gamepad2, LayoutGrid, X, Send, Video, Clock, CheckCircle, Info, Heart, QrCode, Copy, User } from "lucide-react";
+import { 
+  Loader2, Lock, Play, Sparkles, ArrowLeft, Camera, Gamepad2, 
+  LayoutGrid, X, Send, Video, Clock, CheckCircle, Info, Heart, QrCode, Copy, User
+} from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
 export default function ModelProfile() {
@@ -85,7 +88,6 @@ export default function ModelProfile() {
 
         const modelName = Array.isArray(model?.Configs) ? model.Configs[0]?.model_name : model?.Configs?.model_name || model?.slug;
 
-        // 1. REGISTRA O CARRINHO ABANDONADO (Agora vai aparecer no Super Admin!)
         await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
             method: 'POST', headers,
             body: JSON.stringify({
@@ -97,7 +99,6 @@ export default function ModelProfile() {
             })
         });
 
-        // 2. Se for vídeo, salva a requisição como PENDENTE
         if (type === 'video') {
             const resReq = await fetch(`${supabaseUrl}/rest/v1/VideoRequests`, {
                 method: 'POST', headers,
@@ -107,7 +108,6 @@ export default function ModelProfile() {
             requestId = reqData[0].id; itemInfo.requestId = requestId;
         }
 
-        // 3. CHAMA A API DO PIX
         const res = await fetch('/api/checkout/hub', { 
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ amount: price, userId: playerId, type: type, modelId: model.id, mediaId: type === 'photo' ? itemInfo.id : null, requestId: requestId })
@@ -157,10 +157,10 @@ export default function ModelProfile() {
         <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-105" style={{ backgroundImage: `url(${modelConfig?.bg_url})` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent" />
         
+        {/* HEADER LIMPO, APENAS VOLTAR E VITRINE */}
         <div className="absolute top-8 left-8 flex flex-wrap gap-3 sm:gap-4 z-50">
             <button onClick={() => router.push('/vitrine')} className="p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
             <button onClick={() => router.push('/vitrine')} className="px-5 sm:px-6 py-3 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[10px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all"><LayoutGrid size={16}/> <span className="hidden sm:inline">Vitrine</span></button>
-            <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push('/hub'); }} className="px-5 sm:px-6 py-3 bg-[#D946EF]/20 backdrop-blur-xl rounded-full border border-[#D946EF]/50 text-[#D946EF] text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#D946EF] hover:text-white transition-all shadow-[0_0_15px_rgba(217,70,239,0.3)]"><User size={16}/> Meu Perfil</button>
         </div>
 
         <div className="absolute bottom-0 left-0 w-full p-6 sm:p-10 flex flex-col md:flex-row items-end gap-6 sm:gap-8">
@@ -295,8 +295,9 @@ export default function ModelProfile() {
           </div>
       )}
 
+      {/* BOTÃO FLUTUANTE UNIVERSAL */}
       <button 
-          onClick={() => { if(!isLoggedIn) return setShowAuthModal(true); router.push('/hub'); }} 
+          onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push('/hub'); }} 
           className="fixed bottom-6 right-6 z-[999] bg-[#D946EF] text-white p-4 rounded-full shadow-[0_10px_40px_rgba(217,70,239,0.5)] hover:scale-110 hover:bg-[#f062ff] transition-all flex items-center justify-center group border border-white/20"
       >
           <User size={24} />
