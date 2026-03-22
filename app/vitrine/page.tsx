@@ -2,94 +2,87 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowLeft, ShieldCheck } from "lucide-react";
-import AuthModal from "@/components/AuthModal";
+import { ArrowLeft, Loader2, Play, Sparkles } from "lucide-react";
 
-export default function VitrinePage() {
+export default function Vitrine() {
   const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [models, setModels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("labz_player_logged");
-    if (!isLoggedIn) {
-      setIsAuthorized(false);
-      setShowAuthModal(true);
-    } else {
-      setIsAuthorized(true);
-      setShowAuthModal(false);
+    async function fetchShowcase() {
+      try {
+        const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+        
+        // Buscamos todas as modelos primeiro
+        const resModels = await fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug`, { headers });
+        const dataModels = await resModels.json();
+
+        // Buscamos as configs de quem está na vitrine
+        const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=model_id,profile_url,model_name`, { headers });
+        const dataConfigs = await resConfigs.json();
+
+        const showcaseData = dataModels.map((model: any) => {
+          const config = dataConfigs.find((c: any) => c.model_id === model.id);
+          return {
+            ...model,
+            profile_url: config?.profile_url || "https://images.unsplash.com/photo-1511556820780-d912e42b4980?q=80&w=500&auto=format&fit=crop",
+            displayName: config?.model_name || model.slug.toUpperCase()
+          };
+        });
+
+        setModels(showcaseData);
+      } catch (error) {
+        console.error("Erro Vitrine:", error);
+      } finally {
+        setLoading(false);
+      }
     }
+    fetchShowcase();
   }, []);
 
-  const handleReturnHome = () => {
-    window.location.href = "/"; 
-  };
-
   return (
-    <div className="min-h-screen bg-black text-white relative font-sans overflow-x-hidden selection:bg-[#D946EF] selection:text-white">
-      <div className="fixed inset-0 bg-[radial-gradient(circle_at_center,rgba(217,70,239,0.12)_0%,rgba(0,0,0,1)_100%)] z-0 pointer-events-none" />
-      <div className="fixed top-0 w-full h-1/2 bg-gradient-to-b from-[#D946EF]/10 to-transparent z-0 blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-black text-white p-6 relative overflow-x-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(217,70,239,0.15)_0%,rgba(0,0,0,1)_100%)] z-0" />
+      
+      <div className="max-w-6xl mx-auto relative z-10">
+        <button onClick={() => router.push("/")} className="mb-10 flex items-center gap-2 text-[10px] font-black uppercase text-white/40 hover:text-[#D946EF] transition-all">
+          <ArrowLeft size={16} /> Voltar ao Início
+        </button>
 
-      {/* AQUI ESTÁ A MÁGICA: Se não logou, aplica blur e tira os cliques da vitrine */}
-      <div 
-        className={`relative z-10 w-full max-w-md mx-auto px-6 py-10 min-h-[100dvh] flex flex-col transition-all duration-300 
-        ${!isAuthorized ? 'blur-[8px] pointer-events-none select-none brightness-50' : ''}`}
-      >
-        <div className="flex items-center justify-between mb-8">
-          <button 
-            onClick={() => router.push("/")} 
-            className="w-10 h-10 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all pointer-events-auto"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          
-          <h1 className="text-2xl font-black uppercase italic tracking-tighter text-white">
-            Vitrine <span className="text-[#D946EF]">VIP</span>
-          </h1>
-          <div className="w-10"></div>
-        </div>
-
-        <div className="text-center mb-8">
-          <p className="text-[11px] text-[#D946EF] uppercase font-black tracking-[0.2em] flex items-center justify-center gap-2 mb-2">
-            <Sparkles size={12} className="text-[#D946EF] shrink-0" />
-            <span>Escolha a sua Musa</span>
-            <Sparkles size={12} className="text-[#D946EF] shrink-0" />
-          </p>
-          <p className="text-xs text-white/50 font-medium">Selecione uma modelo para acessar aos jogos.</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 flex-1">
-          {/* Card Rapha */}
-          <div onClick={() => router.push('/game/raphasavanah')} className="bg-[#141414] border border-white/10 rounded-3xl p-4 flex flex-col items-center justify-center h-48 hover:border-[#D946EF] transition-all cursor-pointer group relative overflow-hidden">
-            <div className="w-20 h-20 bg-white/5 border border-white/10 rounded-full mb-4 overflow-hidden relative">
-              <div className="absolute inset-0 flex items-center justify-center text-white/20 text-[10px] font-black uppercase">Foto</div>
-            </div>
-            <span className="text-xs font-black uppercase text-white tracking-widest text-center group-hover:text-[#D946EF] transition-colors">Rapha Savanah</span>
-          </div>
-
-          {/* Card Outra */}
-          <div className="bg-[#141414] border border-white/10 rounded-3xl p-4 flex flex-col items-center justify-center h-48 hover:border-[#D946EF] transition-all cursor-pointer group relative overflow-hidden">
-            <div className="w-20 h-20 bg-white/5 border border-white/10 rounded-full mb-4 overflow-hidden relative">
-              <div className="absolute inset-0 flex items-center justify-center text-white/20 text-[10px] font-black uppercase">Foto</div>
-            </div>
-            <span className="text-xs font-black uppercase text-white tracking-widest text-center group-hover:text-[#D946EF] transition-colors">Outra Musa</span>
-          </div>
-        </div>
-
-        <div className="mt-8 pt-8 border-t border-white/10 flex justify-center pb-6">
-          <p className="text-[9px] text-white/30 uppercase font-black tracking-widest flex items-center gap-1">
-            Plataforma 100% Segura <ShieldCheck size={10} />
+        <div className="text-center mb-16">
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter">Escolha sua <span className="text-[#D946EF]">Musa</span></h1>
+          <p className="text-[10px] text-[#FFD700] uppercase font-black tracking-[0.2em] mt-2 flex items-center justify-center gap-2">
+            <Sparkles size={12}/> Giros exclusivos aguardam você <Sparkles size={12}/>
           </p>
         </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center py-20"><Loader2 className="animate-spin text-[#D946EF]" size={40} /></div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+            {models.map((model) => (
+              <div key={model.id} className="bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] overflow-hidden group hover:border-[#D946EF]/40 transition-all shadow-2xl">
+                <div className="relative h-80 overflow-hidden">
+                  <img src={model.profile_url} alt={model.displayName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                  <div className="absolute bottom-6 left-6">
+                    <h3 className="text-2xl font-black uppercase italic text-white drop-shadow-xl">{model.displayName}</h3>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <button onClick={() => router.push(`/game/${model.slug}`)} className="w-full bg-[#D946EF] text-white py-4 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(217,70,239,0.3)] active:scale-95 transition-all">
+                    <Play size={14} fill="currentColor" /> Jogar Agora
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* MODAL */}
-      {!isAuthorized && showAuthModal && (
-        <AuthModal 
-          isOpen={true} 
-          onClose={handleReturnHome}
-        />
-      )}
     </div>
   );
 }
