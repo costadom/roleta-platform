@@ -13,18 +13,16 @@ export default function PlayerPersonalHub() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [playerPhone, setPlayerPhone] = useState<string | null>(null);
 
-  // Estados dos Dados
-  const [associations, setAssociations] = useState<any[]>([]); // Modelos + Saldos
+  const [associations, setAssociations] = useState<any[]>([]); 
   const [videoOrders, setVideoOrders] = useState<any[]>([]);
   const [unlockedGallery, setUnlockedGallery] = useState<any[]>([]);
 
-  // Visualização de Foto em Tela Cheia
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const CENTRAL_SUPORTE_WA = "5515996587248"; // Número para estorno
+  const CENTRAL_SUPORTE_WA = "5515996587248";
 
   useEffect(() => {
     async function loadData() {
@@ -40,7 +38,6 @@ export default function PlayerPersonalHub() {
 
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
-        // 1. Busca TODAS as contas desse jogador (Uma para cada modelo que ele interagiu)
         const resPlayers = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${phone}&select=id,credits,model_id,nickname,Models(slug,Configs(model_name,profile_url))`, { headers }).then(r => r.json());
         
         const playerAccounts = Array.isArray(resPlayers) ? resPlayers : [];
@@ -51,24 +48,17 @@ export default function PlayerPersonalHub() {
         if (playerIds.length > 0) {
             const idsString = playerIds.join(',');
 
-            // 2. Busca Fotos e Vídeos de todas as contas dele
             const [resGallery, resVideos] = await Promise.all([
               fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${idsString})&select=*,Media(url,caption,price,Models(slug,Configs(model_name,profile_url)))&order=created_at.desc`, { headers }).then(r => r.json()),
               fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${idsString})&select=*,Models(slug,Configs(model_name,profile_url))&order=created_at.desc`, { headers }).then(r => r.json())
             ]);
 
             setUnlockedGallery(Array.isArray(resGallery) ? resGallery : []);
-            
-            // Filtramos os vídeos para não mostrar os 'pendentes' que o cliente não pagou o PIX
             const validVideos = Array.isArray(resVideos) ? resVideos.filter(v => v.status !== 'pendente') : [];
             setVideoOrders(validVideos);
         }
 
-      } catch (e) { 
-          console.error(e); 
-      } finally { 
-          setInitialLoading(false); 
-      }
+      } catch (e) { console.error(e); } finally { setInitialLoading(false); }
     }
     loadData();
   }, [router]);
@@ -83,7 +73,6 @@ export default function PlayerPersonalHub() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans pb-24">
       
-      {/* HEADER DO HUB */}
       <header className="fixed top-0 left-0 w-full h-20 bg-black/70 backdrop-blur-xl border-b border-white/5 z-[100] px-6 sm:px-10 flex items-center justify-between shadow-[0_10px_30px_rgba(217,70,239,0.1)]">
           <button onClick={() => router.push('/vitrine')} className="p-3 sm:p-4 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
           <div className="text-center">
@@ -93,10 +82,9 @@ export default function PlayerPersonalHub() {
           <button onClick={() => { localStorage.clear(); window.location.replace('/'); }} className="px-4 py-2 sm:px-5 sm:py-3 bg-red-500/10 border border-red-500/30 text-red-500 rounded-full text-[10px] font-black uppercase shadow-xl hover:bg-red-500 hover:text-white transition-all">Sair</button>
       </header>
 
-      {/* CONTEÚDO PRINCIPAL SCROLLABLE */}
       <main className="max-w-7xl mx-auto p-6 sm:p-10 mt-28">
         
-        {/* SEÇÃO 1: MUSAS ASSOCIADAS & SALDOS */}
+        {/* SEÇÃO 1: MUSAS ASSOCIADAS (CORREÇÃO DE LAYOUT) */}
         <section className="mb-16 animate-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-lg font-black uppercase text-white/40 mb-6 flex items-center gap-3 tracking-widest"><Wallet size={18}/> Minhas Musas & Saldos</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -104,17 +92,17 @@ export default function PlayerPersonalHub() {
                     const modelConfig = assoc.Models?.Configs?.[0];
                     const modelName = modelConfig?.model_name || assoc.Models?.slug;
                     return (
-                        <div key={assoc.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2rem] shadow-xl flex flex-col relative overflow-hidden group hover:border-[#D946EF]/30 transition-all">
-                            <div className="flex items-center gap-4 mb-6 relative z-10">
-                                <div className="w-14 h-14 rounded-full bg-black border-2 border-[#D946EF] overflow-hidden shrink-0 shadow-[0_0_15px_rgba(217,70,239,0.3)]">
-                                    {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover"/> : <User className="w-full h-full p-3 text-[#D946EF]"/>}
+                        <div key={assoc.id} className="bg-[#0a0a0a] border border-white/5 p-5 rounded-[2rem] shadow-xl flex flex-col justify-between gap-5 relative overflow-hidden group hover:border-[#D946EF]/30 transition-all min-h-[140px]">
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="w-12 h-12 rounded-full bg-black border-2 border-[#D946EF] overflow-hidden shrink-0 shadow-[0_0_15px_rgba(217,70,239,0.3)]">
+                                    {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover"/> : <User className="w-full h-full p-2 text-[#D946EF]"/>}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-bold text-[#D946EF] uppercase tracking-widest mb-1 truncate">{modelName}</p>
-                                    <h3 className="text-2xl font-black text-white tracking-tighter truncate">{assoc.credits} CR</h3>
+                                    <p className="text-[10px] font-bold text-[#D946EF] uppercase tracking-widest mb-0.5 truncate">{modelName}</p>
+                                    <h3 className="text-xl font-black text-white tracking-tighter truncate">{assoc.credits} CR</h3>
                                 </div>
                             </div>
-                            <div className="flex gap-2 relative z-10 mt-auto">
+                            <div className="flex gap-2 relative z-10">
                                 <button onClick={() => router.push(`/game/${assoc.Models?.slug}`)} className="flex-1 bg-[#D946EF] text-white py-3 rounded-xl text-[9px] font-black uppercase shadow-lg hover:scale-[1.03] transition-all flex items-center justify-center gap-1.5"><Gamepad2 size={14}/> Jogar</button>
                                 <button onClick={() => router.push(`/profile/${assoc.Models?.slug}`)} className="flex-1 bg-white/5 text-white py-3 rounded-xl text-[9px] font-black uppercase border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center gap-1.5"><User size={14}/> Hub</button>
                             </div>
@@ -126,7 +114,7 @@ export default function PlayerPersonalHub() {
             </div>
         </section>
 
-        {/* SEÇÃO 2: MEUS PEDIDOS DE VÍDEO (ACOMPANHAMENTO) */}
+        {/* SEÇÃO 2: VÍDEOS */}
         <section className="mb-16 animate-in slide-in-from-bottom-4 duration-700">
             <h2 className="text-lg font-black uppercase text-white/40 mb-6 flex items-center gap-3 tracking-widest"><Video size={18}/> Meus Vídeos Encomendados</h2>
             <div className="grid gap-6">
