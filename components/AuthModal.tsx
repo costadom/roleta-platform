@@ -40,6 +40,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setCpf(v);
   };
 
+  const validatePass = (p: string) => /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(p);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -60,7 +62,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         if (dataCheck && dataCheck.length > 0) {
           const userBase = dataCheck[0];
 
-          // 🛑 MIGRAÇÃO: Se não tiver nome ou nick, trava no update
+          // SE FALTA DADOS (MIGRAÇÃO)
           if (!userBase.full_name || !userBase.nickname) {
             setPhone(userBase.whatsapp);
             setEmail(userBase.email || "");
@@ -69,7 +71,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             return;
           }
 
-          // 🔗 ASSOCIAÇÃO
+          // ASSOCIAÇÃO
           const hasLink = dataCheck.find((p: any) => p.model_id === currentModelId);
           if (!hasLink) {
             await fetch(`${supabaseUrl}/rest/v1/Players`, {
@@ -88,24 +90,26 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           window.location.reload();
         } else setError("WhatsApp ou senha incorretos.");
       } 
-      
       else {
-        // REGISTER ou UPDATE
+        if (view === "register" && !validatePass(password)) {
+          setError("Senha deve ter 8+ caracteres, maiúscula e símbolo.");
+          setLoading(false);
+          return;
+        }
+
         const payload = {
            whatsapp: cleanPhone, email, cpf: cpf.replace(/\D/g,""),
            password, full_name: fullName, nickname, credits: 0,
-           model_id: currentModelId
+           model_id: currentModelId, name: nickname
         };
 
         if (view === "register") {
            const res = await fetch(`${supabaseUrl}/rest/v1/Players`, { method: "POST", headers, body: JSON.stringify(payload) });
            if (!res.ok) throw new Error();
         } else {
-           // Atualiza os dados globais pelo WhatsApp antes de associar
            await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanPhone}`, {
              method: "PATCH", headers, body: JSON.stringify({ full_name: fullName, nickname, email, cpf: cpf.replace(/\D/g,"") })
            });
-           // Associa à modelo
            await fetch(`${supabaseUrl}/rest/v1/Players`, { method: "POST", headers, body: JSON.stringify(payload) });
         }
 
@@ -119,22 +123,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
       <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 shadow-[0_0_60px_rgba(217,70,239,0.3)] relative">
-        {view !== "update" && <button onClick={onClose} className="absolute top-6 right-6 text-white/20"><X size={24} /></button>}
+        {view !== "update" && <button onClick={onClose} className="absolute top-6 right-6 text-white/20 hover:text-white"><X size={24} /></button>}
         
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-white uppercase italic">Savanah <span className="text-[#D946EF]">Labz</span></h2>
-          <p className="text-[10px] text-[#FFD700] uppercase font-bold tracking-[0.3em] mt-2">{view === "update" ? "🚀 Finalize seu Perfil" : "Área do Jogador"}</p>
+          <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Savanah <span className="text-[#D946EF]">Labz</span></h2>
+          <p className="text-[10px] text-[#FFD700] uppercase font-bold tracking-[0.3em] mt-2">{view === "update" ? "🚀 Finalize seu Perfil VIP" : "Área Exclusiva do Jogador"}</p>
         </div>
 
         {view !== "update" && (
           <div className="flex bg-[#111] rounded-2xl p-1.5 mb-8 border border-white/5">
-            <button onClick={() => setView("login")} className={`flex-1 py-3 text-xs font-black uppercase rounded-xl transition-all ${view === "login" ? 'bg-[#D946EF] text-white shadow-lg' : 'text-white/20'}`}>Entrar</button>
-            <button onClick={() => setView("register")} className={`flex-1 py-3 text-xs font-black uppercase rounded-xl transition-all ${view === "register" ? 'bg-[#D946EF] text-white shadow-lg' : 'text-white/20'}`}>Cadastrar</button>
+            <button onClick={() => {setView("login"); setError("");}} className={`flex-1 py-3 text-xs font-black uppercase rounded-xl transition-all ${view === "login" ? 'bg-[#D946EF] text-white shadow-lg' : 'text-white/20'}`}>Entrar</button>
+            <button onClick={() => {setView("register"); setError("");}} className={`flex-1 py-3 text-xs font-black uppercase rounded-xl transition-all ${view === "register" ? 'bg-[#D946EF] text-white shadow-lg' : 'text-white/20'}`}>Cadastrar</button>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="tel" placeholder="WhatsApp" value={phone} onChange={e => setPhone(e.target.value)} required disabled={view === "update"} className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm focus:border-[#D946EF] outline-none" /></div>
+          <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="tel" placeholder="WhatsApp (Login)" value={phone} onChange={e => setPhone(e.target.value)} required disabled={view === "update"} className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm focus:border-[#D946EF] outline-none" /></div>
 
           {view !== "login" && (
             <>
@@ -145,12 +149,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </>
           )}
 
-          {view === "login" && (
-            <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type={showPassword ? "text" : "password"} placeholder="Sua Senha" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white text-sm focus:border-[#D946EF] outline-none" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
-          )}
+          <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type={showPassword ? "text" : "password"} placeholder={view === "login" ? "Sua Senha" : "Crie uma Senha Forte"} value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white text-sm focus:border-[#D946EF] outline-none" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
 
-          {view === "register" && (
-            <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="password" placeholder="Crie uma Senha" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm focus:border-[#D946EF] outline-none" /></div>
+          {view !== "login" && (
+            <label className="flex items-start gap-3 cursor-pointer group px-1">
+              <input type="checkbox" checked={ageConfirmed} onChange={e => setAgeConfirmed(e.target.checked)} required className="mt-1 w-4 h-4 rounded accent-[#D946EF]" />
+              <span className="text-[9px] text-white/30 uppercase font-black">Confirmo +18 anos e aceito os termos.</span>
+            </label>
           )}
 
           {error && <p className="text-red-500 text-[10px] text-center font-black uppercase bg-red-500/10 py-3 rounded-xl border border-red-500/20">{error}</p>}
