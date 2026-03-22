@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, Sparkles, MessageCircle, Crown, ChevronDown } from "lucide-react";
+import { Heart, Sparkles, Crown, ChevronDown } from "lucide-react";
+// Importamos o Modal de Autenticação que criamos
+import AuthModal from "@/components/AuthModal";
 
 function TridenteIcon({ className }: { className?: string }) {
   return (
@@ -14,6 +16,9 @@ function TridenteIcon({ className }: { className?: string }) {
 
 export default function HomePage() {
   const router = useRouter();
+  
+  // Estado para controlar se o Modal de Login está aberto ou fechado
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -39,16 +44,22 @@ export default function HomePage() {
           </p>
 
           <div className="w-full space-y-6">
+            {/* CARD 1: CLIENTES / JOGADORES */}
             <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] flex flex-col items-center relative overflow-hidden shadow-xl backdrop-blur-md">
               <Heart className="text-[#FF1493] mb-3" size={28} />
               <h2 className="text-lg font-black uppercase text-white mb-1">Quer curtir, amor?</h2>
-              <p className="text-[11px] text-white/50 mb-6 font-medium uppercase tracking-widest leading-relaxed text-center">Procure uma modelo parceira clicando aqui</p>
+              <p className="text-[11px] text-white/50 mb-6 font-medium uppercase tracking-widest leading-relaxed text-center">Acesse sua carteira para ver a vitrine</p>
               
-              <button onClick={() => router.push("/vitrine")} className="w-full bg-gradient-to-r from-[#FF1493] to-[#9c0a58] text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-[#FF1493]/20 hover:scale-[1.02] transition-transform active:scale-95">
-                <Heart size={18} /> Conheça as modelos em nossa vitrine de musas
+              {/* O Botão agora abre o Modal em vez de mandar direto pra vitrine */}
+              <button 
+                onClick={() => setIsAuthModalOpen(true)} 
+                className="w-full bg-gradient-to-r from-[#FF1493] to-[#9c0a58] text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-[#FF1493]/20 hover:scale-[1.02] transition-transform active:scale-95"
+              >
+                <Heart size={18} /> Entrar na Vitrine VIP
               </button>
             </div>
 
+            {/* CARD 2: MODELOS */}
             <div className="bg-[#FFD700]/5 border border-[#FFD700]/20 p-6 rounded-[2.5rem] flex flex-col items-center relative overflow-hidden shadow-xl backdrop-blur-md">
               <Crown className="text-[#FFD700] mb-3" size={28} />
               <h2 className="text-lg font-black uppercase text-[#FFD700] mb-1 text-center leading-tight">Quer ser uma<br/>modelo parceira?</h2>
@@ -78,6 +89,13 @@ export default function HomePage() {
         </div>
       </div>
       <div className="relative z-10 w-full text-center pb-8 shrink-0"><div className="text-[8px] text-white/20 uppercase font-black tracking-[0.3em]">Powered by Savanah Labz © 2026</div></div>
+      
+      {/* --- O MODAL DE LOGIN/CADASTRO --- */}
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
+
     </div>
   );
 }
