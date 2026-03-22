@@ -14,6 +14,7 @@ export default function ScratchCardGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastVibeTime = useRef<number>(0);
+  const scratchSoundRef = useRef<HTMLAudioElement | null>(null);
 
   // Estados do jogo
   const [cardsRemaining, setCardsRemaining] = useState(0);
@@ -22,35 +23,56 @@ export default function ScratchCardGame() {
   const [result, setResult] = useState<"win" | "loss" | null>(null);
   const [revealedImages, setRevealedImages] = useState<string[]>([]);
   const [collectionProgress, setCollectionProgress] = useState(1);
-  const [shake, setShake] = useState(false); // Estado para o efeito shake
+  const [shake, setShake] = useState(false);
+
+  // Inicializa o Áudio quando o componente carrega
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Puxando da pasta correta: public/sounds/
+      scratchSoundRef.current = new Audio('/sounds/scratch.mp3');
+      scratchSoundRef.current.loop = true; // Fica em loop contínuo
+      scratchSoundRef.current.volume = 0.6; // Volume
+    }
+  }, []);
+
+  const startScratchSound = () => {
+    if (scratchSoundRef.current && scratchSoundRef.current.paused) {
+      // CORTANDO O ÁUDIO: Força a começar do segundo 0.5 para pular silêncios iniciais
+      // Se o barulho bom do seu áudio começar no segundo 2, mude aqui para 2.0
+      scratchSoundRef.current.currentTime = 0.0; 
+      scratchSoundRef.current.play().catch(() => {});
+    }
+  };
+
+  const stopScratchSound = () => {
+    if (scratchSoundRef.current) {
+      scratchSoundRef.current.pause();
+    }
+  };
 
   // Inicializa uma nova cartela
   const initCard = () => {
     setIsScratched(false);
     setResult(null);
 
-    // Lógica simples de Sorteio (30% de chance de ganhar para teste)
     const isWin = Math.random() > 0.7;
     setResult(isWin ? "win" : "loss");
 
     if (isWin) {
-      // 3 fotos iguais da modelo
       const winningPhoto = MODEL_PHOTOS[Math.floor(Math.random() * MODEL_PHOTOS.length)];
       setRevealedImages([winningPhoto, winningPhoto, winningPhoto]);
     } else {
-      // Mistura: Fotos + X Neon
       const lossImages = [
         MODEL_PHOTOS[Math.floor(Math.random() * MODEL_PHOTOS.length)],
         "X_NEON",
         Math.random() > 0.5 ? "X_NEON" : MODEL_PHOTOS[Math.floor(Math.random() * MODEL_PHOTOS.length)],
-      ].sort(() => Math.random() - 0.5); // Embaralha
+      ].sort(() => Math.random() - 0.5);
       setRevealedImages(lossImages);
     }
 
     fillCanvas();
   };
 
-  // Preenche o Canvas (A parte que esconde o prêmio)
   const fillCanvas = () => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -59,22 +81,18 @@ export default function ScratchCardGame() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Ajusta o tamanho do canvas para o tamanho do container
     canvas.width = container.offsetWidth;
     canvas.height = container.offsetHeight;
 
-    // Fundo da raspadinha (Cinza escuro com textura/glow)
     ctx.fillStyle = "#1f1f1f";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Adiciona um texto "RASPE AQUI" no meio
     ctx.font = "bold 24px sans-serif";
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("RASPE AQUI", canvas.width / 2, canvas.height / 2);
 
-    // Reseta o modo de composição para desenhar normalmente
     ctx.globalCompositeOperation = "source-over";
   };
 
@@ -84,20 +102,12 @@ export default function ScratchCardGame() {
     }
   }, [cardsRemaining]);
 
-  // Função para disparar a interação tátil/visual
   const triggerInteractionFeedback = () => {
-    // Tenta a vibração real (Android)
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
-      try {
-        window.navigator.vibrate(10);
-      } catch (e) {
-        // Silencia erro no iOS
-      }
+      try { window.navigator.vibrate(10); } catch (e) {}
     }
-    
-    // Dispara a tremidinha visual no CSS
     setShake(true);
-    setTimeout(() => setShake(false), 50); // A tremidinha dura só 50ms, bem rapidinho
+    setTimeout(() => setShake(false), 50);
   };
 
   const scratch = (x: number, y: number) => {
@@ -115,7 +125,7 @@ export default function ScratchCardGame() {
 
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
-    ctx.arc(x, y, 25, 0, 2 * Math.PI); // Tamanho do 'dedo'
+    ctx.arc(x, y, 25, 0, 2 * Math.PI);
     ctx.fill();
 
     checkScratchedArea();
@@ -144,7 +154,8 @@ export default function ScratchCardGame() {
       setIsScratched(true);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Vibração forte de vitória ou derrota no Android
+      stopScratchSound(); // Pausa o som assim que revela
+
       if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
           window.navigator.vibrate(result === "win" ? [100, 50, 100, 50, 200] : [50, 50]);
       }
@@ -155,11 +166,11 @@ export default function ScratchCardGame() {
     }
   };
 
-  // Eventos do Mouse / Touch
   const handlePointerDown = (e: any) => {
     if (isScratched || cardsRemaining === 0) return;
     setIsDrawing(true);
     triggerInteractionFeedback();
+    startScratchSound(); // Toca o som de raspar
     handlePointerMove(e);
   };
 
@@ -180,9 +191,9 @@ export default function ScratchCardGame() {
 
   const handlePointerUp = () => {
     setIsDrawing(false);
+    stopScratchSound(); // Para o som quando tira o dedo
   };
 
-  // Botões de Compra
   const buyCards = (amount: number, price: number) => {
     setCardsRemaining((prev) => prev + amount);
   };
@@ -195,10 +206,8 @@ export default function ScratchCardGame() {
 
   return (
     <div className="w-full max-w-md mx-auto bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative font-sans">
-      {/* Decoração Neon */}
       <div className="absolute -top-20 -left-20 w-40 h-40 bg-[#D946EF]/20 blur-[80px] pointer-events-none" />
       
-      {/* Header do Jogo */}
       <div className="flex justify-between items-center mb-8 relative z-10">
         <div>
           <h2 className="text-xl font-black uppercase text-white tracking-tight">Raspadinha <span className="text-[#D946EF]">VIP</span></h2>
@@ -210,7 +219,6 @@ export default function ScratchCardGame() {
         </div>
       </div>
 
-      {/* Área da Raspadinha */}
       <div className="mb-8 relative z-10">
         <div className="flex justify-between items-center mb-3">
           <span className="text-xs font-bold text-white uppercase tracking-widest">
@@ -218,7 +226,6 @@ export default function ScratchCardGame() {
           </span>
         </div>
 
-        {/* Adicionei as classes dinâmicas ${shake ? 'translate-x-[2px] -translate-y-[1px]' : ''} aqui */}
         <div 
           ref={containerRef}
           className={`relative w-full h-48 bg-black border-2 border-white/10 rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(217,70,239,0.1)] cursor-pointer ${shake ? 'translate-x-[2px] -translate-y-[1px]' : ''} transition-transform duration-75`}
@@ -230,7 +237,6 @@ export default function ScratchCardGame() {
           onTouchMove={handlePointerMove}
           onTouchEnd={handlePointerUp}
         >
-          {/* Fundo (O Resultado) */}
           <div className="absolute inset-0 flex items-center justify-center p-2 gap-2 bg-[#141414]">
             {revealedImages.map((img, index) => (
               <div key={index} className="flex-1 h-full bg-black rounded-xl border border-white/5 flex items-center justify-center overflow-hidden relative">
@@ -247,7 +253,6 @@ export default function ScratchCardGame() {
             ))}
           </div>
 
-          {/* Canvas da Raspadinha (Cobre o fundo) */}
           {cardsRemaining > 0 && (
             <canvas
               ref={canvasRef}
@@ -255,7 +260,6 @@ export default function ScratchCardGame() {
             />
           )}
 
-          {/* Overlay se não tiver cartelas */}
           {cardsRemaining === 0 && (
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
               <p className="text-sm font-black text-white/50 uppercase tracking-widest flex items-center gap-2">
@@ -265,7 +269,6 @@ export default function ScratchCardGame() {
           )}
         </div>
 
-        {/* Mensagem de Resultado */}
         {isScratched && (
           <div className={`mt-4 p-4 rounded-xl text-center border animate-in fade-in zoom-in duration-300 ${result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
             <p className={`text-lg font-black uppercase tracking-widest ${result === 'win' ? 'text-emerald-500' : 'text-red-500'}`}>
@@ -284,7 +287,6 @@ export default function ScratchCardGame() {
         )}
       </div>
 
-      {/* Loja de Pacotes */}
       <div className="border-t border-white/10 pt-6 relative z-10">
         <h3 className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
           <Sparkles size={14} className="text-[#D946EF]"/> Comprar Pacotes
