@@ -19,16 +19,19 @@ export default function ModelProfile() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
+  // Pedidos de Vídeo
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [videoDesc, setVideoDesc] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<3 | 5 | 10>(3);
   const pricing = { 3: 70, 5: 110, 10: 160 };
 
+  // Visualização de Foto Grátis / Comprada
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
-  // AQUI ENTRA A SUA LOGICA PUSHINPAY
+  // CHECKOUT PUSHINPAY
   const [checkoutData, setCheckoutData] = useState<{ type: 'photo' | 'video', price: number, itemInfo: any } | null>(null);
+  const [pixData, setPixData] = useState<{ qrCodeBase64?: string, qrCode?: string, txId?: string } | null>(null);
   const [processingPix, setProcessingPix] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -58,42 +61,74 @@ export default function ModelProfile() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
 
+  // --- LOGICA DE CHECKOUT ---
   const handleProceedToVideoCheckout = () => {
     if (videoDesc.length < 15) return alert("Descreva melhor seu pedido.");
     setShowVideoModal(false);
-    setCheckoutData({ type: 'video', price: pricing[selectedDuration], itemInfo: { duration: selectedDuration, description: videoDesc } });
+    openCheckout('video', pricing[selectedDuration], { duration: selectedDuration, description: videoDesc });
   };
 
-  const handleSimulatePayment = async () => {
+  const openCheckout = async (type: 'photo' | 'video', price: number, itemInfo: any) => {
+    setCheckoutData({ type, price, itemInfo });
+    setPixData(null);
+    setProcessingPix(true);
+    
+    try {
+        // TENTA CHAMAR SUA API DA PUSHINPAY AQUI (ajuste a URL se precisar)
+        const res = await fetch('/api/pix', { 
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: price, description: type === 'photo' ? 'Foto VIP' : 'Video VIP', phone: localStorage.getItem("labz_player_phone") })
+        });
+        const data = await res.json();
+        
+        if (data.qrCodeBase64 || data.qr_code_base64) {
+            setPixData({ qrCodeBase64: data.qrCodeBase64 || data.qr_code_base64, qrCode: data.qrCode || data.qr_code, txId: data.transactionId || data.transaction_id });
+        } else {
+            throw new Error("Sem QR Code");
+        }
+    } catch (e) {
+        // FALLBACK PARA TESTE DE FOGO CASO SUA API AINDA NÃO ESTEJA LINKADA NESSA ROTA
+        setPixData({ qrCodeBase64: 'simulated', qrCode: '00020101021126580014br.gov.bcb.pix...', txId: 'simulated_tx' });
+    } finally {
+        setProcessingPix(false);
+    }
+  };
+
+  // Simula o Webhook aprovando o pagamento e entregando o produto
+  const handleSimulateWebhookPayment = async () => {
     setProcessingPix(true);
     try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' };
         const phone = localStorage.getItem("labz_player_phone");
 
         if (checkoutData?.type === 'photo') {
-            await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia`, { method: 'POST', headers, body: JSON.stringify({ player_id: phone, media_id: checkoutData.itemInfo.id }) });
+            const mId = checkoutData.itemInfo.id;
+            // 1. Libera a foto
+            await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia`, { method: 'POST', headers, body: JSON.stringify({ player_phone: phone, media_id: mId }) });
+            // 2. Saldo da modelo soma na hora (70%)
             await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${model.id}`, { method: 'PATCH', headers, body: JSON.stringify({ balance: (model.balance || 0) + (checkoutData.price * 0.7) }) });
-            alert("Pagamento Aprovado! Foto desbloqueada.");
+            alert("Pagamento Confirmado! Foto liberada.");
+
         } else if (checkoutData?.type === 'video') {
+            // 1. Cria a solicitação como PAGO (Não soma saldo da modelo aqui)
             await fetch(`${supabaseUrl}/rest/v1/VideoRequests`, {
                 method: 'POST', headers,
-                body: JSON.stringify({ model_id: model.id, player_id: phone, description: checkoutData.itemInfo.description, duration: checkoutData.itemInfo.duration, price: checkoutData.price, status: 'pago' })
+                body: JSON.stringify({ model_id: model.id, player_phone: phone, player_name: "Cliente VIP", description: checkoutData.itemInfo.description, duration: checkoutData.itemInfo.duration, price: checkoutData.price, status: 'pago' })
             });
-            alert("Pagamento Aprovado! Pedido enviado para a musa.");
+            alert("Pagamento Confirmado! Solicitação enviada para a Musa.");
             setVideoDesc("");
         }
         
         setCheckoutData(null); loadProfile(true);
-    } catch (e) { alert("Erro ao processar."); } finally { setProcessingPix(false); }
+    } catch (e) { alert("Erro ao processar pagamento."); } finally { setProcessingPix(false); }
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
-  if (!model) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Musa não encontrada.</div>;
+  if (!model) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase">Musa não encontrada.</div>;
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative">
       
-      {/* HEADER */}
       <div className="relative w-full h-[55vh] overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-105" style={{ backgroundImage: `url(${model?.Configs?.[0]?.bg_url})` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent" />
@@ -113,16 +148,18 @@ export default function ModelProfile() {
         </div>
       </div>
 
-      {/* CONTEÚDO */}
       <div className="max-w-7xl mx-auto p-8">
+        
+        {/* CARD VÍDEOS */}
         <div className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 mb-12 flex flex-col md:flex-row gap-8 items-center shadow-2xl relative overflow-hidden">
             <div className="flex-1">
                 <div className="flex items-center gap-2 mb-4 text-[#D946EF]"><Video size={20} fill="currentColor"/><h2 className="text-xl font-black uppercase italic">Vídeos Exclusivos</h2></div>
-                <p className="text-white/60 text-sm italic mb-6">Peça um vídeo personalizado. Entrega garantida em 2 dias úteis ou seu dinheiro de volta.</p>
+                <p className="text-white/60 text-sm italic mb-6">Peça um vídeo personalizado e descreva exatamente o que deseja ver. Entrega garantida em 2 dias úteis após a aprovação ou seu dinheiro de volta via suporte.</p>
             </div>
             <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); setShowVideoModal(true); }} className="w-full md:w-auto bg-white text-black px-10 py-6 rounded-3xl font-black uppercase text-xs hover:bg-[#D946EF] hover:text-white transition-all shadow-xl">Encomendar Vídeo</button>
         </div>
 
+        {/* GALERIA (LEGENDA FORA DO BLUR) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {media.map((item) => {
             const isUnlocked = item.price === 0 || unlockedIds.includes(item.id);
@@ -131,7 +168,7 @@ export default function ModelProfile() {
                 <div className="relative aspect-[3/4] rounded-[2.5rem] overflow-hidden border border-white/5 bg-[#0a0a0a] cursor-pointer shadow-2xl"
                     onClick={() => { 
                         if(!isLoggedIn) return setShowAuth(true); 
-                        if(!isUnlocked) { setCheckoutData({ type: 'photo', price: item.price, itemInfo: item }); }
+                        if(!isUnlocked) { openCheckout('photo', item.price, item); }
                         else { setViewingMedia(item); setLiked(false); }
                     }}>
                     <img src={item.url} className={`w-full h-full object-cover transition-all duration-1000 ${!isUnlocked ? 'blur-3xl brightness-50 scale-125' : 'group-hover:scale-110'}`} />
@@ -141,9 +178,9 @@ export default function ModelProfile() {
                             <div className="bg-[#D946EF] px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-xl">Liberar R$ {item.price.toFixed(2)}</div>
                         </div>
                     )}
-                    {item.price === 0 && <div className="absolute top-5 left-5 bg-emerald-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Livre</div>}
+                    {item.price === 0 && <div className="absolute top-5 left-5 bg-emerald-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Grátis</div>}
                 </div>
-                {/* LEGENDA VISÍVEL SEMPRE */}
+                {/* Legenda visível e separada */}
                 {item.caption && <p className="text-xs leading-relaxed italic px-4 text-white/70">{item.caption}</p>}
               </div>
             );
@@ -151,7 +188,7 @@ export default function ModelProfile() {
         </div>
       </div>
 
-      {/* MODAL VÍDEO PEDIDO */}
+      {/* MODAL PEDIDO VÍDEO */}
       {showVideoModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-xl">
             <div className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3.5rem] w-full max-w-lg shadow-2xl relative">
@@ -164,15 +201,15 @@ export default function ModelProfile() {
                         </button>
                     ))}
                 </div>
-                <textarea value={videoDesc} onChange={(e) => setVideoDesc(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none focus:border-[#D946EF] h-40 resize-none mb-8" placeholder="Descreva os detalhes do seu vídeo..."/>
+                <textarea value={videoDesc} onChange={(e) => setVideoDesc(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none focus:border-[#D946EF] h-40 resize-none mb-8" placeholder="Descreva os detalhes da sua encomenda..."/>
                 <button onClick={handleProceedToVideoCheckout} className="w-full bg-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center justify-center gap-3 hover:bg-[#f062ff] transition-all">
-                    <QrCode size={18}/> Pagar R$ {pricing[selectedDuration].toFixed(2)}
+                    <QrCode size={18}/> Ir para Pagamento
                 </button>
             </div>
         </div>
       )}
 
-      {/* MODAL CHECKOUT PUSHINPAY (AQUI VOCÊ INSERE A SUA API) */}
+      {/* MODAL CHECKOUT PUSHINPAY */}
       {checkoutData && (
           <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
              <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-10 rounded-[3.5rem] w-full max-w-md text-center relative shadow-[0_0_50px_rgba(217,70,239,0.2)]">
@@ -180,20 +217,38 @@ export default function ModelProfile() {
                 <QrCode size={50} className="text-[#D946EF] mx-auto mb-6" />
                 <h2 className="text-2xl font-black uppercase italic mb-2">Pagamento via PIX</h2>
                 <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Aguardando Pagamento PushinPay...</p>
+                
                 <div className="bg-white/5 border border-white/10 p-6 rounded-3xl mb-8 flex flex-col items-center">
                    <div className="text-4xl font-black text-white mb-2 tracking-tighter">R$ {checkoutData.price.toFixed(2)}</div>
                    <p className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest">{checkoutData.type === 'photo' ? 'Desbloqueio de Foto' : 'Vídeo VIP'}</p>
                 </div>
+
+                {pixData ? (
+                    <div className="mb-8">
+                        {pixData.qrCodeBase64 === 'simulated' ? (
+                            <div className="w-56 h-56 bg-white/10 border-2 border-dashed border-white/20 mx-auto rounded-[2rem] flex flex-col items-center justify-center p-6">
+                                <QrCode size={40} className="text-white/30 mb-2"/>
+                                <p className="text-[9px] text-white/50 uppercase font-black">QR Code via API aparecerá aqui.</p>
+                            </div>
+                        ) : (
+                            <div className="w-56 h-56 bg-white mx-auto rounded-[2rem] flex items-center justify-center p-3 shadow-2xl">
+                                <img src={`data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full rounded-xl" />
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex justify-center mb-8 py-10"><Loader2 className="animate-spin text-[#D946EF]" size={40}/></div>
+                )}
                 
-                {/* BOTAO PARA VOCE TESTAR O FUNCIONAMENTO ATE PLUGAR A SUA API DE VERDADE */}
-                <button onClick={handleSimulatePayment} disabled={processingPix} className="w-full bg-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                   {processingPix ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18}/> Simular PIX Pago</>}
+                {/* BOTÃO PARA TESTE DE FOGO */}
+                <button onClick={handleSimulateWebhookPayment} disabled={processingPix || !pixData} className="w-full bg-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+                   {processingPix ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18}/> Simular PIX Pago (Teste)</>}
                 </button>
              </div>
           </div>
       )}
 
-      {/* MODAL FOTO GRÁTIS */}
+      {/* MODAL FOTO TELA CHEIA (GRÁTIS E COMPRADAS) */}
       {viewingMedia && (
           <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4">
              <button onClick={() => setViewingMedia(null)} className="absolute top-8 right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full"><X size={24}/></button>
