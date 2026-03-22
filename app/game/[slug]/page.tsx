@@ -19,33 +19,30 @@ export default function GamePage() {
   const slug = params.slug as string;
 
   const [backgroundUrl, setBackgroundUrl] = useState("");
-  const [modelName, setModelName] = useState("");
   const [loading, setLoading] = useState(true);
   
-  // Apenas precisamos de saber se o modal está aberto ou não.
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    // 1. Verifica se está logado para uso posterior (se clicar)
     const isLoggedIn = localStorage.getItem("labz_player_logged");
     if (isLoggedIn) {
       setIsAuthorized(true);
     }
 
-    // 2. Busca a foto da modelo (Mantido simples)
     async function fetchModelData() {
       if (!slug) return;
       try {
         setLoading(true);
+        
+        // CORREÇÃO: Removemos a tentativa de buscar o 'name' para evitar o Erro 400.
         const { data: modelData, error: modelError } = await supabase
           .from('Models')
-          .select('id, name')
+          .select('id') 
           .eq('slug', slug)
           .single();
 
         if (modelError || !modelData) throw modelError;
-        setModelName(modelData.name || slug);
 
         const { data: configData, error: configError } = await supabase
           .from('Configs')
@@ -68,7 +65,7 @@ export default function GamePage() {
     fetchModelData();
   }, [slug]);
 
-  // Função que intercepta cliques na área do jogo
+  // Intercepta qualquer clique na div envolvente se não estiver logado
   const handleGameInteraction = (e: React.MouseEvent) => {
     if (!isAuthorized) {
       e.preventDefault();
@@ -84,7 +81,6 @@ export default function GamePage() {
   return (
     <div className="min-h-screen relative font-sans overflow-x-hidden bg-black">
       
-      {/* Imagem de Fundo Dinâmica */}
       {backgroundUrl && (
         <div 
             className="fixed inset-0 bg-cover bg-center z-0 animate-in fade-in"
@@ -95,27 +91,39 @@ export default function GamePage() {
       <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-0 pointer-events-none" />
       <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-[#D946EF]/20 blur-[100px] rounded-full pointer-events-none z-0" />
 
-      {/* CONTEÚDO DA ROLETA 
-        Não usamos blur ou opacity condicional aqui, a roleta renderiza sempre.
-        Usamos onClickCapture para interceptar o clique ANTES de chegar à roleta.
-      */}
+      {/* Invólucro que intercepta os cliques */}
       <div 
         className="relative z-10 w-full min-h-screen flex flex-col"
         onClickCapture={handleGameInteraction}
       >
-        <div className="w-full p-4 flex justify-between items-center max-w-md mx-auto">
+        <div className="w-full p-4 flex justify-between items-center max-w-md mx-auto relative z-20">
           <Link 
             href={`/${slug}`} 
             className="w-10 h-10 bg-black/50 border border-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all"
+            onClick={(e) => {
+               if(!isAuthorized) { e.preventDefault(); setShowAuthModal(true); }
+            }}
           >
             <ArrowLeft size={18} />
           </Link>
           
           <div className="flex gap-2">
-            <Link href="/" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all">
+            <Link 
+                href="/" 
+                className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all"
+                onClick={(e) => {
+                   if(!isAuthorized) { e.preventDefault(); setShowAuthModal(true); }
+                }}
+            >
               <Home size={18} />
             </Link>
-            <Link href="/perfil" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all">
+            <Link 
+                href="/perfil" 
+                className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all"
+                onClick={(e) => {
+                   if(!isAuthorized) { e.preventDefault(); setShowAuthModal(true); }
+                }}
+            >
               <User size={18} />
             </Link>
           </div>
@@ -127,7 +135,7 @@ export default function GamePage() {
               Savanah <span className="text-[#D946EF]">Labz</span>
             </h1>
             <p className="text-[10px] text-white/50 uppercase font-bold tracking-widest mt-2">
-              Roleta de {modelName || 'Musa VIP'}
+              Roleta de {slug} {/* Fallback para o slug já que removemos o name */}
             </p>
           </div>
 
@@ -141,11 +149,9 @@ export default function GamePage() {
         </div>
       </div>
 
-      {/* ÁREA DE BLOQUEIO (MODAL + BOTÃO DO PERFIL) */}
       {showAuthModal && (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center px-4 bg-black/80 backdrop-blur-md">
           
-          {/* BOTÃO PARA VISITAR O PERFIL */}
           <button 
             onClick={() => window.location.href = `/${slug}`}
             className="mb-6 w-full max-w-md bg-[#141414]/90 border border-[#D946EF]/50 hover:bg-[#D946EF]/20 backdrop-blur-md text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 pointer-events-auto transition-all shadow-[0_0_30px_rgba(217,70,239,0.15)]"
