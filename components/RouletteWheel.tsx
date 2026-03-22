@@ -6,9 +6,9 @@ type Segment = {
 };
 
 type RouletteWheelProps = {
-  segments: Segment[];
-  rotation: number;
-  spinning: boolean;
+  segments?: Segment[]; // Agora é opcional (?) para não quebrar
+  rotation?: number;
+  spinning?: boolean;
   onClick?: () => void;
   durationMs?: number;
 };
@@ -37,7 +37,27 @@ function describeDonutSlice(cx: number, cy: number, outerR: number, innerR: numb
   return ["M", outerStart.x, outerStart.y, "A", outerR, outerR, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y, "L", innerStart.x, innerStart.y, "A", innerR, innerR, 0, largeArcFlag, 1, innerEnd.x, innerEnd.y, "Z"].join(" ");
 }
 
-export function RouletteWheel({ segments, rotation, spinning, onClick, durationMs = 4000 }: RouletteWheelProps) {
+// OS SEGMENTOS FALSOS: Usados caso a página não envie os prêmios do banco
+const DEFAULT_SEGMENTS: Segment[] = [
+  { label: "PRÊMIO 1", color: "" },
+  { label: "PRÊMIO 2", color: "" },
+  { label: "PRÊMIO 3", color: "" },
+  { label: "PRÊMIO 4", color: "" },
+  { label: "PRÊMIO 5", color: "" },
+  { label: "PRÊMIO 6", color: "" },
+  { label: "PRÊMIO 7", color: "" },
+  { label: "PRÊMIO 8", color: "" }
+];
+
+export function RouletteWheel({ 
+  segments = DEFAULT_SEGMENTS, // Se for undefined, usa os falsos
+  rotation = 0, 
+  spinning = false, 
+  onClick, 
+  durationMs = 4000 
+}: RouletteWheelProps) {
+  
+  // Como garantimos um array padrão acima, o .length nunca mais vai quebrar.
   const count = segments.length;
   const sliceAngle = 360 / count;
 
@@ -98,8 +118,7 @@ export function RouletteWheel({ segments, rotation, spinning, onClick, durationM
                 const textPoint = polarToCartesian(center, center, textR, midAngle);
                 const rotateText = midAngle > 90 && midAngle < 270 ? midAngle + 180 : midAngle;
                 
-                // MÁGICA PARA PULAR LINHA NO TEXTO
-                const labelStr = String(segment.label).toUpperCase();
+                const labelStr = String(segment.label || "").toUpperCase();
                 const lines = labelStr.includes('\n') ? labelStr.split('\n') : [labelStr.slice(0, 12)];
 
                 return (
