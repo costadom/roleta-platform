@@ -22,25 +22,29 @@ export default function VitrinePage() {
         const logged = localStorage.getItem("labz_player_logged") === "true";
         setIsLoggedIn(logged);
 
-        // Busca blindada: Se der erro, ele não trava a tela.
-        const res = await fetch(`${supabaseUrl}/rest/v1/Models?select=*,Configs(*)`, { headers });
+        // BUSCA PLANA: Busca Modelos e Configs separadamente (Nunca dá Erro 400)
+        const [modelsRes, configsRes] = await Promise.all([
+            fetch(`${supabaseUrl}/rest/v1/Models?select=*`, { headers }),
+            fetch(`${supabaseUrl}/rest/v1/Configs?select=*`, { headers })
+        ]);
         
-        if (res.ok) {
-            const modelsRes = await res.json();
-            const activeModels = Array.isArray(modelsRes) ? modelsRes.filter(m => {
-                // Trata se Configs vier como Array ou Objeto
-                const config = Array.isArray(m.Configs) ? m.Configs[0] : m.Configs;
-                return config && config.showcase_visible === true && config.model_name;
-            }) : [];
-            setModels(activeModels);
-        } else {
-            console.error("Erro na resposta do banco:", await res.text());
-        }
+        if (modelsRes.ok && configsRes.ok) {
+            const modelsData = await modelsRes.json();
+            const configsData = await configsRes.json();
 
+            // Junta as informações no código com segurança
+            const activeModels = modelsData.filter((m: any) => {
+                const config = configsData.find((c: any) => c.model_id === m.id);
+                m.config = config; // Salva a config dentro da modelo
+                return config && config.showcase_visible === true && config.model_name;
+            });
+            
+            setModels(activeModels);
+        }
       } catch (err) { 
           console.error("Falha ao buscar musas:", err); 
       } finally { 
-          setInitialLoading(false); // Garante que a tela de loading sempre suma
+          setInitialLoading(false); 
       }
     }
     fetchData();
@@ -81,12 +85,11 @@ export default function VitrinePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {models.length > 0 ? models.map((m) => {
-            const config = Array.isArray(m.Configs) ? m.Configs[0] : m.Configs;
             return (
               <div key={m.id} className="relative aspect-[3/4] rounded-[2.5rem] overflow-hidden group border border-white/5 bg-[#0a0a0a] shadow-2xl">
-                <img src={config?.profile_url} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-1000 opacity-80 group-hover:opacity-100" />
+                <img src={m.config?.profile_url} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-1000 opacity-80 group-hover:opacity-100" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col p-8 items-center justify-end text-center">
-                    <h3 className="text-3xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl mb-1">{config?.model_name}</h3>
+                    <h3 className="text-3xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl mb-1">{m.config?.model_name}</h3>
                     <p className="text-white/70 text-xs italic mb-6 line-clamp-2 px-2">{m.bio || "Acesse meu Hub para ver meus conteúdos e roleta."}</p>
                     
                     <button onClick={() => router.push(`/profile/${m.slug}`)} className="w-full flex items-center justify-center gap-3 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-2xl transition-all hover:scale-[1.03] active:scale-95">
