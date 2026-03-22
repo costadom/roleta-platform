@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -31,6 +31,7 @@ export default function GamePage() {
   const [showProfile, setShowProfile] = useState(false);
   const [pixData, setPixData] = useState<any>(null);
   const [pixLoading, setPixLoading] = useState(false);
+  const [pixPaid, setPixPaid] = useState(false); // Controle de pagamento aprovado
   const [copied, setCopied] = useState(false);
 
   const [rotation, setRotation] = useState(0);
@@ -44,9 +45,8 @@ export default function GamePage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 1. CARREGA DADOS DA MODELO
   useEffect(() => {
-    async function fetchModel() {
+    async function fetchData() {
       if (!slug || !supabaseUrl) return;
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
@@ -68,14 +68,13 @@ export default function GamePage() {
         }
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
-    fetchModel();
+    fetchData();
     if (typeof window !== "undefined") {
       spinAudioRef.current = new Audio("/sounds/spin.mp3");
       winAudioRef.current = new Audio("/sounds/gemido.mp3");
     }
   }, [slug]);
 
-  // 2. VERIFICAÇÃO DE ACESSO (COLUNA WHATSAPP)
   useEffect(() => {
     async function checkAccess() {
       const isLoggedIn = localStorage.getItem("labz_player_logged");
@@ -87,7 +86,6 @@ export default function GamePage() {
           const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
           const mId = (await resMod.json())[0]?.id;
 
-          // Busca usando a coluna 'whatsapp'
           const resAll = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers });
           const dataAll = await resAll.json();
           setAllAssociations(dataAll);
@@ -106,10 +104,29 @@ export default function GamePage() {
     if (prizes.length > 0) checkAccess();
   }, [slug, prizes]);
 
+  // Monitoramento de pagamento aprovado (Polling)
+  useEffect(() => {
+    let interval: any;
+    if (pixData && !pixPaid) {
+      interval = setInterval(async () => {
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
+        const data = await res.json();
+        if (data[0]?.credits > player.credits) {
+          setPixPaid(true);
+          setPlayer({ ...player, credits: data[0].credits });
+          clearInterval(interval);
+        }
+      }, 4000);
+    }
+    return () => clearInterval(interval);
+  }, [pixData, pixPaid, player]);
+
   const handleGeneratePix = async (val: number) => {
     if (!player) return;
     setPixLoading(true);
     setPixData(null);
+    setPixPaid(false);
     try {
       const res = await fetch('/api/checkout/pix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -181,8 +198,7 @@ export default function GamePage() {
                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
                   <div className="bg-black/80 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
                     <h3 className="text-white font-black uppercase italic text-lg mb-2 tracking-tighter">Área Vip: {modelName}</h3>
-                    <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-6">Cadastre-se para ver os prêmios e jogar</p>
-                    <button onClick={() => setShowAuthModal(true)} className="bg-[#D946EF] text-white px-10 py-5 rounded-2xl font-black uppercase text-xs shadow-[0_0_30px_rgba(217,70,239,0.5)] active:scale-95 transition-all">Começar Agora</button>
+                    <button onClick={() => setShowAuthModal(true)} className="bg-[#D946EF] text-white px-10 py-5 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all shadow-lg">Começar Agora</button>
                   </div>
                </div>
              )}
@@ -205,7 +221,7 @@ export default function GamePage() {
 
       {showProfile && player && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl animate-in zoom-in duration-300">
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl">
             <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[210]"><X size={24} /></button>
             <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
             <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">{player.nickname}</h2>
@@ -223,28 +239,52 @@ export default function GamePage() {
         </div>
       )}
 
+      {/* MODAL DE DEPÓSITO REFEITO COM NOVOS PACOTES E INSTRUÇÕES */}
       {showDeposit && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in duration-300">
-            <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[310]"><X size={24} /></button>
-            <h2 className="text-2xl font-black uppercase text-white italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
+            <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[310]"><X size={24} /></button>
             
-            {pixLoading ? (
+            {pixPaid ? (
+               // TELA DE PAGAMENTO APROVADO
+               <div className="py-10 text-center animate-in zoom-in">
+                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce">
+                    <CheckCircle className="text-emerald-500" size={40} />
+                  </div>
+                  <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
+                  <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
+                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar para a Roleta</button>
+               </div>
+            ) : pixLoading ? (
               <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
             ) : pixData ? (
+              // TELA DO QR CODE COM INSTRUÇÕES
               <div className="mt-4 text-center">
-                 <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_20px_rgba(255,255,255,0.2)]"><img src={pixData.qr_code_base64} alt="QR" className="w-44 h-44" /></div>
-                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">{copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Copiado!" : "Copiar Pix"}</button>
+                 <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
+                 <div className="bg-white p-4 rounded-3xl inline-block mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
+                 
+                 <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
+                    <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
+                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Abra o app do seu banco.<br/>2. Escolha "Pagar com QR Code".<br/>3. Escaneie a imagem acima.<br/>4. O saldo cai automaticamente!</p>
+                 </div>
+
+                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+                 </button>
+                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação do banco...</p>
               </div>
             ) : (
+              // TELA DE PACOTES (R$ 20, 30, 40, 50)
               <div className="space-y-3">
+                <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
                 {[ 
-                  { cr: 25, rs: 15, bonus: 5 }, 
-                  { cr: 45, rs: 30, bonus: 10 }, 
-                  { cr: 75, rs: 50, bonus: 15 } 
+                  { rs: 20, cr: 25 }, 
+                  { rs: 30, cr: 35 }, 
+                  { rs: 40, cr: 45 }, 
+                  { rs: 50, cr: 55 } 
                 ].map((p) => (
                   <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
-                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus} BÔNUS</div>
+                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+5 BÔNUS</div>
                     <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
                     <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-lg group-hover:shadow-[#D946EF]/20">Comprar</div>
                   </button>
@@ -256,7 +296,7 @@ export default function GamePage() {
       )}
 
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; }`}</style>
+      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; }`}</style>
     </div>
   );
 }
