@@ -21,22 +21,19 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  // NOVA ABA: SALES
   const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players">("finance");
 
-  // Dados do Banco
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [videoRequests, setVideoRequests] = useState<any[]>([]);
-  const [salesHistory, setSalesHistory] = useState<any[]>([]); // Para Conteúdos Vendidos
+  const [salesHistory, setSalesHistory] = useState<any[]>([]); 
 
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [globalAnnouncement, setGlobalAnnouncement] = useState("");
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  // Financeiro
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
   const [pixKey1, setPixKey1] = useState("");
@@ -44,7 +41,6 @@ function DashboardContent() {
   const [savingPix, setSavingPix] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // Roleta & Perfil
   const [modelName, setModelName] = useState("");
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [currentProfile, setCurrentProfile] = useState<string | null>(null);
@@ -53,7 +49,6 @@ function DashboardContent() {
   const [bio, setBio] = useState("");
   const [savingHub, setSavingHub] = useState(false);
 
-  // Upload
   const [uploading, setUploading] = useState(false);
   const [galleryPreviewUrl, setGalleryPreviewUrl] = useState<string | null>(null);
   const [selectedGalleryFile, setSelectedGalleryFile] = useState<File | null>(null);
@@ -80,7 +75,6 @@ function DashboardContent() {
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-      const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
       const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resMedia, resVideos, resHistory, resSales] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
@@ -92,26 +86,34 @@ function DashboardContent() {
         fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&order=created_at.desc&limit=50`, { headers }).then(r => r.json()),
-        // Busca Vendas de Mídia
         fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
-      if (resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg);
-      if (resModel[0]) {
+      if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg);
+      if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setTermsAccepted(resModel[0].terms_accepted === true); setBio(resModel[0].bio || "");
       }
-      if (resConfig[0]) {
-        setCurrentBg(resConfig[0].bg_url); setCurrentProfile(resConfig[0].profile_url); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
-      }
-      setAccumulatedEarnings(resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0));
-      setPrizes(resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
-      setNotifications(resNotif || []); setMediaList(resMedia || []); setVideoRequests(resVideos || []); setHistory(resHistory || []);
       
-      // Filtra as vendas para mostrar só as da modelo
-      const mySales = (resSales || []).filter((s: any) => s.Media?.model_id === modelId);
+      // ⚠️ ESPIÃO E PROTEÇÃO DA FOTO DE PERFIL
+      console.log("🕵️ ESPIÃO DASHBOARD - Dados da Configuração (Fundo e Perfil):", resConfig);
+      if (resConfig && resConfig.length > 0) {
+        setCurrentBg(resConfig[0].bg_url || null); 
+        setCurrentProfile(resConfig[0].profile_url || null); 
+        setModelName(resConfig[0].model_name || ""); 
+        setShowcaseVisible(resConfig[0].showcase_visible === true);
+      }
+
+      setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
+      setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
+      setNotifications(Array.isArray(resNotif) ? resNotif : []); 
+      setMediaList(Array.isArray(resMedia) ? resMedia : []); 
+      setVideoRequests(Array.isArray(resVideos) ? resVideos : []); 
+      setHistory(Array.isArray(resHistory) ? resHistory : []);
+      
+      const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
       setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
 
-    } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
+    } catch (err) { console.error("🕵️ ESPIÃO DASHBOARD - Erro Crítico:", err); } finally { setDashboardLoading(false); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
@@ -175,7 +177,6 @@ function DashboardContent() {
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24">
       <div className="max-w-5xl mx-auto">
         
-        {/* HEADER COM NICKNAME */}
         <div className="flex justify-between items-center mb-6">
           <button onClick={() => isSuper ? router.push('/admin/super') : (localStorage.clear(), router.push('/admin'))} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 hover:text-white bg-white/5 px-4 py-2 rounded-xl transition-all">
              {isSuper ? "Voltar Master" : "Sair"}
@@ -189,7 +190,6 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* NAVEGAÇÃO COMPLETA */}
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
           <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Hub</button>
@@ -200,7 +200,6 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Fãs</button>
         </div>
 
-        {/* --- ABA VENDAS (CONTEÚDOS VENDIDOS) --- */}
         {activeTab === "sales" && (
             <div className="animate-in fade-in">
                 <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
@@ -228,7 +227,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* --- ABA VÍDEOS (REGRAS E SALDO NA ENTREGA) --- */}
         {activeTab === "video_requests" && (
             <div className="animate-in fade-in duration-500">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[2.5rem] mb-8 shadow-2xl relative overflow-hidden">
@@ -261,14 +259,12 @@ function DashboardContent() {
                             <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl flex flex-col justify-center gap-3">
                                 {req.status === 'pago' && (
                                     <>
-                                    {/* MUDANÇA: SÓ ACEITA O STATUS, O SALDO NÃO SOMA AQUI */}
                                     <button onClick={async () => { if(!confirm(`Aceitar pedido e iniciar prazo de 48h? O saldo será liberado na entrega.`)) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aceito', accepted_at: new Date().toISOString() }) }); loadData(); }} className="w-full bg-emerald-500 text-black py-4 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-emerald-500/10 hover:bg-emerald-400 transition-all">Aceitar Pedido</button>
                                     <button onClick={async () => { if(!confirm("Recusar pedido? O cliente será avisado.")) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'recusado' }) }); loadData(); }} className="w-full bg-red-500/10 text-red-500 py-4 rounded-xl font-black uppercase text-[10px] hover:bg-red-500 hover:text-white transition-all">Recusar Pedido</button>
                                     </>
                                 )}
                                 {req.status === 'aceito' && (
                                     <div className="space-y-2">
-                                        {/* MUDANÇA: QUANDO ENTREGA, AÍ SIM SOMA O SALDO */}
                                         <input type="text" placeholder="Link do Google Drive" className="w-full bg-black border border-white/10 rounded-xl p-4 text-xs text-white outline-none focus:border-emerald-500" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ drive_link: e.target.value, status: 'entregue' }) }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ balance: modelBalance + (req.price * 0.7) }) }); loadData(); alert("Vídeo entregue e Saldo Adicionado!"); } }} />
                                         <p className="text-[8px] text-white/30 text-center font-black uppercase">Cole o link e aperte Enter</p>
                                     </div>
@@ -282,7 +278,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* RESTANTE DAS ABAS... (Galeria, Financeiro, Hub, Roleta) Mantidas Idênticas */}
         {activeTab === "finance" && (
             <div className="space-y-6 animate-in fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -365,94 +360,4 @@ function DashboardContent() {
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
                             <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                                <button onClick={async () => { if(confirm("Apagar esta foto permanentemente?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-3 bg-red-500 rounded-full"><Trash2 size={20}/></button>
-                            </div>
-                            <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === "roleta" && (
-            <div className="space-y-6 animate-in fade-in">
-                <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex items-center justify-between">
-                    <div><h3 className="text-[11px] font-black uppercase text-[#FFD700]">Visibilidade na Vitrine</h3></div>
-                    <button onClick={async () => { const n = !showcaseVisible; setShowcaseVisible(n); await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ showcase_visible: n }) }); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${showcaseVisible ? 'bg-[#FF1493]' : 'bg-white/20'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showcaseVisible ? 'translate-x-7' : 'translate-x-1'}`} /></button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center text-center">
-                        <div className="w-32 h-32 mb-4 bg-black/50 border border-white/10 rounded-full overflow-hidden flex items-center justify-center relative">
-                            {(profilePreviewUrl || currentProfile) ? <img src={(profilePreviewUrl || currentProfile) as string} className="w-full h-full object-cover" /> : <User className="text-white/10" size={40} />}
-                            {uploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="animate-spin"/></div>}
-                        </div>
-                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Foto Vitrine<input type="file" accept="image/*" onChange={(e:any) => { const f=e.target.files[0]; if(f) { setSelectedProfileFile(f); setProfilePreviewUrl(URL.createObjectURL(f)); } }} className="hidden" /></label>
-                        {selectedProfileFile && <button onClick={async () => { setUploading(true); const fn=`profile_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedProfileFile.type}, body:selectedProfileFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ profile_url: url }) }); setCurrentProfile(url); setSelectedProfileFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FFD700] text-black py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Foto Vitrine</button>}
-                    </div>
-                    <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center text-center">
-                        <div className="w-full h-32 mb-4 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative">
-                            {(bgPreviewUrl || currentBg) ? <img src={(bgPreviewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}
-                            {uploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="animate-spin"/></div>}
-                        </div>
-                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Fundo Roleta<input type="file" accept="image/*" onChange={(e:any) => { const f=e.target.files[0]; if(f) { setSelectedBgFile(f); setBgPreviewUrl(URL.createObjectURL(f)); } }} className="hidden" /></label>
-                        {selectedBgFile && <button onClick={async () => { setUploading(true); const fn=`bg_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedBgFile.type}, body:selectedBgFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: url }) }); setCurrentBg(url); setSelectedBgFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FF1493] text-white py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Fundo Roleta</button>}
-                    </div>
-                </div>
-                <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl">
-                    <h2 className="text-xs font-black uppercase text-white/50 tracking-widest mb-6">Slots da Roleta</h2>
-                    <div className="grid gap-3">
-                        {prizes.map((p, index) => {
-                            const isFake = checkIsFake(p);
-                            return (
-                                <div key={p.id} className={`flex items-center justify-between p-5 rounded-3xl transition-all border ${isFake ? 'bg-indigo-500/5 border-indigo-500/20 opacity-80' : 'bg-white/5 border-white/10 hover:border-[#FF1493]/30'}`}>
-                                    <div className="flex items-center gap-2">
-                                        {!isFake && (<div className="flex flex-col gap-1 mr-2"><button onClick={() => movePrize(index, 'up')} className="p-1 rounded-md bg-white/5 hover:bg-[#FF1493] text-white"><ChevronUp size={14}/></button><button onClick={() => movePrize(index, 'down')} className="p-1 rounded-md bg-white/5 hover:bg-[#FF1493] text-white"><ChevronDown size={14}/></button></div>)}
-                                        <div className="h-6 w-1.5 rounded-full" style={{ backgroundColor: p.color }} />
-                                        <p className={`text-xs font-black uppercase ml-2 ${isFake ? 'text-indigo-400' : 'text-white'}`}>{isFake && <Lock size={12} className="inline mr-1"/>} {p.name}</p>
-                                    </div>
-                                    {!isFake && (<button onClick={() => setEditingPrize(p)} className="p-3 bg-white/5 rounded-xl text-white/40 hover:text-[#FF1493]"><Edit3 size={18}/></button>)}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
-
-      </div>
-
-      {editingPrize && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
-          <form onSubmit={async (e) => { 
-              e.preventDefault(); 
-              const payload = { name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value };
-              await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-              setEditingPrize(null); loadData();
-          }} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative">
-            <button type="button" onClick={() => setEditingPrize(null)} className="absolute top-6 right-6 text-white/20 hover:text-white transition-colors"><X size={24}/></button>
-            <h2 className="text-xl font-black uppercase mb-8 text-[#FF1493] italic text-center">Editar Slot</h2>
-            <div className="space-y-4">
-                <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" />
-                <div className="flex items-center gap-3 bg-black border border-white/10 p-4 rounded-2xl"><Palette size={16} className="text-white/30"/><input type="color" value={editingPrize.color} onChange={e => setEditingPrize({...editingPrize, color: e.target.value})} className="w-full h-8 bg-transparent cursor-pointer" /></div>
-                <div className="bg-white/5 p-4 rounded-2xl space-y-3">
-                    <p className="text-[10px] font-black uppercase text-white/40">Entrega do Conteúdo</p>
-                    <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white">
-                        <option value="whatsapp">Chamar no WhatsApp</option>
-                        <option value="link">Link Direto (Drive)</option>
-                        <option value="credit">Créditos de Giro</option>
-                    </select>
-                    {editingPrize.delivery_type !== 'whatsapp' && <input type="text" value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} placeholder={editingPrize.delivery_type === 'link' ? "Link do Drive" : "Qtd Créditos"} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white" />}
-                </div>
-                <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95">Salvar Configurações</button>
-            </div>
-          </form>
-        </div>
-      )}
-      <style jsx global>{` .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }`}</style>
-    </div>
-  );
-}
-
-export default function DashboardPage() { return <Suspense fallback={null}><DashboardContent /></Suspense>; }
+                                <button onClick={async () => { if(confirm("Apagar esta foto permanentemente?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=
