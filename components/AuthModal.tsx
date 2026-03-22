@@ -11,19 +11,15 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isLoginView, setIsLoginView] = useState(true);
 
-  // Estados dos Campos
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
   const [password, setPassword] = useState("");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
-  
-  // Estado de Erros para dar feedback visual
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   if (!isOpen) return null;
 
-  // --- MÁSCARAS DE INPUT ---
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, "");
     if (value.length > 11) value = value.slice(0, 11);
@@ -41,7 +37,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setCpf(value);
   };
 
-  // --- VALIDAÇÕES MATEMÁTICAS E REGEX ---
   const isValidCPF = (cpfToTest: string) => {
     const cleanCPF = cpfToTest.replace(/\D/g, "");
     if (cleanCPF.length !== 11 || /^(\d)\1+$/.test(cleanCPF)) return false;
@@ -59,12 +54,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   const isValidPassword = (pass: string) => {
-    // Min 8 chars, 1 maiúscula, 1 número, 1 caractere especial
     const regex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     return regex.test(pass);
   };
 
-  // --- SUBMITS E GRAVAÇÃO DE LOGIN ---
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { [key: string]: string } = {};
@@ -81,12 +74,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
 
     setErrors({});
-    
-    // Grava o login no navegador do cliente (Local Storage)
     localStorage.setItem("labz_player_logged", "true");
     localStorage.setItem("labz_player_phone", phone);
-    
-    // Redireciona de imediato para a vitrine
     window.location.href = "/vitrine";
   };
 
@@ -103,31 +92,27 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
 
     setErrors({});
-    
-    // Grava o login no navegador do cliente (Local Storage)
     localStorage.setItem("labz_player_logged", "true");
     localStorage.setItem("labz_player_phone", phone);
-    
-    // Redireciona de imediato para a vitrine
     window.location.href = "/vitrine";
   };
 
-  // Link do WhatsApp de Suporte configurado
   const whatsappSupportLink = "https://wa.me/5515996587248?text=Esqueci%20minha%20senha%20e%20preciso%20redefini-la";
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    // Fundo mais claro (bg-black/50) para deixar o Blur da página de trás brilhar
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[2rem] p-6 shadow-[0_0_40px_rgba(217,70,239,0.15)] relative overflow-hidden">
         
-        {/* Botão Fechar */}
+        {/* Botão Fechar (Com type="button" garantido) */}
         <button 
+          type="button"
           onClick={onClose}
           className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-white/5 hover:bg-white/10 text-white/50 hover:text-white rounded-full transition-colors z-10"
         >
           <X size={18} />
         </button>
 
-        {/* Decoração Neon */}
         <div className="absolute -top-20 -left-20 w-40 h-40 bg-[#D946EF]/20 blur-[80px] pointer-events-none" />
 
         <div className="text-center mb-6 relative z-10 pt-2">
@@ -139,7 +124,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </p>
         </div>
 
-        {/* Toggle Login/Cadastro */}
         <div className="flex bg-[#141414] rounded-xl p-1 mb-6 relative z-10 border border-white/5">
           <button 
             onClick={() => { setIsLoginView(true); setErrors({}); }}
@@ -155,7 +139,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </button>
         </div>
 
-        {/* FORMULÁRIO DE LOGIN */}
         {isLoginView ? (
           <form onSubmit={handleLogin} className="space-y-4 relative z-10">
             <div>
@@ -191,8 +174,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </button>
           </form>
         ) : (
-          
-        /* FORMULÁRIO DE CADASTRO */
           <form onSubmit={handleRegister} className="space-y-4 relative z-10">
             <div>
               <div className="relative">
