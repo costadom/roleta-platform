@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-// CORREÇÃO DO IMPORT: Agora com chaves { } porque não é default
 import { RouletteWheel } from '@/components/RouletteWheel'; 
 import AuthModal from "@/components/AuthModal";
 
@@ -23,12 +22,16 @@ export default function GamePage() {
   const [modelName, setModelName] = useState("");
   const [loading, setLoading] = useState(true);
   
-  // Segurança de Login
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  
+  // Flag para garantir que o componente só renderize no lado do cliente
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    // Verifica o Login
+    setIsMounted(true);
+    
+    // Verifica Login
     const isLoggedIn = localStorage.getItem("labz_player_logged");
     if (!isLoggedIn) {
       setIsAuthorized(false);
@@ -38,7 +41,7 @@ export default function GamePage() {
       setShowAuthModal(false);
     }
 
-    // Busca dados do Supabase
+    // Busca dados
     async function fetchModelData() {
       if (!slug) return;
       try {
@@ -73,6 +76,8 @@ export default function GamePage() {
     fetchModelData();
   }, [slug]);
 
+  if (!isMounted) return null; // Previne o erro de reidratação
+
   const handleReturnToVitrine = () => {
     window.location.href = "/vitrine"; 
   };
@@ -92,22 +97,24 @@ export default function GamePage() {
       <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-0 pointer-events-none" />
       <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-[#D946EF]/20 blur-[100px] rounded-full pointer-events-none z-0" />
 
-      {/* CONTEÚDO DA ROLETA (Embaçado se não tiver login) */}
-      <div className={`relative z-10 w-full min-h-screen flex flex-col transition-all duration-300 ${!isAuthorized ? 'blur-md pointer-events-none select-none opacity-50' : ''}`}>
+      {/* CONTEÚDO DA ROLETA */}
+      {/* Removemos o pointer-events-none total para não quebrar a roleta, aplicamos só se não tiver logado */}
+      <div className={`relative z-10 w-full min-h-screen flex flex-col transition-all duration-300 ${!isAuthorized ? 'blur-[4px] opacity-50 select-none' : ''}`} style={!isAuthorized ? { pointerEvents: 'none' } : {}}>
         
         <div className="w-full p-4 flex justify-between items-center max-w-md mx-auto">
           <Link 
             href={`/${slug}`} 
             className="w-10 h-10 bg-black/50 border border-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all pointer-events-auto"
+            style={{ pointerEvents: 'auto' }} // Garante que a seta de voltar sempre funcione
           >
             <ArrowLeft size={18} />
           </Link>
           
           <div className="flex gap-2">
-            <Link href="/" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all">
+            <Link href="/" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all" style={{ pointerEvents: 'auto' }}>
               <Home size={18} />
             </Link>
-            <Link href="/perfil" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all">
+            <Link href="/perfil" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all" style={{ pointerEvents: 'auto' }}>
               <User size={18} />
             </Link>
           </div>
@@ -135,9 +142,9 @@ export default function GamePage() {
 
       {/* ÁREA DE BLOQUEIO (MODAL + BOTÃO DO PERFIL) */}
       {!isAuthorized && showAuthModal && (
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center px-4">
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center px-4 pointer-events-none">
           
-          {/* BOTÃO PARA VISITAR O PERFIL FICA AQUI, FORA DO MODAL MAS ACIMA DO BLUR */}
+          {/* BOTÃO PARA VISITAR O PERFIL */}
           <button 
             onClick={() => window.location.href = `/${slug}`}
             className="mb-6 w-full max-w-md bg-[#141414]/90 border border-[#D946EF]/50 hover:bg-[#D946EF]/20 backdrop-blur-md text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 pointer-events-auto transition-all shadow-[0_0_30px_rgba(217,70,239,0.15)]"
@@ -145,10 +152,13 @@ export default function GamePage() {
             <ExternalLink size={16} className="text-[#D946EF]" /> Visitar Perfil da Modelo
           </button>
 
-          <AuthModal 
-            isOpen={true} 
-            onClose={handleReturnToVitrine} 
-          />
+          {/* O modal tem pointer-events-auto dentro dele */}
+          <div className="pointer-events-auto w-full max-w-md">
+            <AuthModal 
+              isOpen={true} 
+              onClose={handleReturnToVitrine} 
+            />
+          </div>
         </div>
       )}
     </div>
