@@ -46,9 +46,9 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }), 
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers }) 
       ]);
 
       const dataHist = resHist.ok ? await resHist.json() : [];
@@ -58,14 +58,15 @@ export default function SuperAdmin() {
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
       
+      // Filtra candidaturas ignorando maiúsculas/minúsculas
       if (resApp.ok) {
         const apps = await resApp.json();
         setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
       }
       
+      // Filtra carrinhos + regra dos 3 minutos ignorando maiúsculas/minúsculas
       if (resAbandon.ok) {
         const carts = await resAbandon.json();
-        // 🔥 REGRA DOS 3 MINUTOS: Só mostra se for 'pendente' E tiver mais de 3 minutos de vida
         const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
         setAbandoned(carts.filter((c: any) => {
           const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
@@ -139,10 +140,6 @@ export default function SuperAdmin() {
       });
       if (typeof valRanking !== 'boolean') alert("Configurações salvas!");
     } catch (err) {} finally { setSavingGlobal(false); }
-  };
-
-  const toggleRankingVisibility = async () => {
-    const nextVal = !rankVisible; setRankVisible(nextVal); await handleSaveGlobal(nextVal);
   };
 
   const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
@@ -230,6 +227,26 @@ export default function SuperAdmin() {
     } catch (err) { alert("Erro ao criar."); } finally { setLoading(false); }
   };
 
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoading(true);
+    try {
+      const now = new Date().toISOString(); 
+      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ slug: newModel.slug.toLowerCase().replace(/\s/g, ''), email: newModel.email, password: newModel.password, referred_by: newModel.referred_by || null, created_at: now }), });
+      const dataMod = await resMod.json();
+      const mId = dataMod[0].id;
+      
+      await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, showcase_visible: false, created_at: now }), });
+      
+      const defaultColors = ["#FF1493", "#8B0045", "#FFD700", "#FF1493", "#8B0045", "#FFD700"];
+      const fallbackPrizes = ["Mimo Surpresa", "Vídeo Exclusivo", "Foto Especial", "Áudio Picante", "Acesso VIP", "Pack Econômico"];
+      const prizesToInsert = fallbackPrizes.map((p, i) => ({ id: crypto.randomUUID(), name: p, shortLabel: p.substring(0, 10), type: "digital", weight: 16.66, color: defaultColors[i], active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' }));
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "R$ 100 no PIX", shortLabel: "R$ 100\nNO PIX", type: "digital", weight: 0.02, color: "#10b981", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+      prizesToInsert.push({ id: crypto.randomUUID(), name: "Encontro Presencial", shortLabel: "ENCONTRO\nPRESENCIAL", type: "digital", weight: 0.02, color: "#6366f1", active: true, model_id: mId, createdAt: now, updatedAt: now, delivery_type: 'whatsapp' });
+      await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(prizesToInsert) });
+      alert(`Franquia manual criada!`); setShowModal(false); fetchData(); setNewModel({ slug: "", email: "", password: "", referred_by: "" });
+    } catch (err) {} finally { setLoading(false); }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm(`Remover franquia?`)) return;
     await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
@@ -267,10 +284,14 @@ export default function SuperAdmin() {
     <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
       <div className="max-w-7xl mx-auto">
         
-        {/* HEADER */}
+        {/* HEADER COM O BOTAO CRIAR MANUAL RESTAURADO */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
           <div><h1 className="text-4xl font-black uppercase italic"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1">SISTEMA MASTER</p></div>
-          <div className="flex gap-3"><button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase">ZERAR SISTEMA</button><button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30"><Lock size={18}/></button></div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button>
+            <button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button>
+          </div>
         </div>
 
         {/* PIX ABANDONADOS */}
@@ -286,7 +307,7 @@ export default function SuperAdmin() {
                      <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
                   </div>
                   <div className="flex gap-2">
-                     <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi que o PIX na roleta da ${cart.model_name} não concluiu...`)}`, '_blank')} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase">Recuperar no Zap</button>
+                     <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi que o PIX na roleta da ${cart.model_name} não concluiu...`)}`, '_blank')} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1"><MessageCircle size={14}/> Chamar no Zap</button>
                      <button onClick={async () => {
                        await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
                        fetchData();
@@ -307,7 +328,7 @@ export default function SuperAdmin() {
                 <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl">
                   <p className="text-[10px] text-white/40 uppercase font-black">Modelo: {models.find(m => m.id === w.model_id)?.slug}</p>
                   <p className="text-xl font-black mb-4">R$ {Number(w.amount).toFixed(2)}</p>
-                  <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, 'Modelo', '')} className="w-full bg-amber-500 text-black py-3 rounded-xl text-[9px] font-black uppercase">Marcar como Pago</button>
+                  <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, 'Modelo', '')} className="w-full bg-amber-500 text-black py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
                 </div>
               ))}
             </div>
@@ -320,9 +341,13 @@ export default function SuperAdmin() {
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2"><UserPlus size={16}/> Novas Musas</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {applications.map(app => (
-                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl cursor-pointer hover:border-indigo-400 transition-all">
-                  <p className="text-[12px] text-white uppercase font-black">{app.full_name}</p>
-                  <p className="text-[10px] text-indigo-400 font-bold uppercase">@{app.nickname}</p>
+                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl flex flex-col justify-between cursor-pointer hover:border-indigo-400 transition-all group">
+                  <div className="mb-4">
+                    <p className="text-[12px] text-white uppercase font-black">{app.full_name}</p>
+                    <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mb-2">@{app.nickname}</p>
+                    <div className="text-[9px] text-white/50 uppercase font-mono space-y-1"><p>📱 {app.whatsapp}</p></div>
+                  </div>
+                  <button className="bg-indigo-500/20 text-indigo-400 px-4 py-3 rounded-xl text-[9px] font-black uppercase group-hover:bg-indigo-500 group-hover:text-white transition-all">Analisar Perfil</button>
                 </div>
               ))}
             </div>
@@ -331,9 +356,9 @@ export default function SuperAdmin() {
 
         {/* FINANCEIRO */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-          <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1">Faturamento Total</p><h3 className="text-4xl font-black">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-          <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-emerald-500 uppercase mb-1">Lucro Plataforma</p><h3 className="text-4xl font-black">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-          <div className="bg-blue-500/10 border border-blue-500/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-blue-500 uppercase mb-1">Clientes</p><h3 className="text-4xl font-black">{totalPlayers}</h3></div>
+          <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Faturamento Bruto</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+          <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+          <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden"><p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse Modelos (70%)</p><h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
         </div>
 
         {/* LISTA DE MODELOS COM O NOVO BOTÃO DE USUÁRIOS */}
@@ -396,6 +421,24 @@ export default function SuperAdmin() {
           </div>
         </div>
       )}
+
+      {/* 🔥 MODAL CRIAR MANUAL RESTAURADO 🔥 */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
+            <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
+            <h2 className="text-2xl font-black uppercase mb-6 italic tracking-tighter">Criar <span className="text-[#FF1493]">Manual</span></h2>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug da Modelo</label><input type="text" required value={newModel.slug} onChange={e => setNewModel({ ...newModel, slug: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Ex: savanah" /></div>
+              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email Login</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="admin@modelo.com" /></div>
+              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha Login</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Senha forte" /></div>
+              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Indicada Por (ID da Musa)</label><input type="text" value={newModel.referred_by} onChange={e => setNewModel({ ...newModel, referred_by: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Opcional" /></div>
+              <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg hover:scale-[1.02] transition-all flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
