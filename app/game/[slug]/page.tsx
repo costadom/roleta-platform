@@ -22,8 +22,8 @@ export default function GamePage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [modelName, setModelName] = useState("");
 
-  const [player, setPlayer] = useState<any | null>(null); // Perfil na modelo atual
-  const [allAssociations, setAllAssociations] = useState<any[]>([]); // Todos os saldos
+  const [player, setPlayer] = useState<any | null>(null);
+  const [allAssociations, setAllAssociations] = useState<any[]>([]);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   
@@ -53,14 +53,13 @@ export default function GamePage() {
       const savedPhone = localStorage.getItem("labz_player_phone");
 
       try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-store" };
         
-        // 1. Busca Modelo
+        // 1. Dados da Modelo (Fundo e Nome)
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
 
-        // 2. Busca Prêmios e Configs
         const [resPrizes, resConfig] = await Promise.all([
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers })
@@ -73,24 +72,19 @@ export default function GamePage() {
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
         }
 
-        // 3. Sincronização de Saldos (Multi-Modelo)
+        // 2. Dados do Jogador e Saldos
         if (isLoggedIn && savedPhone) {
           const resAll = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedPhone}&select=*,Models(slug)`, { headers });
           const dataAll = await resAll.json();
           setAllAssociations(dataAll);
 
-          // Filtra o perfil específico desta modelo
           const currentPlayer = dataAll.find((p: any) => p.model_id === mId);
           if (currentPlayer) {
             setPlayer(currentPlayer);
             setIsAuthorized(true);
           } else {
-            // Logado globalmente mas não nesta modelo -> Abre login para associar
-            setIsAuthorized(false);
-            setShowAuthModal(true);
+            setIsAuthorized(false); // Logado global mas não aqui -> Pede associação
           }
-        } else {
-          setTimeout(() => setShowAuthModal(true), 1500);
         }
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
@@ -147,54 +141,62 @@ export default function GamePage() {
     }, SPIN_DURATION + 100);
   };
 
-  if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={40} /><p className="text-[10px] font-black uppercase text-white tracking-widest">Carregando Musas...</p></div>;
+  if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={40} /><p className="text-[10px] font-black uppercase text-white tracking-widest">Carregando...</p></div>;
 
   return (
     <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden">
       <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 overflow-hidden shadow-2xl">
         
+        {/* FUNDO VISÍVEL SEMPRE */}
         <div className="absolute inset-0 z-0">
-           <div className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ${!isAuthorized ? 'blur-2xl brightness-[0.2]' : 'brightness-[0.45]'}`} style={{ backgroundImage: `url(${bgUrl})` }} />
+           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${bgUrl})`, opacity: isAuthorized ? 0.4 : 0.25 }} />
            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
         </div>
 
         <div className="relative z-10 flex flex-col h-full overflow-hidden">
+          {/* HEADER SUPERIOR */}
           <div className="p-4 flex flex-col gap-3 shrink-0">
              <div className="flex justify-between items-center px-1">
                 <div className="flex gap-2">
-                   <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white"><LayoutGrid size={12} /> Vitrine</button>
-                   <button onClick={() => router.push(`/${slug}`)} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white"><User size={12} /> Perfil</button>
+                   <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all">
+                      <LayoutGrid size={12} /> Vitrine
+                   </button>
+                   <button onClick={() => router.push(`/${slug}`)} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all">
+                      <User size={12} /> Perfil
+                   </button>
                 </div>
                 <div className="flex gap-2">
-                   <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-[#FFD700]">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
-                   <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white"><User size={18}/></button>
+                   <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
+                   <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90"><User size={18}/></button>
                 </div>
              </div>
              <div className="flex flex-col items-center">
                 <span className="text-[#D946EF] font-black italic text-xl tracking-tighter">Savanah <span className="text-white">Labz</span></span>
-                <span className="text-[10px] text-[#FFD700] font-black uppercase tracking-widest mt-0.5 italic">Musa {modelName}</span>
+                <span className="text-[10px] text-[#FFD700] font-black uppercase tracking-widest mt-0.5">Musa {modelName}</span>
              </div>
           </div>
 
-          <div className="flex-1 flex flex-col items-center justify-center px-4 relative min-h-[350px]">
-             <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[3px] opacity-40 pointer-events-none' : ''}`}>
+          {/* ROLETA COM PRÊMIOS VISÍVEIS */}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
+             <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[1px] opacity-40 grayscale-[0.5]' : ''}`}>
                 <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin()} />
              </div>
              {!isAuthorized && (
                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center">
-                  <div className="bg-black/60 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
+                  <div className="bg-black/80 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
                     <h3 className="text-white font-black uppercase italic text-lg mb-2">Associe-se a {modelName}</h3>
                     <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-6">Cada musa tem seu próprio saldo de créditos.</p>
-                    <button onClick={() => setShowAuthModal(true)} className="bg-[#D946EF] text-white px-10 py-5 rounded-2xl font-black uppercase text-xs shadow-[0_0_30px_rgba(217,70,239,0.5)]">Começar Agora</button>
+                    <button onClick={() => setShowAuthModal(true)} className="bg-[#D946EF] text-white px-10 py-5 rounded-2xl font-black uppercase text-xs shadow-[0_0_30px_rgba(217,70,239,0.5)] active:scale-95">Começar Agora</button>
                   </div>
                </div>
              )}
           </div>
 
+          {/* FOOTER */}
           <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0">
             <div className="bg-[#111] border border-white/5 p-4 rounded-[1.5rem] flex justify-between items-center mb-4 shadow-2xl">
                <div className="flex flex-col pl-2">
-                  <span className="text-[9px] text-white/40 font-black uppercase">Créditos para {modelName}</span>
+                  <span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Saldo para {modelName}</span>
                   <span className="text-xl font-black text-white italic tracking-tighter">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
                </div>
                <button onClick={() => isAuthorized ? setShowDeposit(true) : setShowAuthModal(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF]"><ShoppingCart size={14}/> Depositar</button>
@@ -206,6 +208,7 @@ export default function GamePage() {
           </div>
         </div>
 
+        {/* MODAL DE LOGIN */}
         {showAuthModal && (
           <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center px-4 bg-black/40 backdrop-blur-md">
             <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />
@@ -213,7 +216,7 @@ export default function GamePage() {
         )}
       </div>
 
-      {/* MODAL DE PERFIL COM TODOS OS SALDOS POR MODELO */}
+      {/* PERFIL DO JOGADOR COM MÚLTIPLOS SALDOS */}
       {showProfile && player && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl animate-in zoom-in">
@@ -232,15 +235,15 @@ export default function GamePage() {
                   ))}
                </div>
             </div>
-
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors underline decoration-red-500/50 underline-offset-4">Sair da Conta</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
           </div>
         </div>
       )}
 
+      {/* MODAL DE DEPÓSITO */}
       {showDeposit && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl">
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in">
             <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
             <h2 className="text-2xl font-black uppercase text-white italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
             {pixLoading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-[#D946EF]" /></div> : pixData ? (
