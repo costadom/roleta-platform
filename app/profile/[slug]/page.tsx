@@ -18,18 +18,19 @@ export default function ModelProfile() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [playerId, setPlayerId] = useState<string | null>(null);
 
-  // Vídeos
+  // Pedidos de Vídeo
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [videoDesc, setVideoDesc] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<3 | 5 | 10>(3);
   const pricing = { 3: 70, 5: 110, 10: 160 };
 
-  // Visualização de Fotos (Grátis e Desbloqueadas)
+  // Visualização de Fotos
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
-  // CHECKOUT PUSHINPAY REAL
+  // CHECKOUT PUSHINPAY
   const [checkoutData, setCheckoutData] = useState<{ type: 'photo' | 'video', price: number, itemInfo: any } | null>(null);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string, qrCodeCopiaCola: string, txId: string } | null>(null);
   const [processingPix, setProcessingPix] = useState(false);
@@ -46,29 +47,45 @@ export default function ModelProfile() {
 
   async function loadProfile(logged: boolean) {
     try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+      
+      // 1. Busca dados da Modelo
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers }).then(r => r.json());
-      if (!resMod[0]) return setLoading(false);
+      if (!resMod || !resMod[0]) return setLoading(false);
       const modelData = resMod[0];
       setModel(modelData);
 
+      let currentPlayerId = null;
+
+      // 2. Se logado, busca o ID real do jogador (baseado na foto do seu banco)
+      if (logged) {
+          const phone = localStorage.getItem("labz_player_phone");
+          const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${phone}&select=id`, { headers }).then(r => r.json());
+          if (playerRes && playerRes[0]) {
+              currentPlayerId = playerRes[0].id;
+              setPlayerId(currentPlayerId);
+          }
+      }
+
+      // 3. Busca Mídias e Desbloqueios usando o player_id
       const [resMedia, resUnlocked] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelData.id}&order=created_at.desc`, { headers }).then(r => r.json()),
-        logged ? fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${localStorage.getItem("labz_player_phone")}&select=media_id`, { headers }).then(r => r.json()) : []
+        (logged && currentPlayerId) ? fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=eq.${currentPlayerId}&select=media_id`, { headers }).then(r => r.json()) : []
       ]);
 
       setMedia(Array.isArray(resMedia) ? resMedia : []);
       setUnlockedIds(Array.isArray(resUnlocked) ? resUnlocked.map((u: any) => u.media_id) : []);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+
+    } catch (e) { console.error("Erro ao carregar perfil:", e); } finally { setLoading(false); }
   }
 
-  // --- GERADOR DE PIX REAL (API PUSHINPAY) ---
   const handleProceedToVideoCheckout = () => {
-    if (videoDesc.length < 15) return alert("Por favor, descreva melhor seu pedido.");
+    if (videoDesc.length < 15) return alert("Por favor, descreva melhor o que você quer no vídeo.");
     setShowVideoModal(false);
     openCheckout('video', pricing[selectedDuration], { duration: selectedDuration, description: videoDesc });
   };
 
+  // --- O ESPIÃO E GERADOR DE PIX DA PUSHINPAY ---
   const openCheckout = async (type: 'photo' | 'video', price: number, itemInfo: any) => {
     setCheckoutData({ type, price, itemInfo });
     setPixData(null);
@@ -76,21 +93,40 @@ export default function ModelProfile() {
     setPaymentSuccess(false);
     
     try {
-        // CHAMA A SUA API REAL AQUI (Ajuste a rota se a sua for diferente de /api/pix)
+        const phone = localStorage.getItem("labz_player_phone");
+        
+        // PAYLOAD enviado para a sua API (Ajuste se sua API pedir nomes diferentes)
+        const payload = { 
+            value: price, 
+            amount: price, // Manda os dois nomes por garantia
+            description: type === 'photo' ? `Foto VIP - ${model?.Configs?.[0]?.model_name}` : `Video VIP - ${model?.Configs?.[0]?.model_name}`, 
+            phone: phone,
+            player_id: playerId,
+            model_id: model.id,
+            media_id: type === 'photo' ? itemInfo.id : null,
+            type: type
+        };
+
+        console.log("🕵️ ESPIÃO - Enviando para API:", payload);
+
+        // ⚠️ ATENÇÃO: SUBSTITUA '/api/pix' PELA SUA ROTA REAL DE CHECKOUT SE FOR DIFERENTE (ex: '/api/checkout')
         const res = await fetch('/api/pix', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                value: price, // Sua API da PushinPay gera o valor a partir daqui
-                description: type === 'photo' ? `Desbloqueio de Foto VIP - ${model?.Configs?.[0]?.model_name}` : `Vídeo VIP ${itemInfo.duration} Min - ${model?.Configs?.[0]?.model_name}`,
-                phone: localStorage.getItem("labz_player_phone"),
-                model_id: model.id,
-                media_id: type === 'photo' ? itemInfo.id : null
-            })
+            body: JSON.stringify(payload)
         });
-        const data = await res.json();
+
+        // Lemos como texto primeiro para o espião capturar qualquer erro do servidor
+        const responseText = await res.text();
+        console.log("🕵️ ESPIÃO - Resposta Bruta da API:", responseText);
+
+        if (!res.ok) {
+            throw new Error(`Erro ${res.status}: ${responseText}`);
+        }
+
+        const data = JSON.parse(responseText);
         
-        // Verifica as respostas comuns da PushinPay e seta o QR Code
+        // Verifica os padrões de resposta da PushinPay
         if (data.qr_code_base64 || data.qrCodeBase64) {
             setPixData({ 
                 qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, 
@@ -98,10 +134,12 @@ export default function ModelProfile() {
                 txId: data.id || data.transaction_id || data.txId 
             });
         } else {
-            throw new Error("Falha ao gerar QR Code pela API.");
+            throw new Error("A API respondeu, mas não retornou o QR Code. Resposta: " + JSON.stringify(data));
         }
-    } catch (e) {
-        alert("Erro ao conectar com o banco. Tente novamente.");
+
+    } catch (e: any) {
+        console.error("🕵️ ESPIÃO - ERRO FATAL:", e);
+        alert("ERRO AO GERAR PIX:\n\n" + e.message + "\n\n(Verifique o nome da sua rota /api/pix ou se falta o CPF no jogador)");
         setCheckoutData(null);
     } finally {
         setProcessingPix(false);
@@ -111,46 +149,50 @@ export default function ModelProfile() {
   // --- VERIFICAÇÃO AUTOMÁTICA DE PAGAMENTO (POLLING) ---
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (checkoutData && pixData && !paymentSuccess) {
-        // A cada 3 segundos, verifica no banco se o Webhook da Pushinpay já confirmou e inseriu a compra
+    
+    // Se o QR Code está na tela, fica olhando o banco pra ver se o Webhook confirmou
+    if (checkoutData && pixData && !paymentSuccess && playerId) {
         interval = setInterval(async () => {
-            const phone = localStorage.getItem("labz_player_phone");
-            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
             
             if (checkoutData.type === 'photo') {
-                const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${phone}&media_id=eq.${checkoutData.itemInfo.id}`, { headers }).then(r => r.json());
+                // Procura se a foto foi inserida no UnlockedMedia pelo webhook
+                const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=eq.${playerId}&media_id=eq.${checkoutData.itemInfo.id}`, { headers }).then(r => r.json());
                 if (res && res.length > 0) {
                     clearInterval(interval);
                     handlePaymentApproved();
                 }
             } else if (checkoutData.type === 'video') {
-                // Verifica se a requisição de vídeo já foi inserida no banco
-                const res = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_phone=eq.${phone}&status=eq.pago&order=created_at.desc&limit=1`, { headers }).then(r => r.json());
+                // Procura se o vídeo foi inserido no VideoRequests pelo webhook
+                const res = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=eq.${playerId}&status=eq.pago&order=created_at.desc&limit=1`, { headers }).then(r => r.json());
                 if (res && res.length > 0) {
                     clearInterval(interval);
                     handlePaymentApproved();
                 }
             }
-        }, 3000);
+        }, 3000); // Checa a cada 3 segundos
     }
     return () => clearInterval(interval);
-  }, [checkoutData, pixData, paymentSuccess]);
+  }, [checkoutData, pixData, paymentSuccess, playerId]);
 
   const handlePaymentApproved = () => {
     setPaymentSuccess(true);
     setTimeout(() => {
+        const itemInfo = checkoutData?.itemInfo;
+        const type = checkoutData?.type;
+        
         setCheckoutData(null);
         setPaymentSuccess(false);
-        loadProfile(true); // Recarrega a galeria para tirar o Blur
+        loadProfile(true); // Recarrega a página para tirar o blur
         
-        // Se foi foto, já abre a foto em tela cheia pra ele
-        if (checkoutData?.type === 'photo') {
-            setViewingMedia(checkoutData.itemInfo);
+        // Se foi foto, abre ela em tela cheia na hora
+        if (type === 'photo') {
+            setViewingMedia(itemInfo);
             setLiked(false);
-        } else if (checkoutData?.type === 'video') {
+        } else if (type === 'video') {
             setVideoDesc("");
         }
-    }, 3000);
+    }, 2000);
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
@@ -181,16 +223,16 @@ export default function ModelProfile() {
 
       <div className="max-w-7xl mx-auto p-8">
         
-        {/* VÍDEOS POR ENCOMENDA */}
+        {/* CARD VÍDEOS */}
         <div className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 mb-12 flex flex-col md:flex-row gap-8 items-center shadow-2xl relative overflow-hidden">
             <div className="flex-1">
                 <div className="flex items-center gap-2 mb-4 text-[#D946EF]"><Video size={20} fill="currentColor"/><h2 className="text-xl font-black uppercase italic">Vídeos Exclusivos</h2></div>
-                <p className="text-white/60 text-sm italic mb-6">Peça um vídeo personalizado. O valor é creditado após a aprovação e você recebe o link do Drive aqui no seu Hub Pessoal. Entrega em 2 dias úteis.</p>
+                <p className="text-white/60 text-sm italic mb-6">Peça um vídeo personalizado. O valor é garantido pelo sistema, se a musa não enviar em 2 dias úteis, você recebe estorno.</p>
             </div>
             <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); setShowVideoModal(true); }} className="w-full md:w-auto bg-white text-black px-10 py-6 rounded-3xl font-black uppercase text-xs hover:bg-[#D946EF] hover:text-white transition-all shadow-xl">Encomendar Vídeo</button>
         </div>
 
-        {/* GALERIA DE FOTOS VIP */}
+        {/* GALERIA DE FOTOS */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {media.map((item) => {
             const isUnlocked = item.price === 0 || unlockedIds.includes(item.id);
@@ -206,12 +248,12 @@ export default function ModelProfile() {
                     {!isUnlocked && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                             <Lock size={24} className="text-[#D946EF] mb-2"/>
-                            <div className="bg-[#D946EF] px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-all">Liberar R$ {item.price.toFixed(2)}</div>
+                            <div className="bg-[#D946EF] px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-all">Desbloquear R$ {item.price.toFixed(2)}</div>
                         </div>
                     )}
                     {item.price === 0 && <div className="absolute top-5 left-5 bg-emerald-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Livre</div>}
                 </div>
-                {/* Legenda fora do Blur, nítida e estilizada */}
+                {/* Legenda visível e nítida abaixo da foto */}
                 {item.caption && <p className="text-xs leading-relaxed italic px-4 text-white/70">{item.caption}</p>}
               </div>
             );
@@ -219,7 +261,7 @@ export default function ModelProfile() {
         </div>
       </div>
 
-      {/* MODAL FAZER PEDIDO DE VÍDEO */}
+      {/* MODAL PEDIDO VÍDEO */}
       {showVideoModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-xl">
             <div className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3.5rem] w-full max-w-lg shadow-2xl relative">
@@ -228,11 +270,11 @@ export default function ModelProfile() {
                 <div className="grid grid-cols-3 gap-2 mb-8">
                     {[3, 5, 10].map(d => (
                         <button key={d} onClick={() => setSelectedDuration(d as any)} className={`py-4 rounded-2xl border text-[10px] font-black transition-all ${selectedDuration === d ? 'bg-[#D946EF] border-[#D946EF] text-white shadow-lg' : 'bg-black border-white/10 text-white/40 hover:bg-white/5'}`}>
-                            {d} MIN<br/>R$ {pricing[d as keyof typeof pricing].toFixed(2)}
+                            {d} MIN<br/><span className="text-[8px] opacity-70">R$ {pricing[d as keyof typeof pricing].toFixed(2)}</span>
                         </button>
                     ))}
                 </div>
-                <textarea value={videoDesc} onChange={(e) => setVideoDesc(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none focus:border-[#D946EF] h-40 resize-none mb-8" placeholder="Descreva todos os detalhes da sua encomenda..."/>
+                <textarea value={videoDesc} onChange={(e) => setVideoDesc(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none focus:border-[#D946EF] h-40 resize-none mb-8" placeholder="Descreva os detalhes da sua encomenda..."/>
                 <button onClick={handleProceedToVideoCheckout} className="w-full bg-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center justify-center gap-3 hover:bg-[#f062ff] transition-all active:scale-95">
                     <QrCode size={18}/> Ir para Pagamento R$ {pricing[selectedDuration].toFixed(2)}
                 </button>
@@ -240,7 +282,7 @@ export default function ModelProfile() {
         </div>
       )}
 
-      {/* TELA DE CHECKOUT PIX (COM INTEGRAÇÃO DA API) */}
+      {/* TELA DE CHECKOUT PUSHINPAY (REALISTA E POLLED) */}
       {checkoutData && (
           <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
              <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-10 rounded-[3.5rem] w-full max-w-md text-center relative shadow-[0_0_50px_rgba(217,70,239,0.2)]">
@@ -258,7 +300,7 @@ export default function ModelProfile() {
                     <>
                         <QrCode size={50} className="text-[#D946EF] mx-auto mb-6" />
                         <h2 className="text-2xl font-black uppercase italic mb-2">Pague com PIX</h2>
-                        <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">O conteúdo será liberado na hora.</p>
+                        <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Aguardando Pagamento PushinPay...</p>
                         
                         <div className="bg-white/5 border border-white/10 p-6 rounded-3xl mb-8 flex flex-col items-center">
                             <div className="text-4xl font-black text-white mb-2 tracking-tighter">R$ {checkoutData.price.toFixed(2)}</div>
@@ -273,7 +315,8 @@ export default function ModelProfile() {
                         ) : pixData ? (
                             <div className="animate-in zoom-in duration-500">
                                 <div className="w-56 h-56 bg-white mx-auto rounded-[2rem] flex items-center justify-center p-3 shadow-2xl mb-6">
-                                    <img src={`data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full rounded-xl" />
+                                    {/* MUDANÇA: Exibe base64 de imagem padrão da Pushinpay */}
+                                    <img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full rounded-xl" />
                                 </div>
                                 <button onClick={() => { navigator.clipboard.writeText(pixData.qrCodeCopiaCola); alert("Código Copia e Cola copiado!"); }} className="w-full bg-white/10 text-white py-5 rounded-2xl font-black uppercase text-xs hover:bg-[#D946EF] transition-all flex items-center justify-center gap-3">
                                     <Copy size={16}/> Copiar PIX Copia e Cola
