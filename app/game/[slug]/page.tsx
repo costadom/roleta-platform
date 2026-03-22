@@ -33,8 +33,6 @@ export default function GamePage() {
   const [pixLoading, setPixLoading] = useState(false);
   const [pixPaid, setPixPaid] = useState(false); 
   const [copied, setCopied] = useState(false);
-  
-  // 🔥 CORREÇÃO: Guarda o ID do carrinho atual para cancelar se ele pagar
   const [activeCartId, setActiveCartId] = useState<string | null>(null);
 
   const [rotation, setRotation] = useState(0);
@@ -48,51 +46,52 @@ export default function GamePage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  // 🔥 O SEGREDO DA VELOCIDADE ESTÁ AQUI: Tudo carrega junto agora!
   useEffect(() => {
-    async function fetchData() {
+    async function initializeData() {
       if (!slug || !supabaseUrl) return;
+      const isLoggedIn = localStorage.getItem("labz_player_logged");
+      const savedWhatsapp = localStorage.getItem("labz_player_phone");
+
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        
+        // 1. Pega ID da Modelo (Super Rápido)
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
-        if (!mId) return;
+        
+        if (!mId) {
+           setLoading(false);
+           return;
+        }
 
-        const [resPrizes, resConfig] = await Promise.all([
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }),
-          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers })
-        ]);
+        // 2. Dispara Prêmios, Configurações e Checagem de Usuário AO MESMO TEMPO
+        const fetchPromises: any[] = [
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
+          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
+        ];
 
-        setPrizes(await resPrizes.json());
-        const dataConfig = await resConfig.json();
+        if (isLoggedIn === "true" && savedWhatsapp) {
+          fetchPromises.push(
+            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers }).then(r => r.json())
+          );
+        }
+
+        const results = await Promise.all(fetchPromises);
+
+        // Aplica os Prêmios e Configs
+        setPrizes(results[0] || []);
+        const dataConfig = results[1];
         if (dataConfig?.[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
         }
-      } catch (e) { console.error(e); } finally { setLoading(false); }
-    }
-    fetchData();
-    if (typeof window !== "undefined") {
-      spinAudioRef.current = new Audio("/sounds/spin.mp3");
-      winAudioRef.current = new Audio("/sounds/gemido.mp3");
-    }
-  }, [slug]);
 
-  useEffect(() => {
-    async function checkAccess() {
-      const isLoggedIn = localStorage.getItem("labz_player_logged");
-      const savedWhatsapp = localStorage.getItem("labz_player_phone");
-
-      if (isLoggedIn === "true" && savedWhatsapp) {
-        try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
-          const mId = (await resMod.json())[0]?.id;
-
-          const resAll = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers });
-          const dataAll = await resAll.json();
+        // Aplica a autorização se tiver retornado usuário
+        if (results.length > 2) {
+          const dataAll = results[2] || [];
           setAllAssociations(dataAll);
-
           const currentPlayer = dataAll.find((p: any) => p.model_id === mId);
           if (currentPlayer && currentPlayer.full_name && currentPlayer.nickname) {
             setPlayer(currentPlayer);
@@ -101,13 +100,22 @@ export default function GamePage() {
           } else {
             setIsAuthorized(false);
           }
-        } catch (e) {}
-      }
-    }
-    if (prizes.length > 0) checkAccess();
-  }, [slug, prizes]);
+        } else {
+          setIsAuthorized(false);
+        }
 
-  // 🔥 MONITORAMENTO DE PIX APROVADO + BAIXA NO CARRINHO ABANDONADO
+      } catch (e) { console.error(e); } finally { setLoading(false); }
+    }
+
+    initializeData();
+
+    if (typeof window !== "undefined") {
+      spinAudioRef.current = new Audio("/sounds/spin.mp3");
+      winAudioRef.current = new Audio("/sounds/gemido.mp3");
+    }
+  }, [slug]);
+
+  // Monitoramento de pagamento aprovado
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -116,12 +124,9 @@ export default function GamePage() {
             const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
             const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
             const data = await res.json();
-            
             if (data[0]?.credits > player.credits) {
               setPixPaid(true);
               setPlayer({ ...player, credits: data[0].credits });
-              
-              // Se ele pagou, marca o carrinho como 'pago' para não ir pro Admin
               if (activeCartId) {
                 await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
                   method: 'PATCH',
@@ -144,7 +149,7 @@ export default function GamePage() {
     setPixPaid(false);
     setActiveCartId(null);
     
-    // 🔥 ENVIANDO O CARRINHO ABANDONADO PARA O BANCO E PEGANDO O ID
+    // Registra o carrinho abandonado no banco
     try {
       const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
         method: 'POST',
