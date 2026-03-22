@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Loader2, Play, ArrowLeft, Camera, Gamepad2, X, Video, Clock, 
-  CheckCircle, Wallet, HelpCircle, Heart, User, ExternalLink, Image as ImageIcon
+  CheckCircle, Wallet, HelpCircle, Heart, User, Image as ImageIcon
 } from "lucide-react";
 
 export default function PlayerPersonalHub() {
@@ -30,35 +30,44 @@ export default function PlayerPersonalHub() {
         const logged = localStorage.getItem("labz_player_logged") === "true";
         const phone = localStorage.getItem("labz_player_phone");
         
-        if (!logged || !phone) { 
-            router.push('/'); 
-            return; 
-        }
+        if (!logged || !phone) { router.push('/'); return; }
         setPlayerPhone(phone);
 
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
+        // 1. Busca Contas do Jogador (Blindado contra erros de relação)
         const resPlayers = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${phone}&select=id,credits,model_id,nickname,Models(slug,Configs(model_name,profile_url))`, { headers }).then(r => r.json());
-        
         const playerAccounts = Array.isArray(resPlayers) ? resPlayers : [];
         setAssociations(playerAccounts);
 
         const playerIds = playerAccounts.map(p => p.id);
-
         if (playerIds.length > 0) {
             const idsString = playerIds.join(',');
 
-            const [resGallery, resVideos] = await Promise.all([
-              fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${idsString})&select=*,Media(url,caption,price,Models(slug,Configs(model_name,profile_url)))&order=created_at.desc`, { headers }).then(r => r.json()),
-              fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${idsString})&select=*,Models(slug,Configs(model_name,profile_url))&order=created_at.desc`, { headers }).then(r => r.json())
-            ]);
+            // 2. Busca Vídeos (Tenta por player_id, se der erro 400, tenta por player_phone)
+            let vids = [];
+            const resV1 = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${idsString})&select=*,Models(slug,Configs(model_name,profile_url))&order=created_at.desc`, { headers });
+            if (resV1.ok) {
+                vids = await resV1.json();
+            } else {
+                const resV2 = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_phone=eq.${encodeURIComponent(phone)}&select=*,Models(slug,Configs(model_name,profile_url))&order=created_at.desc`, { headers });
+                if (resV2.ok) vids = await resV2.json();
+            }
+            setVideoOrders(Array.isArray(vids) ? vids.filter(v => v.status !== 'pendente') : []);
 
-            setUnlockedGallery(Array.isArray(resGallery) ? resGallery : []);
-            const validVideos = Array.isArray(resVideos) ? resVideos.filter(v => v.status !== 'pendente') : [];
-            setVideoOrders(validVideos);
+            // 3. Busca Fotos Desbloqueadas (Mesma proteção anti-erro 400)
+            let pics = [];
+            const resP1 = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${idsString})&select=*,Media(url,caption,price,Models(slug,Configs(model_name,profile_url)))&order=created_at.desc`, { headers });
+            if (resP1.ok) {
+                pics = await resP1.json();
+            } else {
+                const resP2 = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone)}&select=*,Media(url,caption,price,Models(slug,Configs(model_name,profile_url)))&order=created_at.desc`, { headers });
+                if (resP2.ok) pics = await resP2.json();
+            }
+            setUnlockedGallery(Array.isArray(pics) ? pics : []);
         }
 
-      } catch (e) { console.error(e); } finally { setInitialLoading(false); }
+      } catch (e) { console.error("Erro geral no Hub:", e); } finally { setInitialLoading(false); }
     }
     loadData();
   }, [router]);
@@ -84,25 +93,26 @@ export default function PlayerPersonalHub() {
 
       <main className="max-w-7xl mx-auto p-6 sm:p-10 mt-28">
         
-        {/* SEÇÃO 1: MUSAS ASSOCIADAS (CORREÇÃO DE LAYOUT) */}
+        {/* SEÇÃO 1: MUSAS ASSOCIADAS (LAYOUT CORRIGIDO PARA CELULAR) */}
         <section className="mb-16 animate-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-lg font-black uppercase text-white/40 mb-6 flex items-center gap-3 tracking-widest"><Wallet size={18}/> Minhas Musas & Saldos</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {associations.length > 0 ? associations.map((assoc: any) => {
-                    const modelConfig = assoc.Models?.Configs?.[0];
+                    const modelConfig = Array.isArray(assoc.Models?.Configs) ? assoc.Models.Configs[0] : assoc.Models?.Configs;
                     const modelName = modelConfig?.model_name || assoc.Models?.slug;
                     return (
-                        <div key={assoc.id} className="bg-[#0a0a0a] border border-white/5 p-5 rounded-[2rem] shadow-xl flex flex-col justify-between gap-5 relative overflow-hidden group hover:border-[#D946EF]/30 transition-all min-h-[140px]">
-                            <div className="flex items-center gap-4 relative z-10">
-                                <div className="w-12 h-12 rounded-full bg-black border-2 border-[#D946EF] overflow-hidden shrink-0 shadow-[0_0_15px_rgba(217,70,239,0.3)]">
-                                    {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover"/> : <User className="w-full h-full p-2 text-[#D946EF]"/>}
+                        <div key={assoc.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2rem] shadow-xl flex flex-col relative overflow-hidden group hover:border-[#D946EF]/30 transition-all">
+                            <div className="flex items-center gap-4 mb-6 relative z-10">
+                                <div className="w-14 h-14 rounded-full bg-black border-2 border-[#D946EF] overflow-hidden shrink-0 shadow-[0_0_15px_rgba(217,70,239,0.3)] flex items-center justify-center">
+                                    {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover"/> : <User className="w-8 h-8 text-[#D946EF]"/>}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-bold text-[#D946EF] uppercase tracking-widest mb-0.5 truncate">{modelName}</p>
-                                    <h3 className="text-xl font-black text-white tracking-tighter truncate">{assoc.credits} CR</h3>
+                                    <p className="text-[10px] font-bold text-[#D946EF] uppercase tracking-widest mb-1 truncate">{modelName}</p>
+                                    <h3 className="text-2xl font-black text-white tracking-tighter truncate">{assoc.credits} CR</h3>
                                 </div>
                             </div>
-                            <div className="flex gap-2 relative z-10">
+                            {/* Borda superior sutil para afastar os botões do texto, garantindo espaço no celular */}
+                            <div className="flex gap-2 relative z-10 mt-auto pt-4 border-t border-white/5">
                                 <button onClick={() => router.push(`/game/${assoc.Models?.slug}`)} className="flex-1 bg-[#D946EF] text-white py-3 rounded-xl text-[9px] font-black uppercase shadow-lg hover:scale-[1.03] transition-all flex items-center justify-center gap-1.5"><Gamepad2 size={14}/> Jogar</button>
                                 <button onClick={() => router.push(`/profile/${assoc.Models?.slug}`)} className="flex-1 bg-white/5 text-white py-3 rounded-xl text-[9px] font-black uppercase border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center gap-1.5"><User size={14}/> Hub</button>
                             </div>
@@ -119,15 +129,15 @@ export default function PlayerPersonalHub() {
             <h2 className="text-lg font-black uppercase text-white/40 mb-6 flex items-center gap-3 tracking-widest"><Video size={18}/> Meus Vídeos Encomendados</h2>
             <div className="grid gap-6">
                 {videoOrders.length > 0 ? videoOrders.map((req) => {
-                    const modelConfig = req.Models?.Configs?.[0];
+                    const modelConfig = Array.isArray(req.Models?.Configs) ? req.Models.Configs[0] : req.Models?.Configs;
                     const modelName = modelConfig?.model_name || req.Models?.slug;
 
                     return (
                     <div key={req.id} className="bg-[#0a0a0a] border border-white/5 p-6 sm:p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-6 shadow-xl relative group overflow-hidden hover:border-white/10 transition-all">
                         <div className="flex-1">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-full border border-[#D946EF]/30 overflow-hidden shrink-0 hidden sm:block">
-                                    {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover"/> : <User className="w-full h-full p-2 text-white/30"/>}
+                                <div className="w-10 h-10 rounded-full border border-[#D946EF]/30 overflow-hidden shrink-0 hidden sm:block flex items-center justify-center bg-white/5">
+                                    {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover"/> : <User className="w-5 h-5 text-white/30"/>}
                                 </div>
                                 <div>
                                     <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mb-1 inline-block ${
@@ -174,7 +184,8 @@ export default function PlayerPersonalHub() {
                 {unlockedGallery.length > 0 ? unlockedGallery.map((item: any) => {
                     const media = item.Media;
                     if (!media) return null;
-                    const modelName = media.Models?.Configs?.[0]?.model_name || media.Models?.slug;
+                    const modelConfig = Array.isArray(media.Models?.Configs) ? media.Models.Configs[0] : media.Models?.Configs;
+                    const modelName = modelConfig?.model_name || media.Models?.slug;
                     return (
                         <div key={item.id} onClick={() => { setViewingMedia(media); setLiked(false); }} className="flex flex-col gap-3 group cursor-pointer">
                             <div className="relative aspect-[3/4] rounded-3xl overflow-hidden border border-white/5 bg-[#0a0a0a] shadow-xl group-hover:border-[#D946EF]/50 transition-all">
@@ -209,7 +220,9 @@ export default function PlayerPersonalHub() {
                     <Heart size={28} fill={liked ? "currentColor" : "none"} />
                 </button>
                 <div>
-                    <p className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{viewingMedia.Models?.Configs?.[0]?.model_name || viewingMedia.Models?.slug}</p>
+                    <p className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">
+                        {Array.isArray(viewingMedia.Models?.Configs) ? viewingMedia.Models.Configs[0]?.model_name : viewingMedia.Models?.Configs?.model_name || viewingMedia.Models?.slug}
+                    </p>
                     <p className="text-sm sm:text-base italic text-white/90 leading-relaxed font-medium">"{viewingMedia.caption}"</p>
                 </div>
              </div>
