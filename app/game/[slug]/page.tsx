@@ -22,26 +22,18 @@ export default function GamePage() {
   const [modelName, setModelName] = useState("");
   const [loading, setLoading] = useState(true);
   
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  // Apenas precisamos de saber se o modal está aberto ou não.
   const [showAuthModal, setShowAuthModal] = useState(false);
-  
-  // Flag para garantir que o componente só renderize no lado do cliente
-  const [isMounted, setIsMounted] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-    
-    // Verifica Login
+    // 1. Verifica se está logado para uso posterior (se clicar)
     const isLoggedIn = localStorage.getItem("labz_player_logged");
-    if (!isLoggedIn) {
-      setIsAuthorized(false);
-      setShowAuthModal(true);
-    } else {
+    if (isLoggedIn) {
       setIsAuthorized(true);
-      setShowAuthModal(false);
     }
 
-    // Busca dados
+    // 2. Busca a foto da modelo (Mantido simples)
     async function fetchModelData() {
       if (!slug) return;
       try {
@@ -76,20 +68,26 @@ export default function GamePage() {
     fetchModelData();
   }, [slug]);
 
-  if (!isMounted) return null; // Previne o erro de reidratação
+  // Função que intercepta cliques na área do jogo
+  const handleGameInteraction = (e: React.MouseEvent) => {
+    if (!isAuthorized) {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowAuthModal(true);
+    }
+  };
 
-  const handleReturnToVitrine = () => {
-    window.location.href = "/vitrine"; 
+  const closeAuthModal = () => {
+    setShowAuthModal(false);
   };
 
   return (
     <div className="min-h-screen relative font-sans overflow-x-hidden bg-black">
       
-      {/* 1. Imagem de Fundo Dinâmica */}
+      {/* Imagem de Fundo Dinâmica */}
       {backgroundUrl && (
         <div 
-            className={`fixed inset-0 bg-cover bg-center z-0 transition-all duration-500 
-            ${!isAuthorized ? 'blur-[8px] opacity-60' : 'animate-in fade-in'}`}
+            className="fixed inset-0 bg-cover bg-center z-0 animate-in fade-in"
             style={{ backgroundImage: `url(${backgroundUrl})` }}
         />
       )}
@@ -97,24 +95,27 @@ export default function GamePage() {
       <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-0 pointer-events-none" />
       <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-[#D946EF]/20 blur-[100px] rounded-full pointer-events-none z-0" />
 
-      {/* CONTEÚDO DA ROLETA */}
-      {/* Removemos o pointer-events-none total para não quebrar a roleta, aplicamos só se não tiver logado */}
-      <div className={`relative z-10 w-full min-h-screen flex flex-col transition-all duration-300 ${!isAuthorized ? 'blur-[4px] opacity-50 select-none' : ''}`} style={!isAuthorized ? { pointerEvents: 'none' } : {}}>
-        
+      {/* CONTEÚDO DA ROLETA 
+        Não usamos blur ou opacity condicional aqui, a roleta renderiza sempre.
+        Usamos onClickCapture para interceptar o clique ANTES de chegar à roleta.
+      */}
+      <div 
+        className="relative z-10 w-full min-h-screen flex flex-col"
+        onClickCapture={handleGameInteraction}
+      >
         <div className="w-full p-4 flex justify-between items-center max-w-md mx-auto">
           <Link 
             href={`/${slug}`} 
-            className="w-10 h-10 bg-black/50 border border-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all pointer-events-auto"
-            style={{ pointerEvents: 'auto' }} // Garante que a seta de voltar sempre funcione
+            className="w-10 h-10 bg-black/50 border border-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all"
           >
             <ArrowLeft size={18} />
           </Link>
           
           <div className="flex gap-2">
-            <Link href="/" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all" style={{ pointerEvents: 'auto' }}>
+            <Link href="/" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all">
               <Home size={18} />
             </Link>
-            <Link href="/perfil" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all" style={{ pointerEvents: 'auto' }}>
+            <Link href="/perfil" className="w-10 h-10 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-[#D946EF] transition-all">
               <User size={18} />
             </Link>
           </div>
@@ -141,8 +142,8 @@ export default function GamePage() {
       </div>
 
       {/* ÁREA DE BLOQUEIO (MODAL + BOTÃO DO PERFIL) */}
-      {!isAuthorized && showAuthModal && (
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center px-4 pointer-events-none">
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center px-4 bg-black/80 backdrop-blur-md">
           
           {/* BOTÃO PARA VISITAR O PERFIL */}
           <button 
@@ -152,11 +153,10 @@ export default function GamePage() {
             <ExternalLink size={16} className="text-[#D946EF]" /> Visitar Perfil da Modelo
           </button>
 
-          {/* O modal tem pointer-events-auto dentro dele */}
           <div className="pointer-events-auto w-full max-w-md">
             <AuthModal 
               isOpen={true} 
-              onClose={handleReturnToVitrine} 
+              onClose={closeAuthModal} 
             />
           </div>
         </div>
