@@ -59,6 +59,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         if (dataCheck && dataCheck.length > 0) {
           const userBase = dataCheck[0];
 
+          // 🛑 BLOQUEIO DE MIGRAÇÃO: Usuário antigo sem Nome Completo ou Nickname
           if (!userBase.full_name || !userBase.nickname) {
             setPhone(userBase.whatsapp);
             setEmail(userBase.email || "");
@@ -73,9 +74,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               method: "POST", headers,
               body: JSON.stringify({
                 whatsapp: cleanPhone, email: userBase.email, cpf: userBase.cpf,
-                password: userBase.password, name: userBase.name,
-                full_name: userBase.full_name, nickname: userBase.nickname,
-                model_id: currentModelId, credits: 0
+                password: userBase.password, full_name: userBase.full_name, nickname: userBase.nickname,
+                model_id: currentModelId, credits: 0, name: userBase.nickname
               })
             });
           }
@@ -83,7 +83,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           localStorage.setItem("labz_player_logged", "true");
           localStorage.setItem("labz_player_phone", cleanPhone);
           window.location.reload();
-        } else setError("Dados incorretos.");
+        } else setError("WhatsApp ou senha incorretos.");
       } 
       else {
         const payload = {
@@ -106,7 +106,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         localStorage.setItem("labz_player_phone", cleanPhone);
         window.location.reload();
       }
-    } catch { setError("Erro no processamento."); } finally { setLoading(false); }
+    } catch { setError("Erro ao processar dados."); } finally { setLoading(false); }
   };
 
   return (
@@ -114,7 +114,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 shadow-[0_0_60px_rgba(217,70,239,0.3)] relative">
         {view !== "update" && <button onClick={onClose} className="absolute top-6 right-6 text-white/20 hover:text-white"><X size={24} /></button>}
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-white uppercase italic">Savanah <span className="text-[#D946EF]">Labz</span></h2>
+          <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Savanah <span className="text-[#D946EF]">Labz</span></h2>
           <p className="text-[10px] text-[#FFD700] uppercase font-bold tracking-[0.3em] mt-2">{view === "update" ? "🚀 Finalize seu Perfil VIP" : "Área Exclusiva"}</p>
         </div>
         {view !== "update" && (
@@ -124,23 +124,26 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </div>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="tel" placeholder="WhatsApp (Login)" value={phone} onChange={e => setPhone(e.target.value)} required disabled={view === "update"} className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none" /></div>
+          <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="tel" placeholder="WhatsApp (Login)" value={phone} onChange={e => setPhone(e.target.value)} required disabled={view === "update"} className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
           {view !== "login" && (
             <>
-              <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="text" placeholder="Nome Completo" value={fullName} onChange={e => setFullName(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none" /></div>
-              <div className="relative"><Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="text" placeholder="Nickname (Apelido)" value={nickname} onChange={e => setNickname(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none" /></div>
-              <div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none" /></div>
-              <div className="relative"><FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="text" placeholder="CPF" value={cpf} onChange={e => handleCpf(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none" /></div>
+              <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="text" placeholder="Nome Completo" value={fullName} onChange={e => setFullName(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
+              <div className="relative"><Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="text" placeholder="Nickname (Apelido)" value={nickname} onChange={e => setNickname(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
+              <div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
+              <div className="relative"><FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="text" placeholder="CPF" value={cpf} onChange={e => handleCpf(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
             </>
           )}
           {view === "login" && (
-            <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type={showPassword ? "text" : "password"} placeholder="Sua Senha" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white text-sm outline-none" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
+            <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type={showPassword ? "text" : "password"} placeholder="Sua Senha" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white text-sm outline-none focus:border-[#D946EF]" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
           )}
           {view === "register" && (
-            <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="password" placeholder="Crie uma Senha" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none" /></div>
+            <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="password" placeholder="Crie uma Senha Forte" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
           )}
-          {error && <p className="text-red-500 text-[10px] text-center font-black uppercase bg-red-500/10 py-3 rounded-xl">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-[#D946EF] to-[#9c18ae] text-white font-black uppercase py-5 rounded-2xl shadow-lg active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" /> : "Concluir e Acessar"}</button>
+          {view !== "login" && (
+             <div className="px-1"><label className="flex items-start gap-3 cursor-pointer"><input type="checkbox" checked={ageConfirmed} onChange={e => setAgeConfirmed(e.target.checked)} required className="mt-1 accent-[#D946EF]" /><span className="text-[9px] text-white/30 uppercase font-black">Confirmo +18 anos e aceito os termos.</span></label></div>
+          )}
+          {error && <p className="text-red-500 text-[10px] text-center font-black uppercase bg-red-500/10 py-3 rounded-xl border border-red-500/20">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-[#D946EF] to-[#9c18ae] text-white font-black uppercase py-5 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center">{loading ? <Loader2 className="animate-spin" /> : view === "update" ? "Finalizar Cadastro" : "Entrar na Roleta"}</button>
         </form>
       </div>
     </div>
