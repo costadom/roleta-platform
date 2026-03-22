@@ -6,7 +6,7 @@ import {
   Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle 
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -29,7 +29,6 @@ function DashboardContent() {
   const [metaValue, setMetaValue] = useState(0);
   const [metaPrize, setMetaPrize] = useState("");
 
-  // --- ABAS (SUAS ORIGINAIS + NOVAS) ---
   const [activeTab, setActiveTab] = useState<"finance" | "prizes" | "players" | "history" | "ranking" | "hub" | "gallery" | "video_requests">("finance");
   
   const [prizes, setPrizes] = useState<any[]>([]);
@@ -61,10 +60,9 @@ function DashboardContent() {
 
   const [modelName, setModelName] = useState("");
   const [spinCost, setSpinCost] = useState<number>(2);
-  
   const [dashboardLoading, setDashboardLoading] = useState(true);
 
-  // --- NOVOS ESTADOS (HUB, GALERIA, VIDEOS) ---
+  // NOVOS ESTADOS
   const [bio, setBio] = useState("");
   const [savingHub, setSavingHub] = useState(false);
   const [mediaList, setMediaList] = useState<any[]>([]);
@@ -170,7 +168,6 @@ function DashboardContent() {
     setModelBalance(0); setIsWithdrawing(false); alert("Solicitado!");
   };
 
-  // Funções de Peso da Roleta (Suas originais)
   const checkIsFake = (prize: any) => { const upper = String(prize.name).toUpperCase(); return Number(prize.weight) <= 0.05 || upper.includes("PIX") || upper.includes("PRESENCIAL"); };
   const movePrize = async (index: number, direction: 'up' | 'down') => {
     const newPrizes = [...prizes]; const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -181,7 +178,40 @@ function DashboardContent() {
     await Promise.all(updates.map((u:any) => fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${u.id}`, { method:"PATCH", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":"application/json"}, body:JSON.stringify({weight:u.weight}) })));
   };
 
-  if (dashboardLoading) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase animate-pulse">Sincronizando...</div>;
+  const handleProfileFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB!");
+    setSelectedProfileFile(file); setProfilePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleBgFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB!");
+    setSelectedBgFile(file); setBgPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleSaveProfileImage = async () => {
+    if (!selectedProfileFile) return; setUploading(true);
+    const fileName = `profile_${modelId}_${Date.now()}.${selectedProfileFile.name.split('.').pop()}`;
+    await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": selectedProfileFile.type }, body: selectedProfileFile });
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
+    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ profile_url: publicUrl }) });
+    setCurrentProfile(publicUrl); setSelectedProfileFile(null); setUploading(false); alert("Perfil Atualizado!");
+  };
+
+  const handleSaveBgImage = async () => {
+    if (!selectedBgFile) return; setUploading(true);
+    const fileName = `bg_${modelId}_${Date.now()}.${selectedBgFile.name.split('.').pop()}`;
+    await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": selectedBgFile.type }, body: selectedBgFile });
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
+    await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: publicUrl }) });
+    setCurrentBg(publicUrl); setSelectedBgFile(null); setUploading(false); alert("Fundo Atualizado!");
+  };
+
+  if (!modelId) return null;
+  if (dashboardLoading) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase tracking-[0.3em] animate-pulse">Sincronizando...</div>;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24">
@@ -191,7 +221,7 @@ function DashboardContent() {
           <div className="bg-[#0f0f0f] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
             <div className="flex items-center gap-3 mb-6 shrink-0"><div className="h-12 w-12 bg-[#FF1493]/20 text-[#FF1493] rounded-full flex items-center justify-center"><FileText size={24}/></div><div><h2 className="text-xl font-black uppercase text-white italic">Termos de Parceria</h2></div></div>
             <div className="flex-1 overflow-y-auto pr-4 space-y-4 text-[11px] text-white/70 leading-relaxed mb-8">
-              <p>A parceria é estruturada em 70% para a Modelo e 30% para a Plataforma. Saques diários (mínimo R$ 20,00).</p>
+              <p>A parceria é estruturada em 70% Modelo e 30% Plataforma. Saques diários (mínimo R$ 20,00).</p>
             </div>
             <button onClick={async () => { await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method:"PATCH", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":"application/json"}, body:JSON.stringify({terms_accepted:true}) }); setTermsAccepted(true); }} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl">Aceitar Termos</button>
           </div>
@@ -209,7 +239,6 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* --- NAVEGAÇÃO DE ABAS (SUA ORIGINAL + NOVAS) --- */}
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-white/30"}`}>Ganhos</button>
           <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/30" : "text-white/30"}`}>Meu Hub</button>
@@ -218,8 +247,6 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("prizes")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "prizes" ? "bg-white/10 text-white" : "text-white/30"}`}>Roleta</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-white/10 text-white" : "text-white/30"}`}>Fãs</button>
         </div>
-
-        {/* --- CONTEÚDO --- */}
 
         {activeTab === "finance" && (
           <div className="space-y-6 animate-in fade-in duration-500">
@@ -248,7 +275,7 @@ function DashboardContent() {
         {activeTab === "hub" && (
             <div className="max-w-3xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl">
-                    <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Meu Perfil Público</h2>
+                    <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Editar Meu Hub Público</h2>
                     <div className="space-y-6">
                         <div>
                             <label className="text-[10px] font-black uppercase text-white/40 mb-3 block ml-2">Biografia</label>
@@ -301,32 +328,64 @@ function DashboardContent() {
 
         {activeTab === "video_requests" && (
             <div className="grid gap-6 animate-in slide-in-from-bottom-4 duration-500">
-                {videoRequests.length > 0 ? videoRequests.map((req) => (
-                    <div key={req.id} className="bg-black border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-8 shadow-2xl relative">
-                        <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-4">
-                                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${req.status === 'pago' ? 'bg-emerald-500 text-black' : 'bg-amber-500 text-black'}`}>{req.status}</span>
-                                <span className="text-[10px] text-white/30 font-bold uppercase">{req.player_name} ({req.player_phone})</span>
+                {videoRequests.length > 0 ? videoRequests.map((req) => {
+                    const dateAccepted = req.accepted_at ? new Date(req.accepted_at) : null;
+                    const isLate = dateAccepted ? (new Date().getTime() - dateAccepted.getTime() > 48 * 60 * 60 * 1000) : false;
+
+                    return (
+                        <div key={req.id} className="bg-black border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-8 shadow-2xl relative overflow-hidden">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${
+                                        req.status === 'pago' ? 'bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 
+                                        req.status === 'aceito' ? 'bg-amber-500 text-black' :
+                                        req.status === 'entregue' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
+                                    }`}>
+                                        {req.status === 'pago' ? 'Novo Pedido Pago' : req.status}
+                                    </span>
+                                    <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">{req.duration} MINUTOS (R$ {req.price})</span>
+                                </div>
+                                <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{req.description}"</p>
+                                
+                                {req.status === 'aceito' && (
+                                    <div className={`mt-6 flex items-center gap-2 ${isLate ? 'text-red-500' : 'text-amber-500'}`}>
+                                        {isLate ? <AlertTriangle size={14}/> : <Clock size={14}/>}
+                                        <p className="text-[9px] font-black uppercase">{isLate ? 'ENTREGA ATRASADA! RISCO DE SALDO NEGATIVO' : 'Você tem até 48h para entregar!'}</p>
+                                    </div>
+                                )}
                             </div>
-                            <p className="text-sm italic text-white/80 leading-relaxed">"{req.description}"</p>
+
+                            <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl border border-white/5 flex flex-col justify-center gap-3">
+                                {req.status === 'pago' && (
+                                    <>
+                                        <button onClick={async () => {
+                                            if(!confirm("Aceitar vídeo? O valor líquido será somado ao seu saldo agora!")) return;
+                                            await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aceito', accepted_at: new Date().toISOString() }) });
+                                            await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ balance: modelBalance + (req.price * 0.7) }) });
+                                            loadData();
+                                        }} className="w-full bg-emerald-500 text-black py-4 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">Aceitar e Receber</button>
+                                        
+                                        <button onClick={async () => {
+                                            if(!confirm("Recusar vídeo? O cliente poderá solicitar o reembolso.")) return;
+                                            await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'recusado' }) });
+                                            loadData();
+                                        }} className="w-full bg-red-500/10 text-red-500 py-4 rounded-xl font-black uppercase text-[10px] hover:bg-red-500 hover:text-white transition-all">Recusar Pedido</button>
+                                    </>
+                                )}
+
+                                {req.status === 'aceito' && (
+                                    <div className="space-y-3">
+                                        <input type="text" placeholder="Link do Drive/Mega" className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-xs outline-none focus:border-emerald-500" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ drive_link: e.target.value, status: 'entregue' }) }); loadData(); } }} />
+                                        <p className="text-[8px] text-white/30 uppercase text-center font-bold">Cole o link e aperte Enter</p>
+                                    </div>
+                                )}
+
+                                {req.status === 'recusado' && <div className="text-red-500 text-[9px] font-black uppercase text-center bg-red-500/5 py-4 rounded-xl border border-red-500/10">Pedido Cancelado</div>}
+                                {req.status === 'entregue' && <div className="text-emerald-500 text-[10px] font-black uppercase text-center bg-emerald-500/5 py-4 rounded-xl border border-emerald-500/10 flex items-center justify-center gap-2"><CheckCircle size={14}/> Entregue</div>}
+                            </div>
                         </div>
-                        <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl border border-white/5">
-                            {req.status === 'solicitado' && (
-                                <div className="space-y-3">
-                                    <input type="number" placeholder="Valor R$" className="w-full bg-black border border-white/10 rounded-xl p-4 text-white font-black" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ price: Number(e.target.value), status: 'precificado' }) }); loadData(); } }} />
-                                    <p className="text-[8px] text-[#FF1493] uppercase text-center font-bold">Defina R$ 15 - 200 e aperte Enter</p>
-                                </div>
-                            )}
-                            {req.status === 'pago' && (
-                                <div className="space-y-3">
-                                    <input type="text" placeholder="Link do Drive" className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-xs" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ drive_link: e.target.value, status: 'entregue' }) }); loadData(); } }} />
-                                    <p className="text-[8px] text-emerald-500 uppercase text-center font-bold">PAGO! Cole o link e aperte Enter</p>
-                                </div>
-                            )}
-                            {req.status === 'entregue' && <div className="text-emerald-500 text-[10px] font-black uppercase text-center py-4">✓ Vídeo Entregue!</div>}
-                        </div>
-                    </div>
-                )) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum pedido recebido.</div>}
+                    );
+                }) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum pedido recebido ainda.</div>}
             </div>
         )}
 
@@ -389,7 +448,6 @@ function DashboardContent() {
         )}
       </div>
 
-      {/* --- MODAL EDITAR SLOT --- */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
@@ -413,8 +471,5 @@ function DashboardContent() {
     </div>
   );
 }
-
-// Funções de Auxílio de Upload (Suas Originais)
-const handleProfileFileChange = (e: any) => {}; // Placeholder
 
 export default function DashboardPage() { return <Suspense fallback={null}><DashboardContent /></Suspense>; }
