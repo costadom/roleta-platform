@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles, User, Key, LayoutGrid } from "lucide-react";
+import { Loader2, Sparkles, User, Key } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
 export default function VitrinePage() {
@@ -22,17 +22,26 @@ export default function VitrinePage() {
         const logged = localStorage.getItem("labz_player_logged") === "true";
         setIsLoggedIn(logged);
 
-        // CORREÇÃO: Busca tudo e filtra no código para garantir que nenhuma musa se perca.
-        const modelsRes = await fetch(`${supabaseUrl}/rest/v1/Models?select=*,Configs(*)`, { headers }).then(r => r.json());
+        // Busca blindada: Se der erro, ele não trava a tela.
+        const res = await fetch(`${supabaseUrl}/rest/v1/Models?select=*,Configs(*)`, { headers });
         
-        const activeModels = Array.isArray(modelsRes) ? modelsRes.filter(m => {
-            const config = m.Configs && m.Configs.length > 0 ? m.Configs[0] : null;
-            return config && config.showcase_visible === true && config.model_name;
-        }) : [];
-        
-        setModels(activeModels);
+        if (res.ok) {
+            const modelsRes = await res.json();
+            const activeModels = Array.isArray(modelsRes) ? modelsRes.filter(m => {
+                // Trata se Configs vier como Array ou Objeto
+                const config = Array.isArray(m.Configs) ? m.Configs[0] : m.Configs;
+                return config && config.showcase_visible === true && config.model_name;
+            }) : [];
+            setModels(activeModels);
+        } else {
+            console.error("Erro na resposta do banco:", await res.text());
+        }
 
-      } catch (err) { console.error(err); } finally { setInitialLoading(false); }
+      } catch (err) { 
+          console.error("Falha ao buscar musas:", err); 
+      } finally { 
+          setInitialLoading(false); // Garante que a tela de loading sempre suma
+      }
     }
     fetchData();
   }, []);
@@ -72,7 +81,7 @@ export default function VitrinePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {models.length > 0 ? models.map((m) => {
-            const config = m.Configs?.[0];
+            const config = Array.isArray(m.Configs) ? m.Configs[0] : m.Configs;
             return (
               <div key={m.id} className="relative aspect-[3/4] rounded-[2.5rem] overflow-hidden group border border-white/5 bg-[#0a0a0a] shadow-2xl">
                 <img src={config?.profile_url} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-1000 opacity-80 group-hover:opacity-100" />
