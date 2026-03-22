@@ -46,9 +46,9 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=*&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }), 
+        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers }) 
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?order=created_at.desc&limit=50`, { headers })
       ]);
 
       const dataHist = resHist.ok ? await resHist.json() : [];
@@ -58,13 +58,11 @@ export default function SuperAdmin() {
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
       
-      // Filtra candidaturas ignorando maiúsculas/minúsculas
       if (resApp.ok) {
         const apps = await resApp.json();
         setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
       }
       
-      // Filtra carrinhos + regra dos 3 minutos ignorando maiúsculas/minúsculas
       if (resAbandon.ok) {
         const carts = await resAbandon.json();
         const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
@@ -267,26 +265,19 @@ export default function SuperAdmin() {
 
   const pendingWithdrawals = withdrawals.filter(w => w.status === 'pendente');
 
-  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
+  if (initialLoading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-white font-sans"><Loader2 className="animate-spin text-[#FF1493] mb-4" size={40}/><h1 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 animate-pulse">Sincronizando Sistema...</h1></div>
+  );
 
   if (!isLogged) return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl">
-      <ShieldCheck size={40} className="text-[#FF1493] mx-auto mb-6"/><h1 className="text-xl font-black uppercase text-white mb-8 italic">PAINEL MASTER</h1>
-      <form onSubmit={handleLogin} className="space-y-4 text-left">
-        <input type="email" placeholder="EMAIL MASTER" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminUser} onChange={e => setAdminUser(e.target.value)} />
-        <div className="relative"><input type={showPass ? "text" : "password"} placeholder="SENHA" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white" value={adminPass} onChange={e => setAdminPass(e.target.value)} /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
-        <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase">Acessar</button>
-      </form>
-    </div></div>
+    <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl relative overflow-hidden"><div className="absolute -top-20 -left-20 w-40 h-40 bg-[#FF1493]/10 blur-[80px]" /><ShieldCheck size={40} className="text-[#FF1493] mx-auto mb-6 relative z-10"/><h1 className="text-xl font-black uppercase text-white mb-8 italic relative z-10"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><form onSubmit={handleLogin} className="space-y-4 text-left relative z-10"><input type="email" placeholder="EMAIL MASTER" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none focus:border-[#FF1493]" value={adminUser} onChange={e => setAdminUser(e.target.value)} /><div className="relative"><input type={showPass ? "text" : "password"} placeholder="SENHA MESTRE" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none focus:border-[#FF1493]" value={adminPass} onChange={e => setAdminPass(e.target.value)} /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div><button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-[#FF1493]/20 hover:scale-[1.02] active:scale-95 transition-all">Acessar Painel Master</button></form></div></div>
   );
 
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
       <div className="max-w-7xl mx-auto">
-        
-        {/* HEADER COM O BOTAO CRIAR MANUAL RESTAURADO */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
-          <div><h1 className="text-4xl font-black uppercase italic"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1">SISTEMA MASTER</p></div>
+          <div><h1 className="text-4xl font-black uppercase italic drop-shadow-[0_0_15px_rgba(255,20,147,0.3)]"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1">SISTEMA DE GESTÃO V.3001 MASTER</p></div>
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button>
             <button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button>
@@ -294,24 +285,27 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* PIX ABANDONADOS */}
+        {/* 🔥 ABA VERMELHA: RECUPERAÇÃO DE PIX 🔥 */}
         {abandoned.length > 0 && (
-          <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem]">
-            <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Mais de 3 minutos)</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
+            <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {abandoned.map(cart => (
                 <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl flex flex-col justify-between">
                   <div className="mb-4">
-                     <p className="text-[12px] text-white font-black uppercase">{cart.player_name}</p>
-                     <p className="text-[10px] text-red-400 font-bold mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
-                     <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
+                    <p className="text-[12px] text-white uppercase font-black">{cart.player_name}</p>
+                    <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
+                    <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
                   </div>
                   <div className="flex gap-2">
-                     <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi que o PIX na roleta da ${cart.model_name} não concluiu...`)}`, '_blank')} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1"><MessageCircle size={14}/> Chamar no Zap</button>
-                     <button onClick={async () => {
-                       await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
-                       fetchData();
-                     }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all"><X size={14}/></button>
+                    <button onClick={() => {
+                      const msg = `Oii ${cart.player_name}! Vi aqui que você tentou recarregar na roleta da ${cart.model_name}, mas o PIX acabou não concluindo 😕\n\nA roleta dela tá pegando fogo hoje e tem prêmios VIP liberadinhos! 🔥 Quer que eu te mande o Pix Copia e Cola de novo pra você não perder o bônus de créditos e tentar a sorte?`;
+                      window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+                    }} className="flex-1 bg-emerald-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1"><MessageCircle size={14}/> Chamar no Zap</button>
+                    <button onClick={async () => {
+                      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
+                      fetchData();
+                    }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all" title="Ignorar / Limpar"><X size={14}/></button>
                   </div>
                 </div>
               ))}
@@ -319,27 +313,34 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* SOLICITAÇÕES DE SAQUE */}
         {pendingWithdrawals.length > 0 && (
-          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem]">
-            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2"><AlertCircle size={16}/> Saques Pendentes</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {pendingWithdrawals.map(w => (
-                <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl">
-                  <p className="text-[10px] text-white/40 uppercase font-black">Modelo: {models.find(m => m.id === w.model_id)?.slug}</p>
-                  <p className="text-xl font-black mb-4">R$ {Number(w.amount).toFixed(2)}</p>
-                  <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, 'Modelo', '')} className="w-full bg-amber-500 text-black py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
-                </div>
-              ))}
+          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
+            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {pendingWithdrawals.length} Saques (PIX) Solicitados</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingWithdrawals.map(w => {
+                const model = models.find(m => m.id === w.model_id);
+                return (
+                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                      <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
+                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, model?.slug || 'Modelo', model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                      <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves PIX:</p>
+                      <p className="text-[10px] font-mono text-emerald-400 break-all mb-1">1: {model?.pix_key_1 || 'N/A'}</p>
+                      <p className="text-[10px] font-mono text-white/50 break-all">2: {model?.pix_key_2 || 'N/A'}</p>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* NOVAS CANDIDATURAS */}
         {applications.length > 0 && (
-          <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem]">
-            <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2"><UserPlus size={16}/> Novas Musas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
+            <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {applications.map(app => (
                 <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl flex flex-col justify-between cursor-pointer hover:border-indigo-400 transition-all group">
                   <div className="mb-4">
@@ -354,52 +355,97 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* FINANCEIRO */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-          <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Faturamento Bruto</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-          <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-          <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden"><p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse Modelos (70%)</p><h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-        </div>
+        <div className="mb-12">
+          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Faturamento Bruto</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden"><p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse Modelos (70%)</p><h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+          </div>
 
-        {/* LISTA DE MODELOS COM O NOVO BOTÃO DE USUÁRIOS */}
-        <h2 className="text-[11px] font-black uppercase text-white/40 mb-6 flex items-center gap-2"><Users size={14}/> Gestão de Unidades</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {models.map(m => (
-            <div key={m.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl relative group">
-              <div className="flex justify-between items-start mb-6">
-                <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
-                <div className="flex gap-2">
-                  <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all" title="Ver Carteira de Clientes">
-                    <Users size={16}/>
-                  </button>
-                  <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
-                  <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
-                </div>
-              </div>
-              <h3 className="font-black uppercase text-lg mb-1">{m.slug}</h3>
-              <p className="text-[10px] text-emerald-400 font-bold mb-4 uppercase">Ganhos: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-              <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5"><div className="flex items-center gap-2 text-[9px] text-white/50 uppercase"><Mail size={10}/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 uppercase"><Key size={10}/> {m.password}</div></div>
-              
-              {m.whatsapp && (
-                <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
-                   <input type="text" placeholder="Mensagem..." className="flex-1 bg-black border border-white/10 rounded-xl px-3 py-2 text-[10px] text-white outline-none" value={customMessages[m.id] || ""} onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })} />
-                   <button onClick={() => window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(customMessages[m.id] || `Oi ${m.slug}!`)}`, '_blank')} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl"><MessageCircle size={16}/></button>
-                </div>
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
+              <div className="p-4 bg-[#FFD700]/20 rounded-2xl"><Users size={32} className="text-[#FFD700]" /></div>
+              <div><p className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-1">Modelos Parceiras Ativas</p><h3 className="text-3xl font-black text-white">{models.length} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Contas</span></h3></div>
             </div>
-          ))}
+            
+            <div className="bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
+              <div className="p-4 bg-blue-500/20 rounded-2xl"><Gamepad2 size={32} className="text-blue-500" /></div>
+              <div><p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Clientes Cadastrados</p><h3 className="text-3xl font-black text-white">{totalPlayers} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Jogadores</span></h3></div>
+            </div>
+          </div>
         </div>
 
-        {/* COMUNICADO GLOBAL */}
-        <div className="mt-12 bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
-          <h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest"><Megaphone size={14}/> Comunicado Global</h2>
-          <textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none h-24 mb-4 resize-none" />
-          <button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg transition-all">{savingGlobal ? "Salvando..." : "ENVIAR COMUNICADO"}</button>
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
+          <div className="lg:col-span-2 space-y-6">
+            <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {models.map(m => (
+                <div key={m.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] hover:border-[#FF1493]/30 transition-all shadow-xl group relative overflow-hidden">
+                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#FF1493]/5 rounded-full blur-[40px] pointer-events-none" />
+                  
+                  <div className="flex justify-between items-start mb-4 relative z-10">
+                    <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
+                    <div className="flex gap-2">
+                      <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
+                      
+                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all" title="Ver Carteira de Clientes">
+                        <Users size={16}/>
+                      </button>
 
+                      <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
+                      <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
+                    </div>
+                  </div>
+
+                  <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
+                  <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  
+                  {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por: {m.referred_by.split('-')[0]}</span></div>)}
+                  
+                  <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10 mb-4"><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div></div>
+
+                  {m.whatsapp && (
+                    <div className="relative z-10 mt-2 bg-[#141414] border border-white/10 rounded-2xl p-2 flex flex-col gap-2">
+                      <p className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-2">Mandar mensagem rápida:</p>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Ex: Amor, tudo bem com a sua roleta?"
+                          className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50"
+                          value={customMessages[m.id] || ""}
+                          onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}
+                        />
+                        <button 
+                          onClick={() => {
+                            const userMsg = customMessages[m.id];
+                            const defaultMsg = `Oii ${m.slug}!`;
+                            const finalMsg = userMsg ? userMsg : defaultMsg;
+                            window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
+                            setCustomMessages({ ...customMessages, [m.id]: "" });
+                          }} 
+                          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" 
+                          title="Falar no WhatsApp"
+                        >
+                          <MessageCircle size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="space-y-8">
+            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
+          </div>
+        </div>
       </div>
 
-      {/* MODAL DE ANÁLISE DE CANDIDATURA */}
+      {/* 🔥 MODAL DE ANÁLISE DE CANDIDATURA 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -415,14 +461,14 @@ export default function SuperAdmin() {
             </div>
 
             <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
-              {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Criar Roleta</>}
+              {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Enviar WhatsApp</>}
             </button>
             <button onClick={async () => { if(!confirm('Rejeitar e excluir esta candidatura?')) return; await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }}); setSelectedApp(null); fetchData(); }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
           </div>
         </div>
       )}
 
-      {/* 🔥 MODAL CRIAR MANUAL RESTAURADO 🔥 */}
+      {/* 🔥 MODAL CRIAR MANUAL 🔥 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
