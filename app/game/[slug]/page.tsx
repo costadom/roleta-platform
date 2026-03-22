@@ -104,7 +104,6 @@ export default function GamePage() {
     if (prizes.length > 0) checkAccess();
   }, [slug, prizes]);
 
-  // Monitoramento de pagamento aprovado
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -130,33 +129,21 @@ export default function GamePage() {
     setPixData(null);
     setPixPaid(false);
     
-    // 🔥 ENVIANDO O CARRINHO ABANDONADO PARA O SUPABASE
-    console.log("🕵️ [ESPIÃO] Salvando Carrinho Abandonado no Banco...");
+    // 🔥 CORREÇÃO: Registra o carrinho abandonado no banco
     try {
-      const cartPayload = {
-        player_name: player.full_name || player.nickname || "Cliente",
-        player_phone: player.whatsapp,
-        model_name: modelName || slug,
-        amount: val,
-        status: 'pendente'
-      };
-      
-      const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
         method: 'POST',
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify(cartPayload)
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player_name: player.nickname || player.full_name || "Cliente",
+          player_phone: player.whatsapp,
+          model_name: modelName || slug,
+          amount: val,
+          status: 'pendente'
+        })
       });
-      
-      if (!resCart.ok) {
-         console.error("🕵️ [ESPIÃO] Falha ao salvar carrinho!", await resCart.text());
-      } else {
-         console.log("🕵️ [ESPIÃO] Carrinho Salvo com Sucesso!");
-      }
-    } catch (e) { 
-      console.error("🕵️ [ESPIÃO] Erro de conexão ao salvar carrinho:", e); 
-    }
+    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
 
-    // Gerando o PIX
     try {
       const res = await fetch('/api/checkout/pix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -323,7 +310,7 @@ export default function GamePage() {
       )}
 
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; }`}</style>
+      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
 }
