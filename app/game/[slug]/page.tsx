@@ -104,19 +104,21 @@ export default function GamePage() {
     if (prizes.length > 0) checkAccess();
   }, [slug, prizes]);
 
-  // Monitoramento de pagamento aprovado (Polling)
+  // Monitoramento de pagamento aprovado
   useEffect(() => {
     let interval: any;
-    if (pixData && !pixPaid) {
+    if (pixData && !pixPaid && player) {
       interval = setInterval(async () => {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
-        const data = await res.json();
-        if (data[0]?.credits > player.credits) {
-          setPixPaid(true);
-          setPlayer({ ...player, credits: data[0].credits });
-          clearInterval(interval);
-        }
+        try {
+            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+            const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
+            const data = await res.json();
+            if (data[0]?.credits > player.credits) {
+              setPixPaid(true);
+              setPlayer({ ...player, credits: data[0].credits });
+              clearInterval(interval);
+            }
+        } catch(err) { console.error(err); }
       }, 4000);
     }
     return () => clearInterval(interval);
@@ -128,22 +130,33 @@ export default function GamePage() {
     setPixData(null);
     setPixPaid(false);
     
-    // 🔥 CORREÇÃO: Registra o carrinho abandonado no banco ANTES de gerar o PIX
+    // 🔥 ENVIANDO O CARRINHO ABANDONADO PARA O SUPABASE
+    console.log("🕵️ [ESPIÃO] Salvando Carrinho Abandonado no Banco...");
     try {
-      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+      const cartPayload = {
+        player_name: player.full_name || player.nickname || "Cliente",
+        player_phone: player.whatsapp,
+        model_name: modelName || slug,
+        amount: val,
+        status: 'pendente'
+      };
+      
+      const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
         method: 'POST',
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          player_name: player.full_name || player.nickname || "Cliente",
-          player_phone: player.whatsapp,
-          model_name: modelName,
-          amount: val,
-          status: 'pendente'
-        })
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify(cartPayload)
       });
-    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
+      
+      if (!resCart.ok) {
+         console.error("🕵️ [ESPIÃO] Falha ao salvar carrinho!", await resCart.text());
+      } else {
+         console.log("🕵️ [ESPIÃO] Carrinho Salvo com Sucesso!");
+      }
+    } catch (e) { 
+      console.error("🕵️ [ESPIÃO] Erro de conexão ao salvar carrinho:", e); 
+    }
 
-    // Geração do Pix real
+    // Gerando o PIX
     try {
       const res = await fetch('/api/checkout/pix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -224,7 +237,6 @@ export default function GamePage() {
 
           <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0">
             <div className="bg-[#111] border border-white/5 p-4 rounded-[1.5rem] flex justify-between items-center mb-4 shadow-2xl relative">
-               <div className="absolute top-0 left-0 p-2 opacity-10"><DollarSign size={40} className="text-[#D946EF]"/></div>
                <div className="flex flex-col pl-2 z-10"><span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Seu Saldo em {modelName}</span><span className="text-xl font-black text-white italic tracking-tighter">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span></div>
                <button onClick={() => isAuthorized ? setShowDeposit(true) : setShowAuthModal(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5"><ShoppingCart size={14}/> Depositar</button>
             </div>
@@ -287,7 +299,7 @@ export default function GamePage() {
                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
                     {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
                  </button>
-                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação...</p>
+                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação do banco...</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -311,7 +323,7 @@ export default function GamePage() {
       )}
 
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
+      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; }`}</style>
     </div>
   );
 }
