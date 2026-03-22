@@ -22,10 +22,14 @@ export default function VitrinePage() {
         const logged = localStorage.getItem("labz_player_logged") === "true";
         setIsLoggedIn(logged);
 
-        // Busca modelos que estão com a vitrine ativada
-        const modelsRes = await fetch(`${supabaseUrl}/rest/v1/Models?select=*,Configs(*)&Configs(showcase_visible=eq.true)&Configs.model_name=neq.null`, { headers }).then(r => r.json());
+        // CORREÇÃO: Busca tudo e filtra no código para garantir que nenhuma musa se perca.
+        const modelsRes = await fetch(`${supabaseUrl}/rest/v1/Models?select=*,Configs(*)`, { headers }).then(r => r.json());
         
-        const activeModels = Array.isArray(modelsRes) ? modelsRes.filter(m => m.Configs?.[0]?.showcase_visible === true && m.Configs?.[0]?.model_name) : [];
+        const activeModels = Array.isArray(modelsRes) ? modelsRes.filter(m => {
+            const config = m.Configs && m.Configs.length > 0 ? m.Configs[0] : null;
+            return config && config.showcase_visible === true && config.model_name;
+        }) : [];
+        
         setModels(activeModels);
 
       } catch (err) { console.error(err); } finally { setInitialLoading(false); }
@@ -43,14 +47,12 @@ export default function VitrinePage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20">
       
-      {/* HEADER DA VITRINE */}
       <header className="fixed top-0 left-0 w-full h-20 bg-black/80 backdrop-blur-xl border-b border-white/5 z-[100] px-6 flex items-center justify-between shadow-xl">
           <div>
             <h1 className="text-xl font-black italic text-[#D946EF] tracking-tighter">SAVANAH <span className="text-white">LABZ</span></h1>
             <p className="text-[8px] text-white/30 uppercase font-black tracking-widest -mt-1">Escolha sua Musa</p>
           </div>
           
-          {/* SE NÃO TIVER LOGADO, MOSTRA BOTÃO DE LOGIN. SE TIVER, MOSTRA "MEU PERFIL" */}
           {!isLoggedIn ? (
             <button onClick={() => setShowAuthModal(true)} className="px-5 py-2.5 bg-white text-black rounded-full text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#D946EF] hover:text-white transition-all shadow-xl">
                 <Key size={14}/> Login VIP
@@ -62,7 +64,6 @@ export default function VitrinePage() {
           )}
       </header>
 
-      {/* VITRINE (GRADE DE MUSAS) */}
       <div className="max-w-7xl mx-auto p-6 mt-28">
         <div className="text-center mb-12">
             <h2 className="text-4xl font-black uppercase italic text-white tracking-tighter drop-shadow-lg">ESCOLHA SUA <span className="text-[#D946EF]">MUSA</span></h2>
@@ -79,7 +80,6 @@ export default function VitrinePage() {
                     <h3 className="text-3xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl mb-1">{config?.model_name}</h3>
                     <p className="text-white/70 text-xs italic mb-6 line-clamp-2 px-2">{m.bio || "Acesse meu Hub para ver meus conteúdos e roleta."}</p>
                     
-                    {/* BOTÃO QUE MANDA PRO HUB */}
                     <button onClick={() => router.push(`/profile/${m.slug}`)} className="w-full flex items-center justify-center gap-3 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-2xl transition-all hover:scale-[1.03] active:scale-95">
                         <User size={16}/> Acessar Hub Privado
                     </button>
@@ -92,7 +92,6 @@ export default function VitrinePage() {
         </div>
       </div>
 
-      {/* BOTÃO FLUTUANTE UNIVERSAL */}
       <button 
           onClick={() => { if(!isLoggedIn) return setShowAuthModal(true); router.push('/hub'); }} 
           className="fixed bottom-6 right-6 z-[999] bg-[#D946EF] text-white p-4 rounded-full shadow-[0_10px_40px_rgba(217,70,239,0.5)] hover:scale-110 hover:bg-[#f062ff] transition-all flex items-center justify-center group border border-white/20"
