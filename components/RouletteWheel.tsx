@@ -6,9 +6,9 @@ type Segment = {
 };
 
 type RouletteWheelProps = {
-  segments?: Segment[]; // Agora é opcional (?) para não quebrar
-  rotation?: number;
-  spinning?: boolean;
+  segments: Segment[];
+  rotation: number;
+  spinning: boolean;
   onClick?: () => void;
   durationMs?: number;
 };
@@ -37,28 +37,15 @@ function describeDonutSlice(cx: number, cy: number, outerR: number, innerR: numb
   return ["M", outerStart.x, outerStart.y, "A", outerR, outerR, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y, "L", innerStart.x, innerStart.y, "A", innerR, innerR, 0, largeArcFlag, 1, innerEnd.x, innerEnd.y, "Z"].join(" ");
 }
 
-// OS SEGMENTOS FALSOS: Usados caso a página não envie os prêmios do banco
-const DEFAULT_SEGMENTS: Segment[] = [
-  { label: "PRÊMIO 1", color: "" },
-  { label: "PRÊMIO 2", color: "" },
-  { label: "PRÊMIO 3", color: "" },
-  { label: "PRÊMIO 4", color: "" },
-  { label: "PRÊMIO 5", color: "" },
-  { label: "PRÊMIO 6", color: "" },
-  { label: "PRÊMIO 7", color: "" },
-  { label: "PRÊMIO 8", color: "" }
-];
+export function RouletteWheel({ segments = [], rotation, spinning, onClick, durationMs = 4000 }: RouletteWheelProps) {
+  // TRAVA DE SEGURANÇA: Se não houver segmentos (carregando do banco), 
+  // usamos uma lista temporária para a roleta não quebrar (o erro e.length)
+  const safeSegments = segments.length > 0 ? segments : [
+    { label: "Carregando...", color: "#2a0908" },
+    { label: "Labz", color: "#1a0505" }
+  ];
 
-export function RouletteWheel({ 
-  segments = DEFAULT_SEGMENTS, // Se for undefined, usa os falsos
-  rotation = 0, 
-  spinning = false, 
-  onClick, 
-  durationMs = 4000 
-}: RouletteWheelProps) {
-  
-  // Como garantimos um array padrão acima, o .length nunca mais vai quebrar.
-  const count = segments.length;
+  const count = safeSegments.length;
   const sliceAngle = 360 / count;
 
   const size = 320; 
@@ -109,7 +96,7 @@ export function RouletteWheel({
             <circle cx={center} cy={center} r={136} fill="none" stroke="#ffe39c" strokeWidth="1.6" opacity="0.45" />
 
             <g transform={`rotate(${-sliceAngle / 2} ${center} ${center})`}>
-              {segments.map((segment, index) => {
+              {safeSegments.map((segment, index) => {
                 const startAngle = index * sliceAngle;
                 const endAngle = startAngle + sliceAngle;
                 const midAngle = startAngle + sliceAngle / 2;
@@ -143,8 +130,8 @@ export function RouletteWheel({
             <circle cx={center} cy={center} r={innerR + 9} fill="none" stroke="url(#goldStroke)" strokeWidth="7" filter="url(#goldGlow)" />
             <circle cx={center} cy={center} r={innerR + 1} fill="none" stroke="#fff0b2" strokeWidth="1.5" opacity="0.4" />
             <circle cx={center} cy={center} r={innerR} fill="url(#innerCore)" stroke="#0a0a0a" strokeWidth="3" />
-            <circle cx={center} cy={center} r="12" fill="url(#centerOrb)" stroke="#fff1b8" strokeWidth="1.8" filter="url(#goldGlow)" />
-            <circle cx={center} cy={center} r="4.5" fill="#fff7d6" opacity="0.8" />
+            <circle cx={center} cy={center} r={12} fill="url(#centerOrb)" stroke="#fff1b8" strokeWidth="1.8" filter="url(#goldGlow)" />
+            <circle cx={center} cy={center} r={4.5} fill="#fff7d6" opacity="0.8" />
           </svg>
         </div>
       </button>
