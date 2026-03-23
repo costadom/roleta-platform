@@ -65,7 +65,9 @@ export default function GamePage() {
         }
 
         const fetchPromises: any[] = [
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
+          // 🔥 CORREÇÃO 1: Garante que a ordem do banco seja estritamente respeitada pela data de criação
+          // Isso mantém a sua hierarquia visual e matemática intacta!
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
         ];
 
@@ -174,7 +176,7 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 LÓGICA DO GIRO CORRIGIDA COM HIERARQUIA DE CHANCES (BASE = FÁCIL, TOPO = DIFÍCIL) 🔥
+  // 🔥 MOTOR DEFINITIVO: HIERARQUIA + PRECISÃO VISUAL MILIMÉTRICA + ANTI-ISCA 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0) return;
@@ -183,52 +185,65 @@ export default function GamePage() {
     setIsSpinning(true);
     spinAudioRef.current?.play().catch(() => {});
 
-    // 1. Filtramos apenas os prêmios válidos e guardamos a posição original deles
-    const validPrizes: any[] = [];
-    prizes.forEach((p, i) => {
+    // 1. ISOLA AS ISCAS: Filtra os índices que são permitidos sortear
+    const validOptions: { originalIndex: number, weight: number }[] = [];
+    let totalWeight = 0;
+    
+    // O array de prêmios já está na ordem exata de criação.
+    // Os primeiros (índices baixos) são o TOPO (difícil). Os últimos são a BASE (fácil).
+    let validCount = 0;
+    
+    prizes.forEach((p, originalIndex) => {
         const n = String(p.name).toUpperCase();
-        // Bloqueio absoluto das iscas
+        // IGNORA COMPLETAMENTE prêmios que contenham estas palavras
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            validPrizes.push({ originalIndex: i });
+            // HIERARQUIA EXPONENCIAL: O índice 0 recebe peso 1. Índice 1 recebe 8. Índice 2 recebe 27...
+            // Quanto mais perto do final (Base), GIGANTESCAMENTE MAIOR é a chance de sair.
+            const weight = Math.pow((validCount + 1), 3); 
+            validOptions.push({ originalIndex, weight });
+            totalWeight += weight;
+            validCount++;
         }
     });
 
-    let index = 0;
+    let winningIndex = 0;
 
-    if (validPrizes.length > 0) {
-        // 2. Aplicação da Hierarquia Matemática:
-        // O primeiro válido (Topo) recebe o peso 1x.
-        // O último válido (Base) recebe um peso massivamente maior (ex: 25x).
-        let totalWeight = 0;
-        const weighted = validPrizes.map((vp, idx) => {
-            // idx = 0 é o mais no topo. idx máximo é a base.
-            // Elevamos ao quadrado para a base sair infinitamente mais que o topo
-            const weight = Math.pow((idx + 1), 2); 
-            totalWeight += weight;
-            return { ...vp, weight };
-        });
-
-        // 3. Sorteio ponderado
+    if (validOptions.length > 0) {
+        // 2. SORTEIO BASEADO NOS PESOS (Hierarquia funcionando perfeitamente)
         let random = Math.random() * totalWeight;
         
-        for (let i = 0; i < weighted.length; i++) {
-            if (random < weighted[i].weight) {
-                index = weighted[i].originalIndex;
+        // Padrão seguro para o item mais fácil (o último válido) caso algo fuja do laço
+        winningIndex = validOptions[validOptions.length - 1].originalIndex; 
+
+        for (let option of validOptions) {
+            if (random < option.weight) {
+                winningIndex = option.originalIndex;
                 break;
             }
-            random -= weighted[i].weight;
+            random -= option.weight;
         }
     } else {
-        // Fallback preventivo caso a modelo faça uma roleta de 100% iscas (impossível, mas protege o código)
-        index = Math.floor(Math.random() * prizes.length); 
+        // Caso absurdo onde todos os prêmios criados são iscas (Fallback de segurança)
+        winningIndex = Math.floor(Math.random() * prizes.length); 
     }
 
-    // 4. Sua matemática original EXATA que alinha o disco perfeitamente!
-    setRotation(prev => prev + 3600 + (360 - (index * (360/prizes.length))));
+    // 3. MATEMÁTICA DE ROTAÇÃO CIRÚRGICA (Centro exato da fatia)
+    const totalSegments = prizes.length;
+    const sliceAngle = 360 / totalSegments;
+    // Pega o ângulo até o INÍCIO da fatia, e adiciona METADE para cravar no CENTRO da fatia
+    const centerAngle = (winningIndex * sliceAngle) + (sliceAngle / 2);
+    // Quanto o disco tem que girar fisicamente para trazer esse centro até o ponteiro do topo (0/360 graus)
+    const finalStopAngle = 360 - centerAngle;
+
+    // Remove as rotações quebradas anteriores e soma 10 voltas completas para o suspense
+    const currentBaseRotation = rotation - (rotation % 360);
+    const targetRotation = currentBaseRotation + (360 * 10) + finalStopAngle;
+
+    setRotation(targetRotation);
 
     setTimeout(async () => {
       setIsSpinning(false); 
-      setSelectedPrize(prizes[index]); // Seleciona o prêmio real e válido escolhido
+      setSelectedPrize(prizes[winningIndex]); 
       setModalOpen(true);
       
       const newBal = (player?.credits || 0) - 3;
@@ -241,7 +256,7 @@ export default function GamePage() {
       });
       
       winAudioRef.current?.play().catch(() => {});
-      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
     }, SPIN_DURATION + 100);
   };
 
