@@ -34,6 +34,7 @@ export default function GamePage() {
   const [pixPaid, setPixPaid] = useState(false); 
   const [copied, setCopied] = useState(false);
   const [activeCartId, setActiveCartId] = useState<string | null>(null);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 Minutos
 
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -67,11 +68,8 @@ export default function GamePage() {
            return;
         }
 
-        // Fallback de API Sênior para evitar o erro 400
         let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers });
-        if (!prizesRes.ok) {
-            prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers });
-        }
+        if (!prizesRes.ok) prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers });
         const prizesData = await prizesRes.json();
 
         const fetchPromises: any[] = [
@@ -87,7 +85,6 @@ export default function GamePage() {
         const results = await Promise.all(fetchPromises);
 
         const fetchedPrizes = Array.isArray(prizesData) ? prizesData : [];
-        // Ordenação frontend blindada lendo createdAt ou created_at baseada no seu CSV
         fetchedPrizes.sort((a: any, b: any) => {
             const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
             const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
@@ -132,6 +129,7 @@ export default function GamePage() {
     }
   }, [slug]);
 
+  // Checagem do pagamento PIX e Cronômetro
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -158,12 +156,28 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, [pixData, pixPaid, player, activeCartId]);
 
+  // Lógica do Cronômetro Visual
+  useEffect(() => {
+    let timer: any;
+    if (pixData && !pixPaid && pixTimeLeft > 0) {
+      timer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [pixData, pixPaid, pixTimeLeft]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
   const handleGeneratePix = async (val: number) => {
     if (!player) return;
     setPixLoading(true);
     setPixData(null);
     setPixPaid(false);
     setActiveCartId(null);
+    setPixTimeLeft(600); // Reseta o timer para 10 minutos
     
     try {
       const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
@@ -204,9 +218,8 @@ export default function GamePage() {
     setIsSpinning(true);
     if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
 
-    console.log("🕵️ ESPIÃO LABZ: Analisando as Fatias da Roleta...");
-
     const validOptions: { originalIndex: number, weight: number }[] = [];
+    let totalWeight = 0;
     
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
@@ -215,8 +228,8 @@ export default function GamePage() {
         }
     });
 
-    let totalWeight = 0;
     const numValid = validOptions.length;
+    let targetIndex = 0;
 
     if (numValid > 0) {
         validOptions.forEach((option, idx) => {
@@ -225,7 +238,7 @@ export default function GamePage() {
             totalWeight += reverseWeight; 
         });
 
-        let targetIndex = validOptions[0].originalIndex; 
+        targetIndex = validOptions[0].originalIndex; 
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
             if (random < option.weight) {
@@ -235,26 +248,13 @@ export default function GamePage() {
             random -= option.weight;
         }
 
-        console.log(`🕵️ ESPIÃO LABZ: Sorteio Exato Concluído -> Alvo Visual Index: [${targetIndex}] Nome: "${prizes[targetIndex].name}"`);
-
         const creditCost = 3;
         const optimisticBalance = player.credits - creditCost;
         setPlayer({ ...player, credits: optimisticBalance });
 
-        setRotation(prevRotation => {
-            const arcSize = 360 / prizes.length;
-            const centerAngle = (targetIndex * arcSize) + (arcSize / 2);
-            const currentMod = prevRotation % 360;
-            const alignAngle = 360 - centerAngle;
-            
-            let diff = alignAngle - currentMod;
-            if (diff <= 0) diff += 360; 
-            
-            const newRotation = prevRotation + (360 * 10) + diff;
-            console.log(`🕵️ ESPIÃO LABZ: Física de Rotação -> Centro Alvo: ${centerAngle}° | Diferença Calculada: ${diff}°`);
-            
-            return newRotation;
-        });
+        // 🔥 O SEGREDO DO GIRO PERFEITO: Retornamos à SUA fórmula original de Matemática Visual.
+        // O RouletteWheel já entende como centrar, por isso `360 / prizes.length` basta!
+        setRotation(prev => prev + 3600 + (360 - (targetIndex * (360/prizes.length))));
 
         setTimeout(async () => {
           setIsSpinning(false); 
@@ -289,46 +289,15 @@ export default function GamePage() {
     }
   };
 
-  const WonPrizesDisplay = useMemo(() => {
-    if (!wonPrizes || wonPrizes.length === 0 || !player) return null;
-
-    const whatsappBase = `https://wa.me/${player.whatsapp_model?.replace(/\D/g, '')}?text=`;
-    
-    const getPrizeAction = (prize: any) => {
-        const name = String(prize.name).toUpperCase();
-        if(name.includes("TELEGRAM") || name.includes("VIP")) return { icon: Award, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Acabei de ganhar "${prize.name}" na sua roleta! Me manda o acesso VIP? 🔥💖`)}`, '_blank'), text: 'Pegar Acesso' };
-        if(name.includes("PACK")) return { icon: Image, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor, ganhei "${prize.name}" na sua roleta! Me manda as fotos liberadas? 😉`)}`, '_blank'), text: 'Ver Fotos' };
-        if(name.includes("VIDEO")) return { icon: Video, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Ganhei "${prize.name}" na sua roleta! Manda o vídeo quente? 🔥`)}`, '_blank'), text: 'Ver Vídeo' };
-        return { icon: PackageCheck, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Oii! Acabei de ganhar "${prize.name}" na roleta da ${modelName}!`)}`, '_blank'), text: 'Receber no Zap' };
-    };
-
-    return (
-        <div className="p-6 bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] mt-12 shadow-2xl relative overflow-hidden">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#D946EF]/5 rounded-full blur-[40px] pointer-events-none" />
-            <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-6 flex items-center gap-2 relative z-10"><Trophy size={14} className="text-[#FFD700]"/> Prêmios Ganhos na Rodada</h2>
-            <div className="space-y-3 relative z-10">
-                {wonPrizes.map((p, idx) => {
-                    const { icon: Icon, action, text } = getPrizeAction(p);
-                    const isCredito = String(p.name).toUpperCase().includes("CREDITO") || String(p.name).toUpperCase().includes("BONUS") || String(p.name).toUpperCase().includes("CR");
-                    
-                    return (
-                        <div key={`${p.id}-${idx}`} className="bg-black/50 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 justify-between items-center transition-all hover:border-[#D946EF]/20 group">
-                            <div className="flex items-center gap-4 text-center sm:text-left">
-                                <div className="p-3.5 bg-[#141414] rounded-xl text-[#FFD700] border border-white/5 group-hover:border-[#D946EF]/20"><Icon size={20}/></div>
-                                <div><p className="text-[12px] font-black text-white uppercase group-hover:text-[#D946EF]">{p.name}</p><p className="text-[8px] text-white/30 uppercase font-bold font-mono">Ganho em {new Date(p.won_at).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p></div>
-                            </div>
-                            {isCredito ? (
-                               <div className="px-5 py-3 text-[9px] font-black uppercase text-emerald-400 border border-emerald-400/20 bg-emerald-500/5 rounded-lg flex items-center gap-1.5"><Coins size={12}/> Resgatado automaticamente</div>
-                            ) : (
-                                <button onClick={action} className="w-full sm:w-auto px-6 py-3.5 bg-[#1a1a1a] border border-white/10 rounded-xl text-[10px] font-black uppercase text-white hover:bg-[#D946EF] transition-all flex items-center justify-center gap-2 group-hover:shadow-lg"><MessageCircle size={14}/> {text}</button>
-                            )}
-                        </div>
-                    )
-                })}
-            </div>
-        </div>
-    );
-  }, [wonPrizes, player, modelName]);
+  // Funções de Resgate para a aba Perfil
+  const whatsappBase = player ? `https://wa.me/${player.whatsapp_model?.replace(/\D/g, '')}?text=` : '';
+  const getPrizeAction = (prize: any) => {
+      const name = String(prize.name).toUpperCase();
+      if(name.includes("TELEGRAM") || name.includes("VIP")) return { icon: Award, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Acabei de ganhar "${prize.name}" na sua roleta! Me manda o acesso VIP? 🔥💖`)}`, '_blank'), text: 'Pegar Acesso' };
+      if(name.includes("PACK")) return { icon: Image, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor, ganhei "${prize.name}" na sua roleta! Me manda as fotos liberadas? 😉`)}`, '_blank'), text: 'Ver Fotos' };
+      if(name.includes("VIDEO")) return { icon: Video, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Ganhei "${prize.name}" na sua roleta! Manda o vídeo quente? 🔥`)}`, '_blank'), text: 'Ver Vídeo' };
+      return { icon: PackageCheck, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Oii! Acabei de ganhar "${prize.name}" na roleta da ${modelName}!`)}`, '_blank'), text: 'Receber no Zap' };
+  };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
 
@@ -391,29 +360,59 @@ export default function GamePage() {
         {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
       </div>
 
-      {WonPrizesDisplay}
-
       {showProfile && player && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl animate-in zoom-in duration-300">
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in duration-300 flex flex-col max-h-[90vh]">
             <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[210]"><X size={24} /></button>
-            <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
-            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">{player.nickname}</h2>
-            <div className="mt-8 text-left space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30 shrink-0"><User size={40} className="text-[#D946EF]"/></div>
+            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center shrink-0">{player.nickname}</h2>
+            
+            <div className="mt-8 text-left space-y-3 shrink-0">
                <h3 className="text-[10px] text-white/40 uppercase font-black mb-1 flex items-center gap-2 tracking-widest"><Coins size={12} className="text-[#FFD700]"/> Seus Saldos</h3>
                   {allAssociations.map((assoc: any) => (
-                    <div key={assoc.id} className="bg-white/5 border border-white/5 p-4 rounded-xl flex justify-between items-center hover:border-[#D946EF]/30 transition-all">
+                    <div key={assoc.id} className="bg-white/5 border border-white/5 p-4 rounded-xl flex justify-between items-center">
                        <span className="text-[11px] font-black uppercase text-white/80">{assoc.Models?.slug}</span>
                        <span className="text-xs font-black text-[#D946EF]">{assoc.credits} CR</span>
                     </div>
                   ))}
             </div>
+
+            {/* 🔥 TABELA DE PRÊMIOS MOVIDA PARA DENTRO DO PERFIL 🔥 */}
+            {wonPrizes && wonPrizes.length > 0 && (
+                <div className="mt-8 border-t border-white/10 pt-6 text-left flex-1 overflow-hidden flex flex-col">
+                    <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest shrink-0"><Trophy size={14} className="text-[#FFD700]"/> Prêmios Ganhos</h3>
+                    <div className="space-y-3 overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
+                        {wonPrizes.map((p, idx) => {
+                            const { icon: Icon, action, text } = getPrizeAction(p);
+                            const isCredito = String(p.name).toUpperCase().includes("CREDITO") || String(p.name).toUpperCase().includes("BONUS") || String(p.name).toUpperCase().includes("CR");
+                            
+                            return (
+                                <div key={`${p.id}-${idx}`} className="bg-black/50 border border-white/5 rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-[#D946EF]/30">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 bg-[#141414] rounded-lg text-[#FFD700] border border-white/5"><Icon size={16}/></div>
+                                        <div>
+                                           <p className="text-[11px] font-black text-white uppercase">{p.name}</p>
+                                           <p className="text-[8px] text-white/30 uppercase font-bold font-mono">Hoje, {new Date(p.won_at).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p>
+                                        </div>
+                                    </div>
+                                    {isCredito ? (
+                                        <div className="px-3 py-2 text-[9px] font-black uppercase text-emerald-400 border border-emerald-400/20 bg-emerald-500/5 rounded-lg flex items-center gap-1.5"><Coins size={12}/> Resgatado automaticamente</div>
+                                    ) : (
+                                        <button onClick={action} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[9px] font-black uppercase text-white hover:bg-[#D946EF] transition-all flex items-center justify-center gap-2"><MessageCircle size={14}/> {text}</button>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+
             <button onClick={() => { 
                 const storageKey = `won_prizes_${player.model_id}_${player.id}`;
                 localStorage.removeItem(storageKey); 
                 localStorage.clear(); 
                 window.location.reload(); 
-            }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
+            }} className="mt-6 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors text-center w-full shrink-0">Sair da Conta</button>
           </div>
         </div>
       )}
@@ -437,7 +436,12 @@ export default function GamePage() {
             ) : pixData ? (
               <div className="mt-4 text-center">
                  <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
-                 <div className="bg-white p-4 rounded-3xl inline-block mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
+                 <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
+                 
+                 {/* 🔥 CRONÔMETRO DE URGÊNCIA ADICIONADO AQUI 🔥 */}
+                 <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
+                    ⏱ {formatTime(pixTimeLeft)}
+                 </div>
                  
                  <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
                     <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
@@ -472,7 +476,7 @@ export default function GamePage() {
 
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
       
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
+      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
 }
