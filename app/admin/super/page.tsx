@@ -17,8 +17,8 @@ export default function SuperAdmin() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
-  const [abandoned, setAbandoned] = useState<any[]>([]);  
-  const [totalPlayers, setTotalPlayers] = useState(0);  
+  const [abandoned, setAbandoned] = useState<any[]>([]); 
+  const [totalPlayers, setTotalPlayers] = useState(0); 
   
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -38,9 +38,9 @@ export default function SuperAdmin() {
 
   const fetchData = async () => {
     try {
-      const headers = {  
-        apikey: supabaseKey!,  
-        Authorization: `Bearer ${supabaseKey}`,  
+      const headers = { 
+        apikey: supabaseKey!, 
+        Authorization: `Bearer ${supabaseKey}`, 
         "Cache-Control": "no-cache" 
       };
 
@@ -92,19 +92,19 @@ export default function SuperAdmin() {
         }
       }
 
-    } catch (err) {  
-      console.error("Erro no fetch", err);  
-    } finally {  
-      setInitialLoading(false);  
+    } catch (err) { 
+      console.error("Erro no fetch", err); 
+    } finally { 
+      setInitialLoading(false); 
     }
   };
 
   useEffect(() => {
-    if (localStorage.getItem("super_admin_auth") === "true") {  
-      setIsLogged(true);  
-      fetchData();  
-    } else {  
-      setInitialLoading(false);  
+    if (localStorage.getItem("super_admin_auth") === "true") { 
+      setIsLogged(true); 
+      fetchData(); 
+    } else { 
+      setInitialLoading(false); 
     }
   }, []);
 
@@ -149,7 +149,7 @@ export default function SuperAdmin() {
         method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ status: 'pago', is_read: false })
       });
-      if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii, ${modelName}! Amor, seu PIX de R$ ${amount.toFixed(2)} acabou de ser feito com sucesso! 💸✨\n\nSegue o comprovante abaixo:`)}`, '_blank');
+      if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii! Seu PIX de R$ ${amount.toFixed(2)} foi enviado! 💸`)}`, '_blank');
       fetchData();
     } catch (err) { alert("Erro."); }
   };
@@ -160,25 +160,26 @@ export default function SuperAdmin() {
     try {
       const now = new Date().toISOString();
       const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
-      const generatedEmail = `${app.nickname}@admin.com`;
+      const generatedEmail = `${app.nickname.toLowerCase()}@admin.com`;
       const generatedPass = `${capNick}Admin26`;
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ slug: app.nickname, email: generatedEmail, password: generatedPass, full_name: app.full_name, whatsapp: app.whatsapp, created_at: now }),
+        body: JSON.stringify({ slug: app.nickname.toLowerCase(), email: generatedEmail, password: generatedPass, full_name: app.full_name, whatsapp: app.whatsapp, created_at: now }),
       });
       const dataMod = await resMod.json();
-      const mId = dataMod[0].id;
-      await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, profile_url: app.profile_url || app.bg_url, created_at: now }), });
-      await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aprovada' }), });
-      
-      const firstName = app.full_name.split(" ")[0];
-      const msg = `Oi, ${firstName} (${capNick}) ! Que alegria ter você com a gente 💖\nA sua Roleta Sexy exclusiva já está 100% configurada e pronta pra você faturar muito. Tudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar o link da sua roleta e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance quase zero, pra aumentar ainda mais suas vendas.\nSe alguém ganhar, a gente resolve tudo pra você — pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
-      const zapLink = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-      
-      window.open(zapLink, '_blank');
+      if(dataMod && dataMod[0]) {
+          const mId = dataMod[0].id;
+          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, profile_url: app.profile_url || app.bg_url, created_at: now }), });
+          await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aprovada' }), });
+          
+          setSelectedApp(null); 
+          fetchData();
 
-      setSelectedApp(null); fetchData();
-    } catch (err) { alert("Erro."); } finally { setLoading(false); }
+          // CORREÇÃO WPP: Usamos window.location.href para burlar o bloqueador de Pop-up do navegador
+          const msg = `Oi, ${app.full_name.split(' ')[0]} (${capNick})! Que alegria ter você com a gente 💖\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+          window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+      }
+    } catch (err) { alert("Erro ao aprovar."); } finally { setLoading(false); }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -186,8 +187,11 @@ export default function SuperAdmin() {
     try {
       const now = new Date().toISOString(); 
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ slug: newModel.slug.toLowerCase(), email: newModel.email, password: newModel.password, created_at: now }), });
-      const mId = (await resMod.json())[0].id;
-      await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }), });
+      const dataMod = await resMod.json();
+      if(dataMod && dataMod[0]) {
+          const mId = dataMod[0].id;
+          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }), });
+      }
       setShowModal(false); fetchData();
     } catch (err) {} finally { setLoading(false); }
   };
@@ -242,18 +246,11 @@ export default function SuperAdmin() {
                     <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => {
-                      const msg = `Oii ${cart.player_name}! Vi aqui que você tentou comprar os créditos na roleta da ${cart.model_name}, mas o PIX não concluiu.\n\nA roleta dela tá pegando fogo hoje! 🔥 Quer que eu te mande a chave PIX de novo pra você não perder os bônus?`;
-                      const phoneToUse = cart.player_phone || cart.whatsapp || "";
-                      if(phoneToUse) {
-                          window.open(`https://wa.me/${phoneToUse.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
-                      } else {
-                          alert("Ops! Cliente sem telefone registrado.");
-                      }
-                    }} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1"><MessageCircle size={14}/> Chamar no Zap</button>
+                    <button onClick={() => window.open(`https://wa.me/${cart.player_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii ${cart.player_name}! Vi aqui que você tentou recarregar na roleta da ${cart.model_name}, mas o PIX acabou não concluindo 😕\n\nA roleta dela tá pegando fogo hoje! 🔥 Quer o código de novo?`)}`, '_blank')} className="flex-1 bg-emerald-500 text-black py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1"><MessageCircle size={14}/> Chamar no Zap</button>
+                    {/* CORREÇÃO X: Remove imediatamente da tela (Otimista) */}
                     <button onClick={async () => {
+                      setAbandoned(prev => prev.filter(c => c.id !== cart.id));
                       await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
-                      fetchData();
                     }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500"><X size={14}/></button>
                   </div>
                 </div>
@@ -277,27 +274,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* PEDIDOS DE PIX (SAQUES) */}
-        {withdrawals.filter(w => w.status === 'pendente').length > 0 && (
-          <div className="mb-12 bg-emerald-500/10 border border-emerald-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(16,185,129,0.1)]">
-            <h2 className="text-xs font-black uppercase text-emerald-500 mb-4 flex items-center gap-2 tracking-widest"><DollarSign size={16}/> Solicitações de Saque Pendentes</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {withdrawals.filter(w => w.status === 'pendente').map(w => {
-                const m = models.find(x => x.id === w.model_id);
-                return (
-                  <div key={w.id} className="bg-black border border-emerald-500/20 p-5 rounded-3xl flex flex-col justify-between">
-                    <div className="mb-4">
-                      <p className="text-[12px] text-white uppercase font-black">{m?.modelName || m?.slug || 'Musa'}</p>
-                      <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-1">VALOR SOLICITADO: R$ {Number(w.amount).toFixed(2)}</p>
-                    </div>
-                    <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, m?.modelName || m?.slug || 'Musa', m?.whatsapp || '')} className="w-full bg-emerald-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center justify-center gap-1 shadow-lg shadow-emerald-500/20"><CheckCircle2 size={14}/> Aprovar e Enviar PIX</button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* FINANCEIRO GLOBAL */}
         <div className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem]"><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1">Faturamento Bruto</p><h3 className="text-4xl font-black">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
@@ -315,7 +291,16 @@ export default function SuperAdmin() {
                 <div className="flex gap-2">
                   <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all" title="Clientes"><Users size={16}/></button>
                   <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
-                  <button onClick={() => handleDelete(m.id)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500"><Trash2 size={16}/></button>
+                  {/* CORREÇÃO LIXEIRA: Apaga filhos primeiro para evitar erro de banco */}
+                  <button onClick={async () => { 
+                      if(confirm(`Excluir ${m.slug} permanentemente?`)) { 
+                          const h = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+                          await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${m.id}`, { method: "DELETE", headers: h });
+                          await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${m.id}`, { method: "DELETE", headers: h });
+                          await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${m.id}`, { method: "DELETE", headers: h }); 
+                          fetchData(); 
+                      } 
+                  }} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                 </div>
               </div>
               <h3 className="font-black uppercase text-lg mb-1">{m.slug}</h3>
@@ -324,7 +309,11 @@ export default function SuperAdmin() {
               {m.whatsapp && (
                 <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
                    <input type="text" placeholder="Mensagem..." className="flex-1 bg-black border border-white/10 rounded-xl px-3 py-2 text-[10px] text-white outline-none" value={customMessages[m.id] || ""} onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })} />
-                   <button onClick={() => window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(customMessages[m.id] || `Oi ${m.slug}!`)}`, '_blank')} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl"><MessageCircle size={16}/></button>
+                   <button onClick={() => {
+                        const finalMsg = customMessages[m.id] ? customMessages[m.id] : `Oi ${m.slug}!`;
+                        window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
+                        setCustomMessages({ ...customMessages, [m.id]: "" });
+                   }} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl"><MessageCircle size={16}/></button>
                 </div>
               )}
             </div>
