@@ -65,8 +65,8 @@ export default function GamePage() {
         }
 
         const fetchPromises: any[] = [
-          // Garante a ordem correta para a hierarquia funcionar perfeitamente
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).then(r => r.json()),
+          // REMOVIDO o "order" que estava dando erro 400.
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
         ];
 
@@ -78,7 +78,10 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
-        setPrizes(results[0] || []);
+        // Checagem de segurança (fallback caso a API falhe silenciosamente)
+        const fetchedPrizes = Array.isArray(results[0]) ? results[0] : [];
+        setPrizes(fetchedPrizes);
+        
         const dataConfig = results[1];
         if (dataConfig?.[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
@@ -175,7 +178,7 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 O MOTOR DA ROLETA CORRIGIDO E BLINDADO AQUI 🔥
+  // 🔥 MOTOR DA ROLETA COM HIERARQUIA E TRAVA ANTI-ISCA 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0) return;
@@ -215,7 +218,7 @@ export default function GamePage() {
         targetIndex = 0; // Fallback caso ocorra um erro bizarro
     }
 
-    // 3. O SEU CÁLCULO DE ROTAÇÃO ORIGINAL (Para garantir que ela gire como antes)
+    // 3. CÁLCULO DE ROTAÇÃO (Matemática original exata)
     setRotation(prev => prev + 3600 + (360 - (targetIndex * (360/prizes.length))));
 
     // 4. FINALIZAÇÃO DA JOGADA
