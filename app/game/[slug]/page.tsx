@@ -9,7 +9,7 @@ import { PrizeModal } from "@/components/PrizeModal";
 import AuthModal from "@/components/AuthModal";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
-const SPIN_DURATION = 4000;
+const SPIN_DURATION = 5000; // Aumentado levemente para uma parada mais suave e realista
 
 export default function GamePage() {
   const params = useParams();
@@ -34,16 +34,13 @@ export default function GamePage() {
   const [pixPaid, setPixPaid] = useState(false); 
   const [copied, setCopied] = useState(false);
   const [activeCartId, setActiveCartId] = useState<string | null>(null);
-  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 Minutos
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); 
 
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  
   const [wonPrizes, setWonPrizes] = useState<any[]>([]);
-  
-  // 🔥 NOVO ESTADO: Mensagem sedutora do Super Giro 🔥
   const [superMsg, setSuperMsg] = useState("");
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -60,30 +57,18 @@ export default function GamePage() {
 
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers }).catch(() => null);
         if (!resMod || !resMod.ok) { setLoading(false); return; }
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
-        
         if (!mId) { setLoading(false); return; }
 
         let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).catch(() => null);
         if (!prizesRes || !prizesRes.ok) prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).catch(() => null);
         const prizesData = prizesRes && prizesRes.ok ? await prizesRes.json() : [];
 
-        const fetchPromises: any[] = [
-          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()).catch(() => [])
-        ];
-
-        if (isLoggedIn === "true" && savedWhatsapp) {
-          fetchPromises.push(
-            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers }).then(r => r.json()).catch(() => [])
-          );
-        }
-
-        const results = await Promise.all(fetchPromises);
-
+        const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()).catch(() => []);
+        
         const fetchedPrizes = Array.isArray(prizesData) ? prizesData : [];
         fetchedPrizes.sort((a: any, b: any) => {
             const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
@@ -92,36 +77,29 @@ export default function GamePage() {
         });
         setPrizes(fetchedPrizes);
         
-        const dataConfig = results[0];
-        if (dataConfig?.[0]) {
-          setBgUrl(dataConfig[0].bg_url || "");
-          setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
+        if (resConfig?.[0]) {
+          setBgUrl(resConfig[0].bg_url || "");
+          setModelName(resConfig[0].model_name || slug.toString().toUpperCase());
         }
 
-        if (results.length > 1) {
-          const dataAll = results[1] || [];
-          setAllAssociations(dataAll);
-          const currentPlayer = dataAll.find((p: any) => p.model_id === mId);
-          if (currentPlayer && currentPlayer.full_name && currentPlayer.nickname) {
-            setPlayer(currentPlayer);
-            setIsAuthorized(true);
-            setShowAuthModal(false);
-            
-            const storageKey = `won_prizes_${mId}_${currentPlayer.id}`;
-            const stored = localStorage.getItem(storageKey);
-            if(stored) setWonPrizes(JSON.parse(stored));
-          } else {
-            setIsAuthorized(false);
+        if (isLoggedIn === "true" && savedWhatsapp) {
+          const resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers }).then(r => r.json()).catch(() => []);
+          if (resPlayer.length > 0) {
+            setAllAssociations(resPlayer);
+            const currentPlayer = resPlayer.find((p: any) => p.model_id === mId);
+            if (currentPlayer && currentPlayer.full_name) {
+              setPlayer(currentPlayer);
+              setIsAuthorized(true);
+              setShowAuthModal(false);
+              const storageKey = `won_prizes_${mId}_${currentPlayer.id}`;
+              const stored = localStorage.getItem(storageKey);
+              if(stored) setWonPrizes(JSON.parse(stored));
+            }
           }
-        } else {
-          setIsAuthorized(false);
         }
-
-      } catch (e) { console.error("Erro Crítico de Inicialização:", e); } finally { setLoading(false); }
+      } catch (e) { console.error(e); } finally { setLoading(false); }
     }
-
     initializeData();
-
     if (typeof window !== "undefined") {
       spinAudioRef.current = new Audio("/sounds/spin.mp3");
       winAudioRef.current = new Audio("/sounds/gemido.mp3");
@@ -136,25 +114,17 @@ export default function GamePage() {
             const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
             const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers }).catch(() => null);
             if (!res || !res.ok) return; 
-            
             const data = await res.json();
             if (data[0]?.credits > player.credits) {
               setPixPaid(true);
               setPlayer({ ...player, credits: data[0].credits });
-              if (activeCartId) {
-                fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
-                  method: 'PATCH',
-                  headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: 'pago' })
-                }).catch(() => null);
-              }
               clearInterval(interval);
             }
-        } catch(err) { }
+        } catch(err) {}
       }, 4000);
     }
     return () => clearInterval(interval);
-  }, [pixData, pixPaid, player, activeCartId]);
+  }, [pixData, pixPaid, player]);
 
   useEffect(() => {
     let timer: any;
@@ -164,154 +134,88 @@ export default function GamePage() {
     return () => clearInterval(timer);
   }, [pixData, pixPaid, pixTimeLeft]);
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
+  const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
-  const handleGeneratePix = async (val: number) => {
-    if (!player) return;
-    setPixLoading(true);
-    setPixData(null);
-    setPixPaid(false);
-    setActiveCartId(null);
-    setPixTimeLeft(600); 
-    
-    try {
-      const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
-        method: 'POST',
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-        body: JSON.stringify({
-          player_name: player.nickname || player.full_name || "Cliente",
-          player_phone: player.whatsapp,
-          model_name: modelName || slug,
-          amount: val,
-          status: 'pendente'
-        })
-      });
-      if (resCart.ok) {
-        const cartData = await resCart.json();
-        if (cartData && cartData[0]) setActiveCartId(cartData[0].id);
-      }
-    } catch (e) { }
-
-    try {
-      const res = await fetch('/api/checkout/pix', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: val, userId: player.id }),
-      });
-      if(!res.ok) throw new Error("Erro API");
-      const data = await res.json();
-      if (data.qr_code_base64) { setPixData(data); }
-    } catch (e) {
-        alert("Falha ao gerar o PIX. Tente novamente.");
-    } finally { setPixLoading(false); }
-  };
-
-  // 🔥 MOTOR INTELIGENTE: Recebe o custo do giro (3 ou 6) 🔥
   const runSpin = async (cost: number = 3) => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0 || !player) return;
-    if ((player?.credits || 0) < cost) { setShowDeposit(true); return; }
+    if (player.credits < cost) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
     if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
+    if (cost === 6) setSuperMsg("🔥 Isso amor! Com o Super Giro suas chances são GIGANTES! Vem ganhar... 🍀💖");
 
-    // 🔥 O ILUSIONISMO DO SUPER GIRO: Mostra a mensagem de sedução 🔥
-    if (cost === 6) {
-        setSuperMsg("🔥 Isso amor! Agora com o Super Giro você tem MUITO mais chances de ganhar um encontro comigo ou faturar os R$ 100 no PIX! Boa sorte... 🍀💖");
-    }
-
-    const validOptions: { originalIndex: number, weight: number }[] = [];
+    // Lógica de Sorteio Ponderada via Banco
+    const validOptions: any[] = [];
     let totalWeight = 0;
-    
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            const w = parseFloat(p.weight) || 1; 
-            validOptions.push({ originalIndex: i, weight: w });
+            const w = parseFloat(p.weight) || 1;
+            validOptions.push({ index: i, weight: w });
             totalWeight += w;
         }
     });
 
     let targetIndex = 0;
-
     if (validOptions.length > 0) {
         let random = Math.random() * totalWeight;
-        for (let option of validOptions) {
-            if (random < option.weight) {
-                targetIndex = option.originalIndex;
-                break;
-            }
-            random -= option.weight;
+        for (let opt of validOptions) {
+            if (random < opt.weight) { targetIndex = opt.index; break; }
+            random -= opt.weight;
         }
     }
 
-    // Deduz o custo dinâmico (3 ou 6)
-    const optimisticBalance = player.credits - cost;
-    setPlayer({ ...player, credits: optimisticBalance });
+    const newBal = player.credits - cost;
+    setPlayer({ ...player, credits: newBal });
 
-    setRotation(prevRotation => {
-        const sliceAngle = 360 / prizes.length;
-        const absoluteTarget = (360 - (targetIndex * sliceAngle)) % 360;
-        const currentSpins = Math.floor(prevRotation / 360);
-        return ((currentSpins + 10) * 360) + absoluteTarget;
-    });
+    // 🔥 CÁLCULO ESTABILIZADO: Usa a fórmula do seu componente sem tremer
+    const sliceAngle = 360 / prizes.length;
+    const stopAngle = (360 - (targetIndex * sliceAngle)) % 360;
+    const currentSpins = Math.floor(rotation / 360);
+    const finalRotation = ((currentSpins + 10) * 360) + stopAngle;
+
+    setRotation(finalRotation);
 
     setTimeout(async () => {
-      setIsSpinning(false); 
-      setSuperMsg(""); // Limpa a mensagem do Super Giro
-      setSelectedPrize(prizes[targetIndex]); 
+      setIsSpinning(false);
+      setSuperMsg("");
+      setSelectedPrize(prizes[targetIndex]);
       setModalOpen(true);
       
-      try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
-          const resPatch = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
-            method: "PATCH", 
-            headers,
-            body: JSON.stringify({ credits: optimisticBalance }) 
-          }).catch(() => null);
-          
-          if(resPatch && resPatch.ok) {
-              const patchData = await resPatch.json();
-              if (patchData && patchData[0]) setPlayer({ ...player, credits: patchData[0].credits });
-          }
-      } catch(err) { /* erro silenciado de rede */ }
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
+      const resPatch = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers, body: JSON.stringify({ credits: newBal }) });
+      const patchData = await resPatch.json();
+      if (patchData?.[0]) setPlayer({ ...player, credits: patchData[0].credits });
 
       if (soundEnabled) winAudioRef.current?.play().catch(() => {});
       
-      const wonPrize = prizes[targetIndex];
-      const n = String(wonPrize.name).toUpperCase();
-      if(!n.includes("TENTE") && !n.includes("PIX") && !n.includes("100") && !n.includes("R$")) {
+      const won = prizes[targetIndex];
+      if(!String(won.name).toUpperCase().includes("TENTE")) {
           setWonPrizes(prev => {
-              const now = new Date().toISOString();
-              const newWon = [...prev, { ...wonPrize, won_at: now }];
-              const storageKey = `won_prizes_${player.model_id}_${player.id}`;
-              localStorage.setItem(storageKey, JSON.stringify(newWon));
-              return newWon;
+              const updated = [...prev, { ...won, won_at: new Date().toISOString() }];
+              localStorage.setItem(`won_prizes_${player.model_id}_${player.id}`, JSON.stringify(updated));
+              return updated;
           });
       }
-
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
-    }, SPIN_DURATION + 100);
+    }, SPIN_DURATION);
   };
 
-  const whatsappBase = player ? `https://wa.me/${player.whatsapp_model?.replace(/\D/g, '')}?text=` : '';
   const getPrizeAction = (prize: any) => {
       const name = String(prize.name).toUpperCase();
-      if(name.includes("TELEGRAM") || name.includes("VIP")) return { icon: Award, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Acabei de ganhar "${prize.name}" na sua roleta! Me manda o acesso VIP? 🔥💖`)}`, '_blank'), text: 'Pegar Acesso' };
-      if(name.includes("PACK")) return { icon: Image, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor, ganhei "${prize.name}" na sua roleta! Me manda as fotos liberadas? 😉`)}`, '_blank'), text: 'Ver Fotos' };
-      if(name.includes("VIDEO")) return { icon: Video, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Ganhei "${prize.name}" na sua roleta! Manda o vídeo quente? 🔥`)}`, '_blank'), text: 'Ver Vídeo' };
-      return { icon: PackageCheck, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Oii! Acabei de ganhar "${prize.name}" na roleta da ${modelName}!`)}`, '_blank'), text: 'Receber no Zap' };
+      const wa = `https://wa.me/${player?.whatsapp_model?.replace(/\D/g, '')}?text=`;
+      if(name.includes("TELEGRAM")) return { icon: Award, text: 'Pegar Acesso', action: () => window.open(`${wa}${encodeURIComponent(`Amor! Ganhei ${prize.name}!`)}`, '_blank') };
+      if(name.includes("PACK")) return { icon: Image, text: 'Ver Fotos', action: () => window.open(`${wa}${encodeURIComponent(`Amor! Manda meu PACK VIP?`)}`, '_blank') };
+      if(name.includes("VIDEO")) return { icon: Video, text: 'Ver Vídeo', action: () => window.open(`${wa}${encodeURIComponent(`Quero meu vídeo VIP agora! 🔥`)}`, '_blank') };
+      return { icon: PackageCheck, text: 'Resgatar', action: () => window.open(`${wa}${encodeURIComponent(`Ganhei um prêmio na sua roleta!`)}`, '_blank') };
   };
 
-  if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase text-[10px] animate-pulse">Carregando...</div>;
 
   return (
     <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans pb-24">
       <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-hidden">
-        
         <div className="absolute inset-0 z-0">
            <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${bgUrl})`, opacity: isAuthorized ? 0.45 : 0.25 }} />
            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
@@ -320,7 +224,7 @@ export default function GamePage() {
         <div className="relative z-10 flex flex-col h-full overflow-hidden">
           <div className="p-4 flex flex-col gap-3 shrink-0">
              <div className="flex justify-between items-center px-1">
-                <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><LayoutGrid size={12} /> Vitrine</button>
+                <button onClick={() => router.push('/vitrine')} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5"><LayoutGrid size={12} /> Vitrine</button>
                 <div className="flex gap-2">
                    <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
                    <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all"><User size={18}/></button>
@@ -338,17 +242,13 @@ export default function GamePage() {
           </div>
 
           <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
-             
-             {/* 🔥 POPUP FLUTUANTE DO SUPER GIRO 🔥 */}
              {superMsg && (
                  <div className="absolute top-4 left-4 right-4 z-[60] bg-gradient-to-r from-[#FFD700]/20 via-[#D946EF]/30 to-[#FFD700]/20 border border-[#FFD700]/50 backdrop-blur-md p-4 rounded-2xl text-center animate-in slide-in-from-top-4 fade-in duration-300 shadow-[0_0_30px_rgba(217,70,239,0.5)]">
                      <p className="text-[11px] font-black text-white italic drop-shadow-md leading-relaxed">{superMsg}</p>
                  </div>
              )}
-
-             {/* Adicionado o efeito de "Poder" (scale e brilho) quando o Super Giro tá ativo */}
              <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[3px] opacity-40 grayscale-[0.4]' : ''} ${superMsg ? 'scale-105 drop-shadow-[0_0_40px_rgba(255,215,0,0.3)]' : ''}`}>
-                <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(3)} />
+                <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(3)} durationMs={SPIN_DURATION} />
              </div>
              {!isAuthorized && (
                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
@@ -367,24 +267,20 @@ export default function GamePage() {
                <button onClick={() => isAuthorized ? setShowDeposit(true) : setShowAuthModal(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5"><ShoppingCart size={14}/> Depositar</button>
             </div>
             <div className="grid grid-cols-2 gap-3 mb-4">
-              {/* 🔥 BOTÃO DE 3CR MANDA O VALOR 3 🔥 */}
               <button onClick={() => runSpin(3)} disabled={isSpinning} className="bg-[#D946EF] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 shadow-lg transition-all"><span className="text-xs font-black uppercase italic">Giro Normal</span><span className="text-[9px] font-bold text-white/60">3 CR</span></button>
-              
-              {/* 🔥 BOTÃO DE 6CR MANDA O VALOR 6 🔥 */}
               <button onClick={() => runSpin(6)} disabled={isSpinning} className="bg-[#FFD700] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 text-black shadow-lg transition-all"><span className="text-xs font-black uppercase italic flex items-center gap-1"><Zap size={14}/> Super Giro</span><span className="text-[9px] font-bold text-black/60">6 CR</span></button>
             </div>
           </div>
         </div>
-
         {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
       </div>
 
       {showProfile && player && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in duration-300 flex flex-col max-h-[90vh]">
-            <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[210]"><X size={24} /></button>
-            <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30 shrink-0"><User size={40} className="text-[#D946EF]"/></div>
-            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center shrink-0">{player.nickname}</h2>
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl flex flex-col max-h-[90vh]">
+            <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
+            <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
+            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center">{player.nickname}</h2>
             
             <div className="mt-8 text-left space-y-3 shrink-0">
                <h3 className="text-[10px] text-white/40 uppercase font-black mb-1 flex items-center gap-2 tracking-widest"><Coins size={12} className="text-[#FFD700]"/> Seus Saldos</h3>
@@ -402,52 +298,35 @@ export default function GamePage() {
                     <div className="space-y-3 overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
                         {wonPrizes.map((p, idx) => {
                             const { icon: Icon, action, text } = getPrizeAction(p);
-                            const isCredito = String(p.name).toUpperCase().includes("CREDITO") || String(p.name).toUpperCase().includes("BONUS") || String(p.name).toUpperCase().includes("CR");
-                            
+                            const isCr = String(p.name).toUpperCase().includes("CR");
                             return (
-                                <div key={`${p.id}-${idx}`} className="bg-black/50 border border-white/5 rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-[#D946EF]/30">
+                                <div key={idx} className="bg-black/50 border border-white/5 rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-[#D946EF]/30">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2.5 bg-[#141414] rounded-lg text-[#FFD700] border border-white/5"><Icon size={16}/></div>
-                                        <div>
-                                           <p className="text-[11px] font-black text-white uppercase">{p.name}</p>
-                                           <p className="text-[8px] text-white/30 uppercase font-bold font-mono">Hoje, {new Date(p.won_at).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p>
-                                        </div>
+                                        <div><p className="text-[11px] font-black text-white uppercase">{p.name}</p><p className="text-[8px] text-white/30 uppercase font-bold font-mono">Hoje, {new Date(p.won_at).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p></div>
                                     </div>
-                                    {isCredito ? (
-                                        <div className="px-3 py-2 text-[9px] font-black uppercase text-emerald-400 border border-emerald-400/20 bg-emerald-500/5 rounded-lg flex items-center gap-1.5"><Coins size={12}/> Resgatado automaticamente</div>
-                                    ) : (
-                                        <button onClick={action} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[9px] font-black uppercase text-white hover:bg-[#D946EF] transition-all flex items-center justify-center gap-2"><MessageCircle size={14}/> {text}</button>
-                                    )}
+                                    {isCr ? <div className="px-3 py-2 text-[9px] font-black uppercase text-emerald-400 border border-emerald-400/20 bg-emerald-500/5 rounded-lg flex items-center gap-1.5"><Coins size={12}/> Resgatado automaticamente</div> : <button onClick={action} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[9px] font-black uppercase text-white hover:bg-[#D946EF] transition-all flex items-center justify-center gap-2"><MessageCircle size={14}/> {text}</button>}
                                 </div>
                             )
                         })}
                     </div>
                 </div>
             )}
-
-            <button onClick={() => { 
-                const storageKey = `won_prizes_${player.model_id}_${player.id}`;
-                localStorage.removeItem(storageKey); 
-                localStorage.clear(); 
-                window.location.reload(); 
-            }} className="mt-6 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors text-center w-full shrink-0">Sair da Conta</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-6 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors text-center w-full shrink-0">Sair da Conta</button>
           </div>
         </div>
       )}
 
       {showDeposit && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in duration-300">
-            <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); setActiveCartId(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[310]"><X size={24} /></button>
-            
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl">
+            <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
             {pixPaid ? (
                <div className="py-10 text-center animate-in zoom-in">
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce">
-                    <CheckCircle className="text-emerald-500" size={40} />
-                  </div>
+                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle className="text-emerald-500" size={40} /></div>
                   <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
                   <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
-                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); setActiveCartId(null); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar para a Roleta</button>
+                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar para a Roleta</button>
                </div>
             ) : pixLoading ? (
               <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
@@ -455,34 +334,23 @@ export default function GamePage() {
               <div className="mt-4 text-center">
                  <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
                  <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
-                 
-                 <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
-                    ⏱ {formatTime(pixTimeLeft)}
-                 </div>
-                 
+                 <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse">⏱ {formatTime(pixTimeLeft)}</div>
                  <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
-                    <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
-                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Abra o app do seu banco.<br/>2. Escolha "Pagar com QR Code".<br/>3. Escaneie a imagem acima.<br/>4. O saldo cai automaticamente!</p>
+                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Escaneie o QR Code.<br/>2. O saldo cai automaticamente!</p>
                  </div>
-
                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
                     {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
                  </button>
-                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação do banco...</p>
+                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação...</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
-                {[ 
-                  { rs: 20, cr: 25 }, 
-                  { rs: 30, cr: 35 }, 
-                  { rs: 40, cr: 45 }, 
-                  { rs: 50, cr: 55 } 
-                ].map((p) => (
+                {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                   <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
-                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus || 5} BÔNUS</div>
+                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+5 BÔNUS</div>
                     <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
-                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-lg group-hover:shadow-[#D946EF]/20">Comprar</div>
+                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase">Comprar</div>
                   </button>
                 ))}
               </div>
@@ -490,9 +358,7 @@ export default function GamePage() {
           </div>
         </div>
       )}
-
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-      
       <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
