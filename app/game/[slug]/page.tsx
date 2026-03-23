@@ -1,446 +1,341 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle } from "lucide-react";
+import confetti from "canvas-confetti";
+import { RouletteWheel } from "@/components/RouletteWheel";
+import { PrizeModal } from "@/components/PrizeModal";
+import AuthModal from "@/components/AuthModal";
 
-export default function SuperAdmin() {
+const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
+const SPIN_DURATION = 4000;
+
+export default function GamePage() {
+  const params = useParams();
   const router = useRouter();
-  const [isLogged, setIsLogged] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [adminUser, setAdminUser] = useState("");
-  const [adminPass, setAdminPass] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  
-  const [models, setModels] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [withdrawals, setWithdrawals] = useState<any[]>([]);
-  const [applications, setApplications] = useState<any[]>([]);
-  const [abandoned, setAbandoned] = useState<any[]>([]); 
-  const [totalPlayers, setTotalPlayers] = useState(0); 
-  
-  const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [newModel, setNewModel] = useState({ slug: "", email: "", password: "", referred_by: "" });
+  const slug = params.slug;
 
-  const [selectedApp, setSelectedApp] = useState<any | null>(null);
-  const [globalMsg, setGlobalMsg] = useState("");
-  const [rankVisible, setRankVisible] = useState(false);
-  const [goalAmount, setGoalAmount] = useState(1000);
-  const [goalReward, setGoalReward] = useState("");
-  const [savingGlobal, setSavingGlobal] = useState(false);
+  const [prizes, setPrizes] = useState<any[]>([]);
+  const [bgUrl, setBgUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [modelName, setModelName] = useState("");
 
-  const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
+  const [player, setPlayer] = useState<any | null>(null);
+  const [allAssociations, setAllAssociations] = useState<any[]>([]);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [pixData, setPixData] = useState<any>(null);
+  const [pixLoading, setPixLoading] = useState(false);
+  const [pixPaid, setPixPaid] = useState(false); 
+  const [copied, setCopied] = useState(false);
+  const [activeCartId, setActiveCartId] = useState<string | null>(null);
+
+  const [rotation, setRotation] = useState(0);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const spinAudioRef = useRef<HTMLAudioElement | null>(null);
+  const winAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const fetchData = async () => {
-    try {
-      const headers = { 
-        apikey: supabaseKey!, 
-        Authorization: `Bearer ${supabaseKey}`, 
-        "Cache-Control": "no-cache" 
-      };
-
-      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers, resAbandon] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
-        Promise.resolve({ ok: true, json: async () => [] }), 
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=50`, { headers })
-      ]);
-
-      const range = resPlayers.headers.get("content-range");
-      if (range) {
-        const total = range.split("/")[1];
-        setTotalPlayers(parseInt(total));
-      }
-
-      const dataHist = resHist.ok ? await resHist.json() : [];
-      if (resMod.ok) setModels(await resMod.json());
-      setHistory(dataHist);
-      if (resTrans.ok) setTransactions(await resTrans.json());
-      if (resWith.ok) setWithdrawals(await resWith.json());
-      
-      if (resApp.ok) {
-        const apps = await resApp.json();
-        setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
-      }
-      
-      if (resAbandon.ok) {
-        const carts = await resAbandon.json();
-        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-        setAbandoned(carts.filter((c: any) => {
-          const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-          const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
-          return isPendente && isOldEnough;
-        }));
-      }
-
-      if (resGlob.ok) {
-        const dataGlob = await resGlob.json();
-        if (dataGlob[0]) {
-          setGlobalMsg(dataGlob[0].announcement_msg);
-          setRankVisible(dataGlob[0].ranking_visible);
-          setGoalAmount(dataGlob[0].goal_amount);
-          setGoalReward(dataGlob[0].goal_reward);
-        }
-      }
-
-    } catch (err) { 
-      console.error("Erro no fetch", err); 
-    } finally { 
-      setInitialLoading(false); 
-    }
-  };
-
+  // 🔥 O SEGREDO DA VELOCIDADE ESTÁ AQUI: Tudo carrega junto agora!
   useEffect(() => {
-    if (localStorage.getItem("super_admin_auth") === "true") { 
-      setIsLogged(true); 
-      fetchData(); 
-    } else { 
-      setInitialLoading(false); 
+    async function initializeData() {
+      if (!slug || !supabaseUrl) return;
+      const isLoggedIn = localStorage.getItem("labz_player_logged");
+      const savedWhatsapp = localStorage.getItem("labz_player_phone");
+
+      try {
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        
+        // 1. Pega ID da Modelo (Super Rápido)
+        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
+        const dataMod = await resMod.json();
+        const mId = dataMod[0]?.id;
+        
+        if (!mId) {
+           setLoading(false);
+           return;
+        }
+
+        // 2. Dispara Prêmios, Configurações e Checagem de Usuário AO MESMO TEMPO
+        const fetchPromises: any[] = [
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
+          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
+        ];
+
+        if (isLoggedIn === "true" && savedWhatsapp) {
+          fetchPromises.push(
+            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers }).then(r => r.json())
+          );
+        }
+
+        const results = await Promise.all(fetchPromises);
+
+        // Aplica os Prêmios e Configs
+        setPrizes(results[0] || []);
+        const dataConfig = results[1];
+        if (dataConfig?.[0]) {
+          setBgUrl(dataConfig[0].bg_url || "");
+          setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
+        }
+
+        // Aplica a autorização se tiver retornado usuário
+        if (results.length > 2) {
+          const dataAll = results[2] || [];
+          setAllAssociations(dataAll);
+          const currentPlayer = dataAll.find((p: any) => p.model_id === mId);
+          if (currentPlayer && currentPlayer.full_name && currentPlayer.nickname) {
+            setPlayer(currentPlayer);
+            setIsAuthorized(true);
+            setShowAuthModal(false);
+          } else {
+            setIsAuthorized(false);
+          }
+        } else {
+          setIsAuthorized(false);
+        }
+
+      } catch (e) { console.error(e); } finally { setLoading(false); }
     }
-  }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
-      localStorage.setItem("super_admin_auth", "true");
-      setIsLogged(true); setInitialLoading(true); fetchData();
-    } else { alert("Acesso negado!"); }
-  };
+    initializeData();
 
-  const handleResetSystem = async () => {
-    const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
-    if (confirmText !== "ZERARTUDO") return;
-    setInitialLoading(true);
+    if (typeof window !== "undefined") {
+      spinAudioRef.current = new Audio("/sounds/spin.mp3");
+      winAudioRef.current = new Audio("/sounds/gemido.mp3");
+    }
+  }, [slug]);
+
+  // Monitoramento de pagamento aprovado
+  useEffect(() => {
+    let interval: any;
+    if (pixData && !pixPaid && player) {
+      interval = setInterval(async () => {
+        try {
+            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+            const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
+            const data = await res.json();
+            if (data[0]?.credits > player.credits) {
+              setPixPaid(true);
+              setPlayer({ ...player, credits: data[0].credits });
+              if (activeCartId) {
+                await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
+                  method: 'PATCH',
+                  headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'pago' })
+                });
+              }
+              clearInterval(interval);
+            }
+        } catch(err) { console.error(err); }
+      }, 4000);
+    }
+    return () => clearInterval(interval);
+  }, [pixData, pixPaid, player, activeCartId]);
+
+  const handleGeneratePix = async (val: number) => {
+    if (!player) return;
+    setPixLoading(true);
+    setPixData(null);
+    setPixPaid(false);
+    setActiveCartId(null);
+    
+    // Registra o carrinho abandonado no banco
     try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers })
-      ]);
-      fetchData();
-    } catch (err) { alert("Erro."); }
-  };
-
-  const handleSaveGlobal = async () => {
-    setSavingGlobal(true);
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main`, {
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ announcement_msg: globalMsg, ranking_visible: rankVisible, goal_amount: goalAmount, goal_reward: goalReward, updated_at: new Date().toISOString() })
+      const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+        method: 'POST',
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          player_name: player.nickname || player.full_name || "Cliente",
+          player_phone: player.whatsapp,
+          model_name: modelName || slug,
+          amount: val,
+          status: 'pendente'
+        })
       });
-    } catch (err) {} finally { setSavingGlobal(false); }
-  };
-
-  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
-    if (!confirm(`Pagar R$ ${amount.toFixed(2)}?`)) return;
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ status: 'pago', is_read: false })
-      });
-      if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii! Seu PIX de R$ ${amount.toFixed(2)} foi enviado! 💸`)}`, '_blank');
-      fetchData();
-    } catch (err) { alert("Erro."); }
-  };
-
-  const handleApproveApplication = async (app: any) => {
-    if (!confirm(`Aprovar ${app.nickname}?`)) return;
-    setLoading(true);
-    try {
-      const now = new Date().toISOString();
-      const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
-      const generatedEmail = `${app.nickname.toLowerCase()}@admin.com`;
-      const generatedPass = `${capNick}Admin26`;
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ slug: app.nickname.toLowerCase(), email: generatedEmail, password: generatedPass, full_name: app.full_name, whatsapp: app.whatsapp, created_at: now }),
-      });
-      const dataMod = await resMod.json();
-      if(dataMod && dataMod[0]) {
-          const mId = dataMod[0].id;
-          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, profile_url: app.profile_url || app.bg_url, created_at: now }), });
-          await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aprovada' }), });
-          
-          setSelectedApp(null); 
-          fetchData();
-
-          const msg = `Oi, ${app.full_name.split(' ')[0]} (${capNick})! Que alegria ter você com a gente 💖\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
-          window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+      
+      if (resCart.ok) {
+        const cartData = await resCart.json();
+        if (cartData && cartData[0]) setActiveCartId(cartData[0].id);
       }
-    } catch (err) { alert("Erro ao aprovar."); } finally { setLoading(false); }
-  };
+    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true);
     try {
-      const now = new Date().toISOString(); 
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ slug: newModel.slug.toLowerCase(), email: newModel.email, password: newModel.password, created_at: now }), });
-      const dataMod = await resMod.json();
-      if(dataMod && dataMod[0]) {
-          const mId = dataMod[0].id;
-          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }), });
-      }
-      setShowModal(false); fetchData();
-    } catch (err) {} finally { setLoading(false); }
+      const res = await fetch('/api/checkout/pix', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: val, userId: player.id }),
+      });
+      const data = await res.json();
+      if (data.qr_code_base64) { setPixData(data); }
+    } catch (e) {
+        console.error("Erro Pix:", e);
+    } finally { setPixLoading(false); }
   };
 
-  const financialData = useMemo(() => {
-    let totalSales = 0, totalPlatform = 0, totalModels = 0;
-    const byModel: Record<string, number> = {};
-    transactions.forEach(t => {
-      totalSales += Number(t.real_amount) || 0;
-      totalPlatform += Number(t.platform_cut) || 0;
-      totalModels += Number(t.model_cut) || 0;
-      byModel[t.model_id] = (byModel[t.model_id] || 0) + (Number(t.real_amount) || 0);
-    });
-    return { totalSales, totalPlatform, totalModels, byModel };
-  }, [transactions]);
+  const runSpin = async () => {
+    if (!isAuthorized) { setShowAuthModal(true); return; }
+    if (isSpinning || prizes.length === 0) return;
+    if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
 
-  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
+    setIsSpinning(true);
+    spinAudioRef.current?.play().catch(() => {});
+    const index = Math.floor(Math.random() * prizes.length); 
+    setRotation(prev => prev + 3600 + (360 - (index * (360/prizes.length))));
 
-  if (!isLogged) return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center">
-      <ShieldCheck size={40} className="text-[#FF1493] mx-auto mb-6"/><h1 className="text-xl font-black text-white mb-8">PAINEL MASTER</h1>
-      <form onSubmit={handleLogin} className="space-y-4">
-        <input type="email" placeholder="EMAIL" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" value={adminUser} onChange={e => setAdminUser(e.target.value)} />
-        <div className="relative"><input type={showPass ? "text" : "password"} placeholder="SENHA" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" value={adminPass} onChange={e => setAdminPass(e.target.value)} /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
-        <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase">Acessar</button>
-      </form>
-    </div></div>
-  );
+    setTimeout(async () => {
+      setIsSpinning(false); setSelectedPrize(prizes[index]); setModalOpen(true);
+      const newBal = (player?.credits || 0) - 3;
+      setPlayer({ ...player, credits: newBal });
+      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: newBal }) });
+      winAudioRef.current?.play().catch(() => {});
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    }, SPIN_DURATION + 100);
+  };
+
+  if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
-          <div><h1 className="text-4xl font-black uppercase italic tracking-tighter"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1 uppercase">Sistema V.3001 Master</p></div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button>
-            <button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button>
-          </div>
+    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans">
+      <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-hidden">
+        
+        <div className="absolute inset-0 z-0">
+           <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${bgUrl})`, opacity: isAuthorized ? 0.45 : 0.25 }} />
+           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
         </div>
 
-        {/* PIX ABANDONADOS - CARD VERMELHO */}
-        {abandoned.length > 0 && (
-          <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
-            <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {abandoned.map(cart => {
-                const phone = cart.player_phone || cart.whatsapp;
-                return (
-                  <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl flex flex-col justify-between">
-                    <div className="mb-4">
-                      <p className="text-[12px] text-white uppercase font-black">{cart.player_name || 'Cliente VIP'}</p>
-                      <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
-                      <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        disabled={!phone}
-                        onClick={() => {
-                          const msg = `Oii ${cart.player_name}! Vi aqui que você tentou comprar os créditos na roleta da ${cart.model_name}, mas o PIX não concluiu.\n\nA roleta dela tá pegando fogo hoje! 🔥 Quer que eu te mande a chave PIX de novo pra você não perder os bônus?`;
-                          window.open(`https://wa.me/${phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
-                        }} 
-                        className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 transition-transform ${phone ? 'bg-emerald-500 text-black hover:scale-105' : 'bg-white/5 text-white/20'}`}
-                      >
-                        <MessageCircle size={14}/> {phone ? 'Chamar no Zap' : 'Sem Telefone'}
-                      </button>
-                      <button onClick={async () => {
-                        setAbandoned(prev => prev.filter(c => c.id !== cart.id));
-                        await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
-                      }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all" title="Ignorar / Limpar"><X size={14}/></button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* CANDIDATURAS */}
-        {applications.length > 0 && (
-          <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
-            <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {applications.map(app => (
-                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl flex flex-col justify-between cursor-pointer hover:border-indigo-400 transition-all group">
-                  <div className="mb-4">
-                    <p className="text-[12px] text-white uppercase font-black">{app.full_name}</p>
-                    <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mb-2">@{app.nickname}</p>
-                    <div className="text-[9px] text-white/50 uppercase font-mono space-y-1"><p>📱 {app.whatsapp}</p></div>
-                  </div>
-                  <button className="bg-indigo-500/20 text-indigo-400 px-4 py-3 rounded-xl text-[9px] font-black uppercase group-hover:bg-indigo-500 group-hover:text-white transition-all">Analisar Perfil</button>
+        <div className="relative z-10 flex flex-col h-full overflow-hidden">
+          <div className="p-4 flex flex-col gap-3 shrink-0">
+             <div className="flex justify-between items-center px-1">
+                <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><LayoutGrid size={12} /> Vitrine</button>
+                <div className="flex gap-2">
+                   <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
+                   <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all"><User size={18}/></button>
                 </div>
+             </div>
+             <div className="flex flex-col items-center"><span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span><span className="text-[10px] text-[#FFD700] font-black uppercase mt-0.5 tracking-widest italic">Musa {modelName}</span></div>
+          </div>
+
+          <div className="w-full h-9 bg-black/60 border-y border-white/5 backdrop-blur-sm overflow-hidden flex items-center relative shrink-0">
+            <div className="flex whitespace-nowrap animate-marquee">
+              { NAMES.map((name, i) => (
+                <div key={i} className="flex items-center gap-2 mx-8 text-[10px] font-black uppercase tracking-tighter"><Sparkles size={11} className="text-[#FFD700]" /><span className="text-white/60">{name}</span><span className="text-white">GANHOU</span><span className="text-[#D946EF]">PRÊMIO VIP</span></div>
               ))}
             </div>
           </div>
-        )}
 
-        {/* SAQUES PENDENTES */}
-        {withdrawals.filter(w => w.status === 'pendente').length > 0 && (
-          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
-            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {withdrawals.filter(w => w.status === 'pendente').length} Saques (PIX) Solicitados</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {withdrawals.filter(w => w.status === 'pendente').map(w => {
-                const model = models.find(m => m.id === w.model_id);
-                return (
-                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
-                    <div className="flex justify-between items-start mb-4">
-                      <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
-                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, model?.slug || 'Modelo', model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
-                    </div>
-                    <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-                      <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves PIX:</p>
-                      <p className="text-[10px] font-mono text-emerald-400 break-all mb-1">1: {model?.pix_key_1 || 'N/A'}</p>
-                      <p className="text-[10px] font-mono text-white/50 break-all">2: {model?.pix_key_2 || 'N/A'}</p>
-                    </div>
+          <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
+             <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[3px] opacity-40 grayscale-[0.4]' : ''}`}>
+                <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin()} />
+             </div>
+             {!isAuthorized && (
+               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
+                  <div className="bg-black/80 backdrop-blur-xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
+                    <h3 className="text-white font-black uppercase italic text-lg mb-2 tracking-tighter">Área Vip: {modelName}</h3>
+                    <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-6">Cadastre-se para ver os prêmios e jogar</p>
+                    <button onClick={() => setShowAuthModal(true)} className="bg-[#D946EF] text-white px-10 py-5 rounded-2xl font-black uppercase text-xs shadow-[0_0_30px_rgba(217,70,239,0.5)] active:scale-95 transition-all">Começar Agora</button>
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        <div className="mb-12">
-          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Faturamento Bruto</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden"><p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse Modelos (70%)</p><h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
+               </div>
+             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
-              <div className="p-4 bg-[#FFD700]/20 rounded-2xl"><Users size={32} className="text-[#FFD700]" /></div>
-              <div><p className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-1">Modelos Parceiras Ativas</p><h3 className="text-3xl font-black text-white">{models.length} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Contas</span></h3></div>
+          <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0">
+            <div className="bg-[#111] border border-white/5 p-4 rounded-[1.5rem] flex justify-between items-center mb-4 shadow-2xl relative">
+               <div className="flex flex-col pl-2 z-10"><span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Seu Saldo em {modelName}</span><span className="text-xl font-black text-white italic tracking-tighter">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span></div>
+               <button onClick={() => isAuthorized ? setShowDeposit(true) : setShowAuthModal(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5"><ShoppingCart size={14}/> Depositar</button>
             </div>
-            
-            <div className="bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
-              <div className="p-4 bg-blue-500/20 rounded-2xl"><Gamepad2 size={32} className="text-blue-500" /></div>
-              <div><p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Clientes Cadastrados</p><h3 className="text-3xl font-black text-white">{totalPlayers} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Jogadores</span></h3></div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button onClick={() => runSpin()} disabled={isSpinning} className="bg-[#D946EF] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 shadow-lg transition-all"><span className="text-xs font-black uppercase italic">Giro Normal</span><span className="text-[9px] font-bold text-white/60">3 CR</span></button>
+              <button onClick={() => runSpin()} disabled={isSpinning} className="bg-[#FFD700] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 text-black shadow-lg transition-all"><span className="text-xs font-black uppercase italic flex items-center gap-1"><Zap size={14}/> Super Giro</span><span className="text-[9px] font-bold text-black/60">6 CR</span></button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {models.map(m => (
-                <div key={m.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] hover:border-[#FF1493]/30 transition-all shadow-xl group relative overflow-hidden">
-                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#FF1493]/5 rounded-full blur-[40px] pointer-events-none" />
-                  
-                  <div className="flex justify-between items-start mb-4 relative z-10">
-                    <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
-                    <div className="flex gap-2">
-                      <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
-                      
-                      {/* 🔥 O SEU BOTÃO DE CLIENTES RESTAURADO AQUI 🔥 */}
-                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes">
-                        <Users size={16}/>
-                      </button>
-
-                      <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
-                      <button onClick={async () => { if(confirm(`Excluir ${m.slug} permanentemente?`)) { const h = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${m.id}`, { method: "DELETE", headers: h }); await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${m.id}`, { method: "DELETE", headers: h }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${m.id}`, { method: "DELETE", headers: h }); fetchData(); } }} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-
-                  <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
-                  <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                  
-                  {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por: {m.referred_by.split('-')[0]}</span></div>)}
-                  
-                  <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10 mb-4"><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div></div>
-
-                  {m.whatsapp && (
-                    <div className="relative z-10 mt-2 bg-[#141414] border border-white/10 rounded-2xl p-2 flex flex-col gap-2">
-                      <p className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-2">Mandar mensagem rápida:</p>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Ex: Amor, tudo bem com a sua roleta?"
-                          className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50"
-                          value={customMessages[m.id] || ""}
-                          onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}
-                        />
-                        <button 
-                          onClick={() => {
-                            const userMsg = customMessages[m.id];
-                            const defaultMsg = `Oii ${m.slug}!`;
-                            const finalMsg = userMsg ? userMsg : defaultMsg;
-                            window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
-                            setCustomMessages({ ...customMessages, [m.id]: "" });
-                          }} 
-                          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" 
-                          title="Falar no WhatsApp"
-                        >
-                          <MessageCircle size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="space-y-8">
-            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
-          </div>
-        </div>
+        {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
       </div>
 
-      {selectedApp && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
-            <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
-            <h2 className="text-2xl font-black uppercase mb-6 text-indigo-400 italic tracking-tighter">Analisar Perfil</h2>
-          
-            <div className="flex gap-6 mb-6">
-              <div className="w-32 h-40 bg-black border border-white/10 rounded-2xl overflow-hidden shrink-0"><img src={selectedApp.profile_url || selectedApp.bg_url} className="w-full h-full object-cover" /></div>
-              <div className="flex-1 space-y-2">
-                <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
-                <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
-              </div>
+      {showProfile && player && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl animate-in zoom-in duration-300">
+            <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[210]"><X size={24} /></button>
+            <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
+            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">{player.nickname}</h2>
+            <div className="mt-8 text-left space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+               <h3 className="text-[10px] text-white/40 uppercase font-black mb-1 flex items-center gap-2 tracking-widest"><Coins size={12} className="text-[#FFD700]"/> Seus Saldos</h3>
+                  {allAssociations.map((assoc: any) => (
+                    <div key={assoc.id} className="bg-white/5 border border-white/5 p-4 rounded-xl flex justify-between items-center hover:border-[#D946EF]/30 transition-all">
+                       <span className="text-[11px] font-black uppercase text-white/80">{assoc.Models?.slug}</span>
+                       <span className="text-xs font-black text-[#D946EF]">{assoc.credits} CR</span>
+                    </div>
+                  ))}
             </div>
-
-            <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
-              {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Enviar WhatsApp</>}
-            </button>
-            <button onClick={async () => { if(!confirm('Rejeitar e excluir esta candidatura?')) return; await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }}); setSelectedApp(null); fetchData(); }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
           </div>
         </div>
       )}
 
-      {/* MODAL CRIAR MANUAL */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
-            <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
-            <h2 className="text-2xl font-black uppercase mb-6 italic">Criar <span className="text-[#FF1493]">Manual</span></h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug</label><input type="text" required value={newModel.slug} onChange={e => setNewModel({ ...newModel, slug: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Ex: savanah" /></div>
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
-              <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
-            </form>
+      {showDeposit && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl animate-in zoom-in duration-300">
+            <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); setActiveCartId(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors z-[310]"><X size={24} /></button>
+            
+            {pixPaid ? (
+               <div className="py-10 text-center animate-in zoom-in">
+                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce">
+                    <CheckCircle className="text-emerald-500" size={40} />
+                  </div>
+                  <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
+                  <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
+                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); setActiveCartId(null); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar para a Roleta</button>
+               </div>
+            ) : pixLoading ? (
+              <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
+            ) : pixData ? (
+              <div className="mt-4 text-center">
+                 <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
+                 <div className="bg-white p-4 rounded-3xl inline-block mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
+                 
+                 <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
+                    <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
+                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Abra o app do seu banco.<br/>2. Escolha "Pagar com QR Code".<br/>3. Escaneie a imagem acima.<br/>4. O saldo cai automaticamente!</p>
+                 </div>
+
+                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+                 </button>
+                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação do banco...</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
+                {[ 
+                  { rs: 20, cr: 25 }, 
+                  { rs: 30, cr: 35 }, 
+                  { rs: 40, cr: 45 }, 
+                  { rs: 50, cr: 55 } 
+                ].map((p) => (
+                  <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
+                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus} BÔNUS</div>
+                    <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
+                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-lg group-hover:shadow-[#D946EF]/20">Comprar</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
+      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
 }
