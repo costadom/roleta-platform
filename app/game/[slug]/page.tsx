@@ -9,7 +9,7 @@ import { PrizeModal } from "@/components/PrizeModal";
 import AuthModal from "@/components/AuthModal";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
-const SPIN_DURATION = 5000; // Aumentado levemente para uma parada mais suave e realista
+const SPIN_DURATION = 5000; 
 
 export default function GamePage() {
   const params = useParams();
@@ -106,6 +106,7 @@ export default function GamePage() {
     }
   }, [slug]);
 
+  // Checagem do pagamento aprovado
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -118,14 +119,22 @@ export default function GamePage() {
             if (data[0]?.credits > player.credits) {
               setPixPaid(true);
               setPlayer({ ...player, credits: data[0].credits });
+              if (activeCartId) {
+                fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
+                  method: 'PATCH',
+                  headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'pago' })
+                }).catch(() => null);
+              }
               clearInterval(interval);
             }
         } catch(err) {}
       }, 4000);
     }
     return () => clearInterval(interval);
-  }, [pixData, pixPaid, player]);
+  }, [pixData, pixPaid, player, activeCartId]);
 
+  // Cronômetro do Pix
   useEffect(() => {
     let timer: any;
     if (pixData && !pixPaid && pixTimeLeft > 0) {
@@ -136,6 +145,49 @@ export default function GamePage() {
 
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
+  // 🔥 RESTAURADA: Função de geração de PIX com Carrinho Abandonado 🔥
+  const handleGeneratePix = async (val: number) => {
+    if (!player) return;
+    setPixLoading(true);
+    setPixData(null);
+    setPixPaid(false);
+    setActiveCartId(null);
+    setPixTimeLeft(600); 
+    
+    // Registro do Carrinho Abandonado para Recuperação de Vendas
+    try {
+      const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+        method: 'POST',
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          player_name: player.nickname || player.full_name || "Cliente",
+          player_phone: player.whatsapp,
+          model_name: modelName || slug,
+          amount: val,
+          status: 'pendente'
+        })
+      });
+      if (resCart.ok) {
+        const cartData = await resCart.json();
+        if (cartData && cartData[0]) setActiveCartId(cartData[0].id);
+      }
+    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
+
+    try {
+      const res = await fetch('/api/checkout/pix', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: val, userId: player.id }),
+      });
+      if(!res.ok) throw new Error("Erro API Pix");
+      const data = await res.json();
+      if (data.qr_code_base64) { 
+          setPixData(data); 
+      }
+    } catch (e) {
+        alert("Falha ao gerar o PIX. Tente novamente.");
+    } finally { setPixLoading(false); }
+  };
+
   const runSpin = async (cost: number = 3) => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0 || !player) return;
@@ -145,7 +197,6 @@ export default function GamePage() {
     if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
     if (cost === 6) setSuperMsg("🔥 Isso amor! Com o Super Giro suas chances são GIGANTES! Vem ganhar... 🍀💖");
 
-    // Lógica de Sorteio Ponderada via Banco
     const validOptions: any[] = [];
     let totalWeight = 0;
     prizes.forEach((p, i) => {
@@ -169,7 +220,6 @@ export default function GamePage() {
     const newBal = player.credits - cost;
     setPlayer({ ...player, credits: newBal });
 
-    // 🔥 CÁLCULO ESTABILIZADO: Usa a fórmula do seu componente sem tremer
     const sliceAngle = 360 / prizes.length;
     const stopAngle = (360 - (targetIndex * sliceAngle)) % 360;
     const currentSpins = Math.floor(rotation / 360);
