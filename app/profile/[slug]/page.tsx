@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User
+  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
@@ -30,6 +30,8 @@ export default function ModelProfile() {
   const [pixData, setPixData] = useState<{ qrCodeBase64: string, qrCodeCopiaCola: string, txId: string } | null>(null);
   const [processingPix, setProcessingPix] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 Minutos
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -51,76 +53,91 @@ export default function ModelProfile() {
       let currentPlayerId = null;
       const phone = localStorage.getItem("labz_player_phone");
       if (logged && phone) {
-          const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=id`, { headers }).then(r => r.json());
-          if (playerRes && playerRes[0]) {
-              currentPlayerId = playerRes[0].id;
-              setPlayerId(currentPlayerId);
-          }
+        const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=id`, { headers }).then(r => r.json());
+        if (playerRes && playerRes[0]) {
+          currentPlayerId = playerRes[0].id;
+          setPlayerId(currentPlayerId);
+        }
       }
 
       const resMedia = await fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelData.id}&order=created_at.desc`, { headers }).then(r => r.json());
       setMedia(Array.isArray(resMedia) ? resMedia : []);
 
-      // BUSCA HÍBRIDA DE DESBLOQUEIOS
       if (logged) {
-          let unlocked = [];
-          if (currentPlayerId) {
-              const resU = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=eq.${currentPlayerId}&select=media_id`, { headers });
-              if (resU.ok) unlocked = await resU.json();
-              else {
-                  const resU2 = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&select=media_id`, { headers });
-                  if (resU2.ok) unlocked = await resU2.json();
-              }
+        let unlocked = [];
+        if (currentPlayerId) {
+          const resU = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=eq.${currentPlayerId}&select=media_id`, { headers });
+          if (resU.ok) unlocked = await resU.json();
+          else {
+            const resU2 = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&select=media_id`, { headers });
+            if (resU2.ok) unlocked = await resU2.json();
           }
-          setUnlockedIds(unlocked.map((u: any) => u.media_id));
+        }
+        setUnlockedIds(unlocked.map((u: any) => u.media_id));
       }
-
     } catch (e) { console.error("Erro", e); } finally { setLoading(false); }
   }
+
+  // Cronômetro do Pix
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (pixData && !paymentSuccess && pixTimeLeft > 0) {
+      timer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [pixData, paymentSuccess, pixTimeLeft]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   const openCheckout = async (type: 'photo' | 'video', price: number, itemInfo: any) => {
     if (!playerId) return alert("Você precisa estar logado.");
     setCheckoutData({ type, price, itemInfo });
-    setPixData(null); setProcessingPix(true); setPaymentSuccess(false);
+    setPixData(null); setProcessingPix(true); setPaymentSuccess(false); setPixTimeLeft(600);
     try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
-        const modelName = Array.isArray(model?.Configs) ? model.Configs[0]?.model_name : model?.Configs?.model_name || model?.slug;
-        const phone = localStorage.getItem("labz_player_phone");
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+      const modelName = Array.isArray(model?.Configs) ? model.Configs[0]?.model_name : model?.Configs?.model_name || model?.slug;
+      const phone = localStorage.getItem("labz_player_phone");
 
-        await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ player_phone: phone, model_name: `${modelName} (${type === 'photo' ? 'Foto' : 'Vídeo'})`, amount: price, status: 'pendente' })
-        });
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ player_phone: phone, model_name: `${modelName} (${type === 'photo' ? 'Foto' : 'Vídeo'})`, amount: price, status: 'pendente' })
+      });
 
-        let requestId = null;
-        if (type === 'video') {
-            const resReq = await fetch(`${supabaseUrl}/rest/v1/VideoRequests`, { method: 'POST', headers, body: JSON.stringify({ model_id: model.id, player_id: playerId, player_phone: phone, description: itemInfo.description, duration: itemInfo.duration, price: price, status: 'pendente' }) });
-            const reqData = await resReq.json();
-            requestId = reqData[0].id; itemInfo.requestId = requestId;
-        }
+      let requestId = null;
+      if (type === 'video') {
+        const resReq = await fetch(`${supabaseUrl}/rest/v1/VideoRequests`, { method: 'POST', headers, body: JSON.stringify({ model_id: model.id, player_id: playerId, player_phone: phone, description: itemInfo.description, duration: itemInfo.duration, price: price, status: 'pendente' }) });
+        const reqData = await resReq.json();
+        requestId = reqData[0].id; itemInfo.requestId = requestId;
+      }
 
-        const res = await fetch('/api/checkout/hub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: price, userId: playerId, type: type, modelId: model.id, mediaId: type === 'photo' ? itemInfo.id : null, requestId: requestId }) });
-        const data = await res.json();
-        if (data.qr_code_base64 || data.qrCodeBase64) {
-            setPixData({ qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, txId: data.id || data.transaction_id });
-        } else { throw new Error("Falha no PIX"); }
+      const res = await fetch('/api/checkout/hub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: price, userId: playerId, type: type, modelId: model.id, mediaId: type === 'photo' ? itemInfo.id : null, requestId: requestId }) });
+      const data = await res.json();
+      if (data.qr_code_base64 || data.qrCodeBase64) {
+        setPixData({ qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, txId: data.id || data.transaction_id });
+      } else { throw new Error("Falha no PIX"); }
     } catch (e) { alert("Falha na conexão."); setCheckoutData(null); } finally { setProcessingPix(false); }
   };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (checkoutData && pixData && !paymentSuccess && playerId) {
-        interval = setInterval(async () => {
-            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
-            const phone = localStorage.getItem("labz_player_phone");
-            if (checkoutData.type === 'photo') {
-                const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&media_id=eq.${checkoutData.itemInfo.id}`, { headers }).then(r => r.json());
-                if (res && res.length > 0) { clearInterval(interval); handlePaymentApproved(); }
-            } else if (checkoutData.type === 'video') {
-                const res = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${checkoutData.itemInfo.requestId}&select=status`, { headers }).then(r => r.json());
-                if (res && res[0]?.status === 'pago') { clearInterval(interval); handlePaymentApproved(); }
-            }
-        }, 3000); 
+      interval = setInterval(async () => {
+        try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+          const phone = localStorage.getItem("labz_player_phone");
+          if (checkoutData.type === 'photo') {
+            const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&media_id=eq.${checkoutData.itemInfo.id}`, { headers }).then(r => r.json());
+            if (res && res.length > 0) { clearInterval(interval); handlePaymentApproved(); }
+          } else if (checkoutData.type === 'video') {
+            const res = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${checkoutData.itemInfo.requestId}&select=status`, { headers }).then(r => r.json());
+            if (res && res[0]?.status === 'pago') { clearInterval(interval); handlePaymentApproved(); }
+          }
+        } catch (e) {}
+      }, 3000); 
     }
     return () => clearInterval(interval);
   }, [checkoutData, pixData, paymentSuccess, playerId]);
@@ -128,9 +145,9 @@ export default function ModelProfile() {
   const handlePaymentApproved = () => {
     setPaymentSuccess(true);
     setTimeout(() => {
-        const itemInfo = checkoutData?.itemInfo; const type = checkoutData?.type;
-        setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
-        if (type === 'photo') { setViewingMedia(itemInfo); setLiked(false); }
+      const itemInfo = checkoutData?.itemInfo; const type = checkoutData?.type;
+      setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
+      if (type === 'photo') { setViewingMedia(itemInfo); setLiked(false); }
     }, 2500); 
   };
 
@@ -209,10 +226,12 @@ export default function ModelProfile() {
         </div>
       )}
 
+      {/* CHECKOUT MODERNIZADO COM URGÊNCIA E INSTRUÇÕES */}
       {checkoutData && (
           <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
              <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md text-center relative shadow-2xl">
-                {!paymentSuccess && <button onClick={() => setCheckoutData(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/20 hover:text-white"><X size={24}/></button>}
+                {!paymentSuccess && <button onClick={() => setCheckoutData(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/30 hover:text-white transition-colors"><X size={24}/></button>}
+                
                 {paymentSuccess ? (
                     <div className="py-10 animate-in zoom-in duration-500">
                         <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle size={50} className="text-black"/></div>
@@ -221,17 +240,44 @@ export default function ModelProfile() {
                     </div>
                 ) : (
                     <>
-                        <QrCode size={50} className="text-[#D946EF] mx-auto mb-6" />
-                        <h2 className="text-2xl font-black uppercase italic mb-2">Pague com PIX</h2>
-                        <div className="bg-white/5 border border-white/10 p-6 rounded-3xl mb-8 flex flex-col items-center">
-                            <div className="text-4xl font-black text-white mb-2">R$ {checkoutData.price.toFixed(2).replace('.', ',')}</div>
-                        </div>
-                        {processingPix && !pixData ? (<Loader2 className="animate-spin text-[#D946EF] mx-auto" size={40}/>) : pixData ? (
-                            <div className="animate-in zoom-in duration-500">
-                                <div className="w-48 h-48 sm:w-56 sm:h-56 bg-white mx-auto rounded-[2rem] flex items-center justify-center p-3 mb-6"><img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full rounded-xl" /></div>
-                                <button onClick={() => { navigator.clipboard.writeText(pixData.qrCodeCopiaCola); alert("PIX Copiado!"); }} className="w-full bg-white/10 text-white py-5 rounded-2xl font-black uppercase text-xs hover:bg-[#D946EF] transition-all flex items-center justify-center gap-3"><Copy size={16}/> Copiar PIX</button>
+                        <h2 className="text-xl font-black text-white uppercase italic mb-6">Pagar com PIX</h2>
+                        
+                        <div className="bg-white p-4 rounded-3xl inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.1)] relative">
+                          {processingPix && !pixData ? (
+                            <div className="w-48 h-48 sm:w-56 sm:h-56 flex flex-col items-center justify-center text-black font-black uppercase text-[10px]">
+                              <Loader2 className="animate-spin text-[#D946EF] mb-2" size={30} />
+                              Gerando PIX...
                             </div>
-                        ) : null}
+                          ) : pixData ? (
+                            <img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-48 h-48 sm:w-56 sm:h-56 rounded-xl" />
+                          ) : null}
+                        </div>
+
+                        {/* CRONÔMETRO DE URGÊNCIA */}
+                        {pixData && (
+                          <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
+                             ⏱ {formatTime(pixTimeLeft)}
+                          </div>
+                        )}
+
+                        <div className="text-left bg-white/5 border border-white/10 p-5 rounded-2xl mb-6">
+                            <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
+                            <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Abra o app do seu banco.<br/>2. Escolha "Pagar com QR Code".<br/>3. Escaneie a imagem acima.<br/>4. O conteúdo libera automaticamente!</p>
+                        </div>
+
+                        {pixData && (
+                          <button onClick={() => { 
+                            navigator.clipboard.writeText(pixData.qrCodeCopiaCola); 
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+                             {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+                          </button>
+                        )}
+                        
+                        <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse flex items-center justify-center gap-2">
+                           <Loader2 size={10} className="animate-spin" /> Aguardando confirmação do banco...
+                        </p>
                     </>
                 )}
              </div>
@@ -252,6 +298,13 @@ export default function ModelProfile() {
       <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push('/hub'); }} className="fixed bottom-6 right-6 z-[999] bg-[#D946EF] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center group border border-white/20"><User size={24} /><span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 font-black uppercase text-xs tracking-widest">Meu Perfil VIP</span></button>
 
       {showAuth && <AuthModal isOpen={true} onClose={() => setShowAuth(false)} />}
+      
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }
+      `}</style>
     </div>
   );
 }
