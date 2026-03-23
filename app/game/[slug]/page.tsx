@@ -9,7 +9,7 @@ import { PrizeModal } from "@/components/PrizeModal";
 import AuthModal from "@/components/AuthModal";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
-const SPIN_DURATION = 4000;
+const SPIN_DURATION = 8000; // Ajustado para casar com a animação CSS (8s)
 
 export default function GamePage() {
   const params = useParams();
@@ -39,6 +39,7 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modelId, setModelId] = useState<string | null>(null);
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -65,6 +66,7 @@ export default function GamePage() {
            setLoading(false);
            return;
         }
+        setModelId(mId);
 
         // 2. Dispara Prêmios, Configurações e Checagem de Usuário AO MESMO TEMPO
         const fetchPromises: any[] = [
@@ -80,8 +82,10 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
-        // Aplica os Prêmios e Configs
-        setPrizes(results[0] || []);
+        // Aplica os Prêmios (Sincronizando ordem alfabética para o motor de ângulo funcionar perfeito)
+        const rawPrizes = results[0] || [];
+        setPrizes(rawPrizes.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+        
         const dataConfig = results[1];
         if (dataConfig?.[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
@@ -181,24 +185,76 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
+  // 🔥 MOTOR DE GIRO BLINDADO 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
-    if (isSpinning || prizes.length === 0) return;
-    if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
+    if (isSpinning || prizes.length < 2 || !modelId || !player) return;
+    if (player.credits < 3) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
-    spinAudioRef.current?.play().catch(() => {});
-    const index = Math.floor(Math.random() * prizes.length); 
-    setRotation(prev => prev + 3600 + (360 - (index * (360/prizes.length))));
+    const cost = 3;
+    setPlayer({ ...player, credits: player.credits - cost }); // Dedução visual imediata
+    if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
 
-    setTimeout(async () => {
-      setIsSpinning(false); setSelectedPrize(prizes[index]); setModalOpen(true);
-      const newBal = (player?.credits || 0) - 3;
-      setPlayer({ ...player, credits: newBal });
-      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ credits: newBal }) });
-      winAudioRef.current?.play().catch(() => {});
-      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-    }, SPIN_DURATION + 100);
+    try {
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+      
+      // 1. SORTEIO REAL NO BANCO
+      const resSpin = await fetch(`${supabaseUrl}/functions/v1/spin`, { 
+          method: 'POST', headers, 
+          body: JSON.stringify({ model_id: modelId, player_id: player.id, player_phone: player.whatsapp }) 
+      });
+      const dataSpin = await resSpin.json();
+
+      if (dataSpin.error || !dataSpin.prizeId) { throw new Error(dataSpin.error || "Falha na API"); }
+
+      const prizeIdWon = dataSpin.prizeId;
+      const wonObjFromBanco = prizes.find(p => p.id === prizeIdWon);
+      if (!wonObjFromBanco) throw new Error("Prêmio não encontrado na roleta");
+
+      // 2. PROTOCOLO ANTI-BAIT 🛡️ (Garante que nunca caia em prêmio proibido visualmente)
+      let finalVisualPrize = wonObjFromBanco;
+      const n = String(wonObjFromBanco.name).toUpperCase();
+      if (n.includes("PIX") || n.includes("PRESENCIAL") || n.includes("100") || n.includes("R$")) {
+          // Se o banco sortear uma isca, o sistema intercepta e força o visual para outro prêmio
+          const safePrize = prizes.find(p => String(p.name).toUpperCase().includes("CRÉDITO")) || prizes[0];
+          finalVisualPrize = safePrize;
+      }
+
+      // 3. CÁLCULO MATEMÁTICO DO ÂNGULO
+      const totalSegments = prizes.length;
+      const arcSize = 360 / totalSegments;
+      const prizeIndexVisual = prizes.findIndex(p => p.id === finalVisualPrize.id);
+      
+      // A RouletteWheel original do seu código gira em sentido anti-horário (por isso a matemática é assim)
+      const baseAngle = 360 - (prizeIndexVisual * arcSize) - (arcSize / 2); 
+      const voltasCompletas = 6 * 360;
+      const targetRotation = rotation + voltasCompletas + (baseAngle - (rotation % 360));
+
+      setRotation(targetRotation); // Dispara a animação CSS
+
+      // 4. FINALIZAÇÃO E MODAL (Após a animação)
+      setTimeout(async () => {
+        setIsSpinning(false); 
+        setSelectedPrize(finalVisualPrize); 
+        setModalOpen(true);
+        if (soundEnabled) winAudioRef.current?.play().catch(() => {});
+        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
+        
+        // Puxa o saldo real atualizado do banco
+        const resBal = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
+        const balData = await resBal.json();
+        if (balData && balData[0]) setPlayer({ ...player, credits: balData[0].credits });
+
+      }, SPIN_DURATION);
+
+    } catch (err) {
+      console.error("Erro no giro:", err);
+      // Reembolsa visualmente se der erro
+      setPlayer({ ...player, credits: player.credits + cost });
+      setIsSpinning(false);
+      alert("Falha na conexão. Seu crédito foi devolvido.");
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
@@ -323,7 +379,7 @@ export default function GamePage() {
                   { rs: 50, cr: 55 } 
                 ].map((p) => (
                   <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
-                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus} BÔNUS</div>
+                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus || 5} BÔNUS</div>
                     <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
                     <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-lg group-hover:shadow-[#D946EF]/20">Comprar</div>
                   </button>
@@ -334,7 +390,9 @@ export default function GamePage() {
         </div>
       )}
 
+      {/* MODAL DE PRÊMIO REVISADO E BLINDADO */}
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
+      
       <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
