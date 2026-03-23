@@ -65,7 +65,6 @@ export default function GamePage() {
         }
 
         const fetchPromises: any[] = [
-          // REMOVIDO o "order" que estava dando erro 400.
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
         ];
@@ -78,8 +77,9 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
-        // Checagem de segurança (fallback caso a API falhe silenciosamente)
+        // Garante a ordem de criação no frontend (mesmo sem o order do backend) para a hierarquia não falhar
         const fetchedPrizes = Array.isArray(results[0]) ? results[0] : [];
+        fetchedPrizes.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
         setPrizes(fetchedPrizes);
         
         const dataConfig = results[1];
@@ -178,7 +178,7 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 MOTOR DA ROLETA COM HIERARQUIA E TRAVA ANTI-ISCA 🔥
+  // 🔥 O MOTOR SÊNIOR ABSOLUTO: HIERARQUIA + PRECISÃO MATEMÁTICA + ANTI-ISCA 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0) return;
@@ -187,15 +187,17 @@ export default function GamePage() {
     setIsSpinning(true);
     spinAudioRef.current?.play().catch(() => {});
 
-    // 1. FILTRO ANTI-ISCA (Bloqueio total de PIX, 100 e Presencial)
+    console.log("🕵️ ESPIÃO LABZ: Iniciando Motor Sênior...");
+
+    // 1. ISOLANDO OS PRÊMIOS PERMITIDOS
     const validOptions: { originalIndex: number, weight: number }[] = [];
     let totalWeight = 0;
     
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
-        // Se não for isca, entra pro sorteio
+        // CADEADO DE SEGURANÇA MÁXIMA: NUNCA Sorteia Iscas
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            // HIERARQUIA: O prêmio 0 tem peso 1. O prêmio 5 tem peso 216. A base sai MUITO MAIS.
+            // HIERARQUIA LOGARÍTMICA: A Base (últimos itens) domina o sorteio.
             const weight = Math.pow((i + 1), 3); 
             validOptions.push({ originalIndex: i, weight });
             totalWeight += weight;
@@ -205,7 +207,7 @@ export default function GamePage() {
     let targetIndex = 0;
 
     if (validOptions.length > 0) {
-        // 2. SORTEIO BASEADO NA HIERARQUIA
+        // 2. SORTEIO HIERÁRQUICO (Rodando os pesos)
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
             if (random < option.weight) {
@@ -215,16 +217,36 @@ export default function GamePage() {
             random -= option.weight;
         }
     } else {
-        targetIndex = 0; // Fallback caso ocorra um erro bizarro
+        targetIndex = 0; // Fallback extremo
     }
 
-    // 3. CÁLCULO DE ROTAÇÃO (Matemática original exata)
-    setRotation(prev => prev + 3600 + (360 - (targetIndex * (360/prizes.length))));
+    console.log(`🕵️ ESPIÃO LABZ: Sorteio concluído. Alvo Visual Index: [${targetIndex}] -> Nome: "${prizes[targetIndex].name}"`);
 
-    // 4. FINALIZAÇÃO DA JOGADA
+    // 3. A MATEMÁTICA DE SINCRONIA PERFEITA (Onde a mágica visual acontece)
+    setRotation(prevRotation => {
+        const arcSize = 360 / prizes.length;
+        // O ângulo para a fatia exata ficar apontando para cima (com correção para o CENTRO da fatia)
+        const targetAngle = 360 - (targetIndex * arcSize) - (arcSize / 2);
+        
+        // Calcula onde o disco está fisicamente agora (ignorando as voltas completas)
+        const currentMod = prevRotation % 360;
+        
+        // Calcula a diferença exata de graus para chegar no alvo
+        let diff = targetAngle - currentMod;
+        if (diff <= 0) diff += 360; // Garante que o disco gire sempre para frente
+        
+        // Adiciona 10 voltas completas para a emoção visual + a diferença milimétrica calculada
+        const newRotation = prevRotation + (360 * 10) + diff;
+        
+        console.log(`🕵️ ESPIÃO LABZ: Rotação Anterior: ${prevRotation} | Alvo Angular: ${targetAngle} | Nova Rotação Certa: ${newRotation}`);
+        
+        return newRotation;
+    });
+
+    // 4. FINALIZAÇÃO APÓS A ANIMAÇÃO (Sincronizado com SPIN_DURATION)
     setTimeout(async () => {
       setIsSpinning(false); 
-      setSelectedPrize(prizes[targetIndex]); 
+      setSelectedPrize(prizes[targetIndex]); // O prêmio exato da matemática visual
       setModalOpen(true);
       
       const newBal = (player?.credits || 0) - 3;
