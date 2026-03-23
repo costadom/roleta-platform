@@ -9,7 +9,7 @@ import { PrizeModal } from "@/components/PrizeModal";
 import AuthModal from "@/components/AuthModal";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
-const SPIN_DURATION = 8000; // Ajustado para casar com a animação CSS (8s)
+const SPIN_DURATION = 4000;
 
 export default function GamePage() {
   const params = useParams();
@@ -39,7 +39,6 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modelId, setModelId] = useState<string | null>(null);
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -47,7 +46,6 @@ export default function GamePage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 O SEGREDO DA VELOCIDADE ESTÁ AQUI: Tudo carrega junto agora!
   useEffect(() => {
     async function initializeData() {
       if (!slug || !supabaseUrl) return;
@@ -57,7 +55,6 @@ export default function GamePage() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
         
-        // 1. Pega ID da Modelo (Super Rápido)
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
@@ -66,9 +63,7 @@ export default function GamePage() {
            setLoading(false);
            return;
         }
-        setModelId(mId);
 
-        // 2. Dispara Prêmios, Configurações e Checagem de Usuário AO MESMO TEMPO
         const fetchPromises: any[] = [
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
@@ -82,17 +77,13 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
-        // Aplica os Prêmios (Sincronizando ordem alfabética para o motor de ângulo funcionar perfeito)
-        const rawPrizes = results[0] || [];
-        setPrizes(rawPrizes.sort((a: any, b: any) => a.name.localeCompare(b.name)));
-        
+        setPrizes(results[0] || []);
         const dataConfig = results[1];
         if (dataConfig?.[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
         }
 
-        // Aplica a autorização se tiver retornado usuário
         if (results.length > 2) {
           const dataAll = results[2] || [];
           setAllAssociations(dataAll);
@@ -119,7 +110,6 @@ export default function GamePage() {
     }
   }, [slug]);
 
-  // Monitoramento de pagamento aprovado
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -153,7 +143,6 @@ export default function GamePage() {
     setPixPaid(false);
     setActiveCartId(null);
     
-    // Registra o carrinho abandonado no banco
     try {
       const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
         method: 'POST',
@@ -185,76 +174,75 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 MOTOR DE GIRO BLINDADO 🔥
+  // 🔥 LÓGICA DO GIRO CORRIGIDA COM HIERARQUIA DE CHANCES (BASE = FÁCIL, TOPO = DIFÍCIL) 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
-    if (isSpinning || prizes.length < 2 || !modelId || !player) return;
-    if (player.credits < 3) { setShowDeposit(true); return; }
+    if (isSpinning || prizes.length === 0) return;
+    if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
-    const cost = 3;
-    setPlayer({ ...player, credits: player.credits - cost }); // Dedução visual imediata
-    if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
+    spinAudioRef.current?.play().catch(() => {});
 
-    try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
-      
-      // 1. SORTEIO REAL NO BANCO
-      const resSpin = await fetch(`${supabaseUrl}/functions/v1/spin`, { 
-          method: 'POST', headers, 
-          body: JSON.stringify({ model_id: modelId, player_id: player.id, player_phone: player.whatsapp }) 
-      });
-      const dataSpin = await resSpin.json();
+    // 1. Filtramos apenas os prêmios válidos e guardamos a posição original deles
+    const validPrizes: any[] = [];
+    prizes.forEach((p, i) => {
+        const n = String(p.name).toUpperCase();
+        // Bloqueio absoluto das iscas
+        if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
+            validPrizes.push({ originalIndex: i });
+        }
+    });
 
-      if (dataSpin.error || !dataSpin.prizeId) { throw new Error(dataSpin.error || "Falha na API"); }
+    let index = 0;
 
-      const prizeIdWon = dataSpin.prizeId;
-      const wonObjFromBanco = prizes.find(p => p.id === prizeIdWon);
-      if (!wonObjFromBanco) throw new Error("Prêmio não encontrado na roleta");
+    if (validPrizes.length > 0) {
+        // 2. Aplicação da Hierarquia Matemática:
+        // O primeiro válido (Topo) recebe o peso 1x.
+        // O último válido (Base) recebe um peso massivamente maior (ex: 25x).
+        let totalWeight = 0;
+        const weighted = validPrizes.map((vp, idx) => {
+            // idx = 0 é o mais no topo. idx máximo é a base.
+            // Elevamos ao quadrado para a base sair infinitamente mais que o topo
+            const weight = Math.pow((idx + 1), 2); 
+            totalWeight += weight;
+            return { ...vp, weight };
+        });
 
-      // 2. PROTOCOLO ANTI-BAIT 🛡️ (Garante que nunca caia em prêmio proibido visualmente)
-      let finalVisualPrize = wonObjFromBanco;
-      const n = String(wonObjFromBanco.name).toUpperCase();
-      if (n.includes("PIX") || n.includes("PRESENCIAL") || n.includes("100") || n.includes("R$")) {
-          // Se o banco sortear uma isca, o sistema intercepta e força o visual para outro prêmio
-          const safePrize = prizes.find(p => String(p.name).toUpperCase().includes("CRÉDITO")) || prizes[0];
-          finalVisualPrize = safePrize;
-      }
-
-      // 3. CÁLCULO MATEMÁTICO DO ÂNGULO
-      const totalSegments = prizes.length;
-      const arcSize = 360 / totalSegments;
-      const prizeIndexVisual = prizes.findIndex(p => p.id === finalVisualPrize.id);
-      
-      // A RouletteWheel original do seu código gira em sentido anti-horário (por isso a matemática é assim)
-      const baseAngle = 360 - (prizeIndexVisual * arcSize) - (arcSize / 2); 
-      const voltasCompletas = 6 * 360;
-      const targetRotation = rotation + voltasCompletas + (baseAngle - (rotation % 360));
-
-      setRotation(targetRotation); // Dispara a animação CSS
-
-      // 4. FINALIZAÇÃO E MODAL (Após a animação)
-      setTimeout(async () => {
-        setIsSpinning(false); 
-        setSelectedPrize(finalVisualPrize); 
-        setModalOpen(true);
-        if (soundEnabled) winAudioRef.current?.play().catch(() => {});
-        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
+        // 3. Sorteio ponderado
+        let random = Math.random() * totalWeight;
         
-        // Puxa o saldo real atualizado do banco
-        const resBal = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
-        const balData = await resBal.json();
-        if (balData && balData[0]) setPlayer({ ...player, credits: balData[0].credits });
-
-      }, SPIN_DURATION);
-
-    } catch (err) {
-      console.error("Erro no giro:", err);
-      // Reembolsa visualmente se der erro
-      setPlayer({ ...player, credits: player.credits + cost });
-      setIsSpinning(false);
-      alert("Falha na conexão. Seu crédito foi devolvido.");
+        for (let i = 0; i < weighted.length; i++) {
+            if (random < weighted[i].weight) {
+                index = weighted[i].originalIndex;
+                break;
+            }
+            random -= weighted[i].weight;
+        }
+    } else {
+        // Fallback preventivo caso a modelo faça uma roleta de 100% iscas (impossível, mas protege o código)
+        index = Math.floor(Math.random() * prizes.length); 
     }
+
+    // 4. Sua matemática original EXATA que alinha o disco perfeitamente!
+    setRotation(prev => prev + 3600 + (360 - (index * (360/prizes.length))));
+
+    setTimeout(async () => {
+      setIsSpinning(false); 
+      setSelectedPrize(prizes[index]); // Seleciona o prêmio real e válido escolhido
+      setModalOpen(true);
+      
+      const newBal = (player?.credits || 0) - 3;
+      setPlayer({ ...player, credits: newBal });
+      
+      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
+        method: "PATCH", 
+        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+        body: JSON.stringify({ credits: newBal }) 
+      });
+      
+      winAudioRef.current?.play().catch(() => {});
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    }, SPIN_DURATION + 100);
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
@@ -390,7 +378,6 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* MODAL DE PRÊMIO REVISADO E BLINDADO */}
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
       
       <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
