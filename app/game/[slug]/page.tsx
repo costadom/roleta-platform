@@ -40,7 +40,6 @@ export default function GamePage() {
   const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   
-  // 🔥 NOVO ESTADO: Prêmios ganhos persistentes 🔥
   const [wonPrizes, setWonPrizes] = useState<any[]>([]);
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -59,6 +58,7 @@ export default function GamePage() {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
         
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
+        if (!resMod.ok) throw new Error("Falha ao buscar Modelo");
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
         
@@ -67,9 +67,15 @@ export default function GamePage() {
            return;
         }
 
+        // 🔥 FALLBACK DE API SÊNIOR: Tenta buscar ordenado, se der erro (ex: falta a coluna), busca simples.
+        let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers });
+        if (!prizesRes.ok) {
+            console.warn("⚠️ Coluna created_at ausente, fazendo busca simples de prêmios.");
+            prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers });
+        }
+        const prizesData = await prizesRes.json();
+
         const fetchPromises: any[] = [
-          // REMOVIDO o "order" que estava dando erro 400.
-          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
         ];
 
@@ -81,20 +87,17 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
-        // Robustez Sênior: Checagem de segurança (fallback caso a API falhe)
-        const fetchedPrizes = Array.isArray(results[0]) ? results[0] : [];
-        // Ordenação frontend garantida para a hierarquia reativa
-        fetchedPrizes.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        const fetchedPrizes = Array.isArray(prizesData) ? prizesData : [];
         setPrizes(fetchedPrizes);
         
-        const dataConfig = results[1];
+        const dataConfig = results[0];
         if (dataConfig?.[0]) {
           setBgUrl(dataConfig[0].bg_url || "");
           setModelName(dataConfig[0].model_name || slug.toString().toUpperCase());
         }
 
-        if (results.length > 2) {
-          const dataAll = results[2] || [];
+        if (results.length > 1) {
+          const dataAll = results[1] || [];
           setAllAssociations(dataAll);
           const currentPlayer = dataAll.find((p: any) => p.model_id === mId);
           if (currentPlayer && currentPlayer.full_name && currentPlayer.nickname) {
@@ -102,7 +105,6 @@ export default function GamePage() {
             setIsAuthorized(true);
             setShowAuthModal(false);
             
-            // 🔥 Recupera prêmios ganhos persistidos no navegador 🔥
             const storageKey = `won_prizes_${mId}_${currentPlayer.id}`;
             const stored = localStorage.getItem(storageKey);
             if(stored) setWonPrizes(JSON.parse(stored));
@@ -114,7 +116,7 @@ export default function GamePage() {
           setIsAuthorized(false);
         }
 
-      } catch (e) { console.error(e); } finally { setLoading(false); }
+      } catch (e) { console.error("Erro Crítico de Inicialização:", e); } finally { setLoading(false); }
     }
 
     initializeData();
@@ -135,7 +137,6 @@ export default function GamePage() {
             const data = await res.json();
             if (data[0]?.credits > player.credits) {
               setPixPaid(true);
-              // 🔥 FIX SALDO EM TEMPO REAL: Atualiza estado local imediatamente 🔥
               setPlayer({ ...player, credits: data[0].credits });
               if (activeCartId) {
                 await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
@@ -190,27 +191,25 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 MOTOR SÊNIOR V4 FINAL: PRECISÃO MILIMÉTRICA + HIERARQUIA REVERSA + MUDO FIX + SALDO TEMPO REAL 🔥
+  // 🔥 MOTOR SÊNIOR V5: MATEMÁTICA ABSOLUTA E RESILIENTE 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0 || !player) return;
     if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
-    
-    // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de giro 🔥
     if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
 
-    console.log("🕵️ ESPIÃO LABZ: Iniciando Motor Sênior Final...");
+    console.log("🕵️ ESPIÃO LABZ: Analisando as Fatias da Roleta...");
 
     // 1. ISOLANDO OS PRÊMIOS PERMITIDOS
     const validOptions: { originalIndex: number, weight: number }[] = [];
     
-    // Filtro inicial anti-isca (Segurança Absoluta)
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
+        // CADEADO DE SEGURANÇA MÁXIMA: NUNCA Sorteia Iscas
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            validOptions.push({ originalIndex: i, weight: 0 }); // Peso temporário
+            validOptions.push({ originalIndex: i, weight: 0 }); 
         }
     });
 
@@ -218,18 +217,16 @@ export default function GamePage() {
     const numValid = validOptions.length;
 
     if (numValid > 0) {
-        // 🔥 FIX 2: HIERARQUIA REVERSA (Topo da lista = Super Fácil, Base = Super Difícil) 🔥
+        // 2. HIERARQUIA REVERSA (Topo da lista = Muito Fácil, Base = Muito Difícil)
         validOptions.forEach((option, idx) => {
-            // idx=0 é o primeiro item válido da lista (topo). idx=(numValid-1) é o último (base).
-            // Elevamos ao cubo a diferença reversa para criar uma rampa de probabilidade agressiva no topo.
-            // Ex: Se tem 5 itens válidos: Item 0 (Bônus) ganha peso 125 ($5^3$), Item 4 ganha peso 1 ($1^3$).
+            // Correção do Bug Crítico de Variável: Adicionado 'const reverseWeight'
             const reverseWeight = Math.pow((numValid - idx), 3); 
             option.weight = reverseWeight;
-            totalWeight += weight = reverseWeight;
+            totalWeight += reverseWeight; 
         });
 
-        // 2. SORTEIO HIERÁRQUICO
-        let targetIndex = validOptions[0].originalIndex; // Fallback para o primeiro item (mais fácil)
+        // 3. SORTEIO HIERÁRQUICO
+        let targetIndex = validOptions[0].originalIndex; // Fallback seguro
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
             if (random < option.weight) {
@@ -239,42 +236,41 @@ export default function GamePage() {
             random -= option.weight;
         }
 
-        console.log(`🕵️ ESPIÃO LABZ: Sorteio concluído via Hierarquia Reversa. Alvo Visual Index: [${targetIndex}] -> Nome: "${prizes[targetIndex].name}"`);
+        console.log(`🕵️ ESPIÃO LABZ: Sorteio Exato Concluído -> Alvo Visual Index: [${targetIndex}] Nome: "${prizes[targetIndex].name}"`);
 
-        // 🔥 FIX SALDO EM TEMPO REAL: Dedução otimista visual imediata 🔥
+        // 4. DEDUÇÃO OTIMISTA DE SALDO
         const creditCost = 3;
         const optimisticBalance = player.credits - creditCost;
         setPlayer({ ...player, credits: optimisticBalance });
 
-        // 🔥 FIX 3: MIRA LASER VISUAL (Matemática de sincronia perfeita para ponteiro no TOPO) 🔥
+        // 5. MIRA LASER MATEMÁTICA (Calcula exatamente o centro da fatia)
         setRotation(prevRotation => {
             const arcSize = 360 / prizes.length;
-            // O ângulo para o CENTRO da fatia exata ficar apontando para cima (12 horas / 270 graus CSS)
-            // Assumimos que a fatia 0 começa em 0 graus (3 horas) e cresce no sentido horário.
-            const centerAngleOfTarget = (targetIndex * arcSize) + (arcSize / 2);
+            // Centro da fatia desejada
+            const centerAngle = (targetIndex * arcSize) + (arcSize / 2);
             
-            // O ponteiro visual do layout está no topo (12h), que corresponde a 270 graus na rotação SVG/CSS padrão.
-            // Calculamos a diferença que o disco precisa girar para levar esse centro até o ponteiro.
-            let diff = 270 - centerAngleOfTarget;
+            // Onde o disco está fisicamente agora (módulo)
+            const currentMod = prevRotation % 360;
             
-            // Normaliza a diferença para garantir que o disco gire sempre para a frente (sentido horário)
-            if (diff <= 0) diff += 360; 
+            // Qual ângulo devemos posicionar para alinhar o 'centerAngle' no topo (0 graus)
+            const alignAngle = 360 - centerAngle;
             
-            // Adiciona 10 voltas completas para emoção visual + a diferença milimétrica calculada
+            // Diferença necessária para alcançar o alinhamento
+            let diff = alignAngle - currentMod;
+            if (diff <= 0) diff += 360; // Gira sempre para a frente
+            
             const newRotation = prevRotation + (360 * 10) + diff;
-            
-            console.log(`🕵️ ESPIÃO LABZ: Mira Laser -> Rotação Anterior: ${prevRotation} | Alvo Angular (Topo): 270 | Centro da Fatia: ${centerAngleOfTarget} | Nova Rotação Certa: ${newRotation}`);
+            console.log(`🕵️ ESPIÃO LABZ: Física de Rotação -> Centro Alvo: ${centerAngle}° | Diferença Calculada: ${diff}°`);
             
             return newRotation;
         });
 
-        // 4. FINALIZAÇÃO APÓS A ANIMAÇÃO (Sincronizado com SPIN_DURATION)
+        // 6. FINALIZAÇÃO APÓS A ANIMAÇÃO
         setTimeout(async () => {
           setIsSpinning(false); 
-          setSelectedPrize(prizes[targetIndex]); // O prêmio exato da matemática visual
+          setSelectedPrize(prizes[targetIndex]); 
           setModalOpen(true);
           
-          // 🔥 Sincronização Sênior do Saldo: Atualiza no banco com REPRESENTATION e resgata valor exato 🔥
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
           const resPatch = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
             method: "PATCH", 
@@ -282,20 +278,16 @@ export default function GamePage() {
             body: JSON.stringify({ credits: optimisticBalance }) 
           });
           const patchData = await resPatch.json();
-          // Atualiza estado local com o valor cravado pelo banco
           if (patchData && patchData[0]) setPlayer({ ...player, credits: patchData[0].credits });
 
-          // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de vitória 🔥
           if (soundEnabled) winAudioRef.current?.play().catch(() => {});
           
-          // 🔥 Adiciona prêmio ganho à lista persistente (bloqueando "Tente Outra Vez" e "Iscas" para não mostrar embaixo) 🔥
           const wonPrize = prizes[targetIndex];
           const n = String(wonPrize.name).toUpperCase();
           if(!n.includes("TENTE") && !n.includes("PIX") && !n.includes("100") && !n.includes("R$")) {
               setWonPrizes(prev => {
                   const now = new Date().toISOString();
                   const newWon = [...prev, { ...wonPrize, won_at: now }];
-                  // 🔥 Persistência Sênior: Salva em localStorage específico 🔥
                   const storageKey = `won_prizes_${player.model_id}_${player.id}`;
                   localStorage.setItem(storageKey, JSON.stringify(newWon));
                   return newWon;
@@ -307,13 +299,11 @@ export default function GamePage() {
     }
   };
 
-  // 🔥 NOVO COMPONENTE: Interface de Resgate de Prêmios 🔥
   const WonPrizesDisplay = useMemo(() => {
     if (!wonPrizes || wonPrizes.length === 0 || !player) return null;
 
     const whatsappBase = `https://wa.me/${player.whatsapp_model?.replace(/\D/g, '')}?text=`;
     
-    // 🔥 FIX RETIRADA INDIVIDUAL: Define ícone e botão de resgate baseados no tipo do prêmio 🔥
     const getPrizeAction = (prize: any) => {
         const name = String(prize.name).toUpperCase();
         if(name.includes("TELEGRAM") || name.includes("VIP")) return { icon: Award, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Acabei de ganhar "${prize.name}" na sua roleta! Me manda o acesso VIP? 🔥💖`)}`, '_blank'), text: 'Pegar Acesso' };
@@ -411,7 +401,6 @@ export default function GamePage() {
         {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
       </div>
 
-      {/* 🔥 Renderização Condicional Sênior: Seção de Prêmios Ganhos com Retirada 🔥 */}
       {WonPrizesDisplay}
 
       {showProfile && player && (
@@ -429,10 +418,9 @@ export default function GamePage() {
                     </div>
                   ))}
             </div>
-            {/* 🔥 FIX LOGOUT INDIVIDUAL: Zera o localStorage específico dos prêmios 🔥 */}
             <button onClick={() => { 
                 const storageKey = `won_prizes_${player.model_id}_${player.id}`;
-                localStorage.removeItem(storageKey); // Zera prêmios do browser
+                localStorage.removeItem(storageKey); 
                 localStorage.clear(); 
                 window.location.reload(); 
             }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
