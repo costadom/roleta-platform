@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle, PackageCheck, Image, Video, Award } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle, PackageCheck, Image, Video, Award, Trophy, MessageCircle } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -67,10 +67,9 @@ export default function GamePage() {
            return;
         }
 
-        // 🔥 FALLBACK DE API SÊNIOR: Tenta buscar ordenado, se der erro (ex: falta a coluna), busca simples.
+        // Fallback de API Sênior para evitar o erro 400
         let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers });
         if (!prizesRes.ok) {
-            console.warn("⚠️ Coluna created_at ausente, fazendo busca simples de prêmios.");
             prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers });
         }
         const prizesData = await prizesRes.json();
@@ -88,6 +87,12 @@ export default function GamePage() {
         const results = await Promise.all(fetchPromises);
 
         const fetchedPrizes = Array.isArray(prizesData) ? prizesData : [];
+        // Ordenação frontend blindada lendo createdAt ou created_at baseada no seu CSV
+        fetchedPrizes.sort((a: any, b: any) => {
+            const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
+            const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
+            return dateA - dateB;
+        });
         setPrizes(fetchedPrizes);
         
         const dataConfig = results[0];
@@ -191,7 +196,6 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 MOTOR SÊNIOR V5: MATEMÁTICA ABSOLUTA E RESILIENTE 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0 || !player) return;
@@ -202,12 +206,10 @@ export default function GamePage() {
 
     console.log("🕵️ ESPIÃO LABZ: Analisando as Fatias da Roleta...");
 
-    // 1. ISOLANDO OS PRÊMIOS PERMITIDOS
     const validOptions: { originalIndex: number, weight: number }[] = [];
     
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
-        // CADEADO DE SEGURANÇA MÁXIMA: NUNCA Sorteia Iscas
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
             validOptions.push({ originalIndex: i, weight: 0 }); 
         }
@@ -217,16 +219,13 @@ export default function GamePage() {
     const numValid = validOptions.length;
 
     if (numValid > 0) {
-        // 2. HIERARQUIA REVERSA (Topo da lista = Muito Fácil, Base = Muito Difícil)
         validOptions.forEach((option, idx) => {
-            // Correção do Bug Crítico de Variável: Adicionado 'const reverseWeight'
             const reverseWeight = Math.pow((numValid - idx), 3); 
             option.weight = reverseWeight;
             totalWeight += reverseWeight; 
         });
 
-        // 3. SORTEIO HIERÁRQUICO
-        let targetIndex = validOptions[0].originalIndex; // Fallback seguro
+        let targetIndex = validOptions[0].originalIndex; 
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
             if (random < option.weight) {
@@ -238,26 +237,18 @@ export default function GamePage() {
 
         console.log(`🕵️ ESPIÃO LABZ: Sorteio Exato Concluído -> Alvo Visual Index: [${targetIndex}] Nome: "${prizes[targetIndex].name}"`);
 
-        // 4. DEDUÇÃO OTIMISTA DE SALDO
         const creditCost = 3;
         const optimisticBalance = player.credits - creditCost;
         setPlayer({ ...player, credits: optimisticBalance });
 
-        // 5. MIRA LASER MATEMÁTICA (Calcula exatamente o centro da fatia)
         setRotation(prevRotation => {
             const arcSize = 360 / prizes.length;
-            // Centro da fatia desejada
             const centerAngle = (targetIndex * arcSize) + (arcSize / 2);
-            
-            // Onde o disco está fisicamente agora (módulo)
             const currentMod = prevRotation % 360;
-            
-            // Qual ângulo devemos posicionar para alinhar o 'centerAngle' no topo (0 graus)
             const alignAngle = 360 - centerAngle;
             
-            // Diferença necessária para alcançar o alinhamento
             let diff = alignAngle - currentMod;
-            if (diff <= 0) diff += 360; // Gira sempre para a frente
+            if (diff <= 0) diff += 360; 
             
             const newRotation = prevRotation + (360 * 10) + diff;
             console.log(`🕵️ ESPIÃO LABZ: Física de Rotação -> Centro Alvo: ${centerAngle}° | Diferença Calculada: ${diff}°`);
@@ -265,7 +256,6 @@ export default function GamePage() {
             return newRotation;
         });
 
-        // 6. FINALIZAÇÃO APÓS A ANIMAÇÃO
         setTimeout(async () => {
           setIsSpinning(false); 
           setSelectedPrize(prizes[targetIndex]); 
