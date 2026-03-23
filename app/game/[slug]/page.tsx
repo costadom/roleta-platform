@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle, PackageCheck, Image, Video, Award } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -39,6 +39,9 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedPrize, setSelectedPrize] = useState<any | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  
+  // 🔥 NOVO ESTADO: Prêmios ganhos persistentes 🔥
+  const [wonPrizes, setWonPrizes] = useState<any[]>([]);
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -65,7 +68,7 @@ export default function GamePage() {
         }
 
         const fetchPromises: any[] = [
-          // Conforme analise sênior, confiamos na ordenação de inserção do Supabase como hierarquia (Topo = Mais Antigo = Mais Fácil)
+          // REMOVIDO o "order" que estava dando erro 400.
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
         ];
@@ -78,7 +81,10 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
+        // Robustez Sênior: Checagem de segurança (fallback caso a API falhe)
         const fetchedPrizes = Array.isArray(results[0]) ? results[0] : [];
+        // Ordenação frontend garantida para a hierarquia reativa
+        fetchedPrizes.sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
         setPrizes(fetchedPrizes);
         
         const dataConfig = results[1];
@@ -95,6 +101,12 @@ export default function GamePage() {
             setPlayer(currentPlayer);
             setIsAuthorized(true);
             setShowAuthModal(false);
+            
+            // 🔥 Recupera prêmios ganhos persistidos no navegador 🔥
+            const storageKey = `won_prizes_${mId}_${currentPlayer.id}`;
+            const stored = localStorage.getItem(storageKey);
+            if(stored) setWonPrizes(JSON.parse(stored));
+            
           } else {
             setIsAuthorized(false);
           }
@@ -123,6 +135,7 @@ export default function GamePage() {
             const data = await res.json();
             if (data[0]?.credits > player.credits) {
               setPixPaid(true);
+              // 🔥 FIX SALDO EM TEMPO REAL: Atualiza estado local imediatamente 🔥
               setPlayer({ ...player, credits: data[0].credits });
               if (activeCartId) {
                 await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
@@ -177,25 +190,25 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 MOTOR SÊNIOR V3: PRECISAO MILIMÉTRICA + HIERARQUIA REVERSA + MUDO FIX 🔥
+  // 🔥 MOTOR SÊNIOR V4 FINAL: PRECISÃO MILIMÉTRICA + HIERARQUIA REVERSA + MUDO FIX + SALDO TEMPO REAL 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
-    if (isSpinning || prizes.length === 0) return;
+    if (isSpinning || prizes.length === 0 || !player) return;
     if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
-    // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de giro
+    
+    // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de giro 🔥
     if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
 
-    console.log("🕵️ ESPIÃO LABZ: Iniciando Motor Sênior V3...");
+    console.log("🕵️ ESPIÃO LABZ: Iniciando Motor Sênior Final...");
 
     // 1. ISOLANDO OS PRÊMIOS PERMITIDOS
     const validOptions: { originalIndex: number, weight: number }[] = [];
     
-    // Filtro inicial anti-isca
+    // Filtro inicial anti-isca (Segurança Absoluta)
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
-        // CADEADO DE SEGURANÇA MÁXIMA: NUNCA Sorteia Iscas
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
             validOptions.push({ originalIndex: i, weight: 0 }); // Peso temporário
         }
@@ -205,14 +218,14 @@ export default function GamePage() {
     const numValid = validOptions.length;
 
     if (numValid > 0) {
-        // 🔥 FIX 2: HIERARQUIA REVERSA (Topo da lista = Super Fácil, Base = Super Difícil)
+        // 🔥 FIX 2: HIERARQUIA REVERSA (Topo da lista = Super Fácil, Base = Super Difícil) 🔥
         validOptions.forEach((option, idx) => {
             // idx=0 é o primeiro item válido da lista (topo). idx=(numValid-1) é o último (base).
             // Elevamos ao cubo a diferença reversa para criar uma rampa de probabilidade agressiva no topo.
-            // Ex: Se tem 5 itens válidos: Item 0 ganha peso 125 ($5^3$), Item 4 ganha peso 1 ($1^3$).
+            // Ex: Se tem 5 itens válidos: Item 0 (Bônus) ganha peso 125 ($5^3$), Item 4 ganha peso 1 ($1^3$).
             const reverseWeight = Math.pow((numValid - idx), 3); 
             option.weight = reverseWeight;
-            totalWeight += reverseWeight;
+            totalWeight += weight = reverseWeight;
         });
 
         // 2. SORTEIO HIERÁRQUICO
@@ -228,7 +241,12 @@ export default function GamePage() {
 
         console.log(`🕵️ ESPIÃO LABZ: Sorteio concluído via Hierarquia Reversa. Alvo Visual Index: [${targetIndex}] -> Nome: "${prizes[targetIndex].name}"`);
 
-        // 🔥 FIX 3: MIRA LASER VISUAL (Matemática de sincronia perfeita para ponteiro no TOPO)
+        // 🔥 FIX SALDO EM TEMPO REAL: Dedução otimista visual imediata 🔥
+        const creditCost = 3;
+        const optimisticBalance = player.credits - creditCost;
+        setPlayer({ ...player, credits: optimisticBalance });
+
+        // 🔥 FIX 3: MIRA LASER VISUAL (Matemática de sincronia perfeita para ponteiro no TOPO) 🔥
         setRotation(prevRotation => {
             const arcSize = 360 / prizes.length;
             // O ângulo para o CENTRO da fatia exata ficar apontando para cima (12 horas / 270 graus CSS)
@@ -256,26 +274,86 @@ export default function GamePage() {
           setSelectedPrize(prizes[targetIndex]); // O prêmio exato da matemática visual
           setModalOpen(true);
           
-          const newBal = (player?.credits || 0) - 3;
-          setPlayer({ ...player, credits: newBal });
-          
-          await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
+          // 🔥 Sincronização Sênior do Saldo: Atualiza no banco com REPRESENTATION e resgata valor exato 🔥
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
+          const resPatch = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
             method: "PATCH", 
-            headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-            body: JSON.stringify({ credits: newBal }) 
+            headers,
+            body: JSON.stringify({ credits: optimisticBalance }) 
           });
-          
-          // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de vitória
+          const patchData = await resPatch.json();
+          // Atualiza estado local com o valor cravado pelo banco
+          if (patchData && patchData[0]) setPlayer({ ...player, credits: patchData[0].credits });
+
+          // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de vitória 🔥
           if (soundEnabled) winAudioRef.current?.play().catch(() => {});
+          
+          // 🔥 Adiciona prêmio ganho à lista persistente (bloqueando "Tente Outra Vez" e "Iscas" para não mostrar embaixo) 🔥
+          const wonPrize = prizes[targetIndex];
+          const n = String(wonPrize.name).toUpperCase();
+          if(!n.includes("TENTE") && !n.includes("PIX") && !n.includes("100") && !n.includes("R$")) {
+              setWonPrizes(prev => {
+                  const now = new Date().toISOString();
+                  const newWon = [...prev, { ...wonPrize, won_at: now }];
+                  // 🔥 Persistência Sênior: Salva em localStorage específico 🔥
+                  const storageKey = `won_prizes_${player.model_id}_${player.id}`;
+                  localStorage.setItem(storageKey, JSON.stringify(newWon));
+                  return newWon;
+              });
+          }
+
           confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
         }, SPIN_DURATION + 100);
     }
   };
 
+  // 🔥 NOVO COMPONENTE: Interface de Resgate de Prêmios 🔥
+  const WonPrizesDisplay = useMemo(() => {
+    if (!wonPrizes || wonPrizes.length === 0 || !player) return null;
+
+    const whatsappBase = `https://wa.me/${player.whatsapp_model?.replace(/\D/g, '')}?text=`;
+    
+    // 🔥 FIX RETIRADA INDIVIDUAL: Define ícone e botão de resgate baseados no tipo do prêmio 🔥
+    const getPrizeAction = (prize: any) => {
+        const name = String(prize.name).toUpperCase();
+        if(name.includes("TELEGRAM") || name.includes("VIP")) return { icon: Award, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Acabei de ganhar "${prize.name}" na sua roleta! Me manda o acesso VIP? 🔥💖`)}`, '_blank'), text: 'Pegar Acesso' };
+        if(name.includes("PACK")) return { icon: Image, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor, ganhei "${prize.name}" na sua roleta! Me manda as fotos liberadas? 😉`)}`, '_blank'), text: 'Ver Fotos' };
+        if(name.includes("VIDEO")) return { icon: Video, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Amor! Ganhei "${prize.name}" na sua roleta! Manda o vídeo quente? 🔥`)}`, '_blank'), text: 'Ver Vídeo' };
+        return { icon: PackageCheck, action: () => window.open(`${whatsappBase}${encodeURIComponent(`Oii! Acabei de ganhar "${prize.name}" na roleta da ${modelName}!`)}`, '_blank'), text: 'Receber no Zap' };
+    };
+
+    return (
+        <div className="p-6 bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] mt-12 shadow-2xl relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#D946EF]/5 rounded-full blur-[40px] pointer-events-none" />
+            <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-6 flex items-center gap-2 relative z-10"><Trophy size={14} className="text-[#FFD700]"/> Prêmios Ganhos na Rodada</h2>
+            <div className="space-y-3 relative z-10">
+                {wonPrizes.map((p, idx) => {
+                    const { icon: Icon, action, text } = getPrizeAction(p);
+                    const isCredito = String(p.name).toUpperCase().includes("CREDITO") || String(p.name).toUpperCase().includes("BONUS") || String(p.name).toUpperCase().includes("CR");
+                    
+                    return (
+                        <div key={`${p.id}-${idx}`} className="bg-black/50 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 justify-between items-center transition-all hover:border-[#D946EF]/20 group">
+                            <div className="flex items-center gap-4 text-center sm:text-left">
+                                <div className="p-3.5 bg-[#141414] rounded-xl text-[#FFD700] border border-white/5 group-hover:border-[#D946EF]/20"><Icon size={20}/></div>
+                                <div><p className="text-[12px] font-black text-white uppercase group-hover:text-[#D946EF]">{p.name}</p><p className="text-[8px] text-white/30 uppercase font-bold font-mono">Ganho em {new Date(p.won_at).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p></div>
+                            </div>
+                            {isCredito ? (
+                               <div className="px-5 py-3 text-[9px] font-black uppercase text-emerald-400 border border-emerald-400/20 bg-emerald-500/5 rounded-lg flex items-center gap-1.5"><Coins size={12}/> Resgatado automaticamente</div>
+                            ) : (
+                                <button onClick={action} className="w-full sm:w-auto px-6 py-3.5 bg-[#1a1a1a] border border-white/10 rounded-xl text-[10px] font-black uppercase text-white hover:bg-[#D946EF] transition-all flex items-center justify-center gap-2 group-hover:shadow-lg"><MessageCircle size={14}/> {text}</button>
+                            )}
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    );
+  }, [wonPrizes, player, modelName]);
+
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans">
+    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans pb-24">
       <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-hidden">
         
         <div className="absolute inset-0 z-0">
@@ -333,6 +411,9 @@ export default function GamePage() {
         {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
       </div>
 
+      {/* 🔥 Renderização Condicional Sênior: Seção de Prêmios Ganhos com Retirada 🔥 */}
+      {WonPrizesDisplay}
+
       {showProfile && player && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative text-center shadow-2xl animate-in zoom-in duration-300">
@@ -348,7 +429,13 @@ export default function GamePage() {
                     </div>
                   ))}
             </div>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
+            {/* 🔥 FIX LOGOUT INDIVIDUAL: Zera o localStorage específico dos prêmios 🔥 */}
+            <button onClick={() => { 
+                const storageKey = `won_prizes_${player.model_id}_${player.id}`;
+                localStorage.removeItem(storageKey); // Zera prêmios do browser
+                localStorage.clear(); 
+                window.location.reload(); 
+            }} className="mt-8 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors">Sair da Conta</button>
           </div>
         </div>
       )}
