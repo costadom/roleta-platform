@@ -58,27 +58,24 @@ export default function GamePage() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
         
-        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers });
-        if (!resMod.ok) throw new Error("Falha ao buscar Modelo");
+        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers }).catch(() => null);
+        if (!resMod || !resMod.ok) { setLoading(false); return; }
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
         
-        if (!mId) {
-           setLoading(false);
-           return;
-        }
+        if (!mId) { setLoading(false); return; }
 
-        let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers });
-        if (!prizesRes.ok) prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers });
-        const prizesData = await prizesRes.json();
+        let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).catch(() => null);
+        if (!prizesRes || !prizesRes.ok) prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).catch(() => null);
+        const prizesData = prizesRes && prizesRes.ok ? await prizesRes.json() : [];
 
         const fetchPromises: any[] = [
-          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
+          fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()).catch(() => [])
         ];
 
         if (isLoggedIn === "true" && savedWhatsapp) {
           fetchPromises.push(
-            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers }).then(r => r.json())
+            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${savedWhatsapp}&select=*,Models(slug)`, { headers }).then(r => r.json()).catch(() => [])
           );
         }
 
@@ -110,7 +107,6 @@ export default function GamePage() {
             const storageKey = `won_prizes_${mId}_${currentPlayer.id}`;
             const stored = localStorage.getItem(storageKey);
             if(stored) setWonPrizes(JSON.parse(stored));
-            
           } else {
             setIsAuthorized(false);
           }
@@ -129,34 +125,34 @@ export default function GamePage() {
     }
   }, [slug]);
 
-  // Checagem do pagamento PIX e Cronômetro
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
       interval = setInterval(async () => {
         try {
             const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-            const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
+            const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers }).catch(() => null);
+            if (!res || !res.ok) return; 
+            
             const data = await res.json();
             if (data[0]?.credits > player.credits) {
               setPixPaid(true);
               setPlayer({ ...player, credits: data[0].credits });
               if (activeCartId) {
-                await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
+                fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
                   method: 'PATCH',
                   headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: 'pago' })
-                });
+                }).catch(() => null);
               }
               clearInterval(interval);
             }
-        } catch(err) { console.error(err); }
+        } catch(err) { }
       }, 4000);
     }
     return () => clearInterval(interval);
   }, [pixData, pixPaid, player, activeCartId]);
 
-  // Lógica do Cronômetro Visual
   useEffect(() => {
     let timer: any;
     if (pixData && !pixPaid && pixTimeLeft > 0) {
@@ -177,7 +173,7 @@ export default function GamePage() {
     setPixData(null);
     setPixPaid(false);
     setActiveCartId(null);
-    setPixTimeLeft(600); // Reseta o timer para 10 minutos
+    setPixTimeLeft(600); 
     
     try {
       const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
@@ -191,25 +187,26 @@ export default function GamePage() {
           status: 'pendente'
         })
       });
-      
       if (resCart.ok) {
         const cartData = await resCart.json();
         if (cartData && cartData[0]) setActiveCartId(cartData[0].id);
       }
-    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
+    } catch (e) { }
 
     try {
       const res = await fetch('/api/checkout/pix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: val, userId: player.id }),
       });
+      if(!res.ok) throw new Error("Erro API");
       const data = await res.json();
       if (data.qr_code_base64) { setPixData(data); }
     } catch (e) {
-        console.error("Erro Pix:", e);
+        alert("Falha ao gerar o PIX. Tente novamente.");
     } finally { setPixLoading(false); }
   };
 
+  // 🔥 O MOTOR DEFINITIVO: MATEMÁTICA ABSOLUTA + PESO DO BANCO 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0 || !player) return;
@@ -221,24 +218,21 @@ export default function GamePage() {
     const validOptions: { originalIndex: number, weight: number }[] = [];
     let totalWeight = 0;
     
+    // 1. Busca os pesos reais configurados no painel
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
+        // Iscas nunca participam do sorteio, garantido 100%
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            validOptions.push({ originalIndex: i, weight: 0 }); 
+            const w = parseFloat(p.weight) || 1; // Pega exatamente o peso do banco (ex: 60 para Tente Outra Vez)
+            validOptions.push({ originalIndex: i, weight: w });
+            totalWeight += w;
         }
     });
 
-    const numValid = validOptions.length;
     let targetIndex = 0;
 
-    if (numValid > 0) {
-        validOptions.forEach((option, idx) => {
-            const reverseWeight = Math.pow((numValid - idx), 3); 
-            option.weight = reverseWeight;
-            totalWeight += reverseWeight; 
-        });
-
-        targetIndex = validOptions[0].originalIndex; 
+    // 2. Seleciona o prêmio com base na probabilidade real
+    if (validOptions.length > 0) {
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
             if (random < option.weight) {
@@ -247,49 +241,65 @@ export default function GamePage() {
             }
             random -= option.weight;
         }
+    }
 
-        const creditCost = 3;
-        const optimisticBalance = player.credits - creditCost;
-        setPlayer({ ...player, credits: optimisticBalance });
+    const creditCost = 3;
+    const optimisticBalance = player.credits - creditCost;
+    setPlayer({ ...player, credits: optimisticBalance });
 
-        // 🔥 O SEGREDO DO GIRO PERFEITO: Retornamos à SUA fórmula original de Matemática Visual.
-        // O RouletteWheel já entende como centrar, por isso `360 / prizes.length` basta!
-        setRotation(prev => prev + 3600 + (360 - (targetIndex * (360/prizes.length))));
+    // 3. A FÍSICA MATEMÁTICA PERFEITA (Sem acúmulo de erros)
+    setRotation(prevRotation => {
+        const sliceAngle = 360 / prizes.length;
+        
+        // O seu componente RouletteWheel.tsx JÁ CENTRA a fatia em 0 graus.
+        // A única coisa que precisamos fazer é girar exatamente (360 - índice * sliceAngle).
+        const absoluteTarget = (360 - (targetIndex * sliceAngle)) % 360;
+        
+        // Pegamos quantas voltas completas a roleta já deu, para continuar girando pra frente
+        const currentSpins = Math.floor(prevRotation / 360);
+        
+        // Adicionamos 10 voltas de emoção + o ângulo cirúrgico absoluto
+        return ((currentSpins + 10) * 360) + absoluteTarget;
+    });
 
-        setTimeout(async () => {
-          setIsSpinning(false); 
-          setSelectedPrize(prizes[targetIndex]); 
-          setModalOpen(true);
-          
+    setTimeout(async () => {
+      setIsSpinning(false); 
+      setSelectedPrize(prizes[targetIndex]); 
+      setModalOpen(true);
+      
+      try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
           const resPatch = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
             method: "PATCH", 
             headers,
             body: JSON.stringify({ credits: optimisticBalance }) 
-          });
-          const patchData = await resPatch.json();
-          if (patchData && patchData[0]) setPlayer({ ...player, credits: patchData[0].credits });
-
-          if (soundEnabled) winAudioRef.current?.play().catch(() => {});
+          }).catch(() => null);
           
-          const wonPrize = prizes[targetIndex];
-          const n = String(wonPrize.name).toUpperCase();
-          if(!n.includes("TENTE") && !n.includes("PIX") && !n.includes("100") && !n.includes("R$")) {
-              setWonPrizes(prev => {
-                  const now = new Date().toISOString();
-                  const newWon = [...prev, { ...wonPrize, won_at: now }];
-                  const storageKey = `won_prizes_${player.model_id}_${player.id}`;
-                  localStorage.setItem(storageKey, JSON.stringify(newWon));
-                  return newWon;
-              });
+          if(resPatch && resPatch.ok) {
+              const patchData = await resPatch.json();
+              if (patchData && patchData[0]) setPlayer({ ...player, credits: patchData[0].credits });
           }
+      } catch(err) { /* erro silenciado de rede */ }
 
-          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
-        }, SPIN_DURATION + 100);
-    }
+      if (soundEnabled) winAudioRef.current?.play().catch(() => {});
+      
+      const wonPrize = prizes[targetIndex];
+      const n = String(wonPrize.name).toUpperCase();
+      // Salva no perfil apenas prêmios válidos (Tira iscas e tente outra vez)
+      if(!n.includes("TENTE") && !n.includes("PIX") && !n.includes("100") && !n.includes("R$")) {
+          setWonPrizes(prev => {
+              const now = new Date().toISOString();
+              const newWon = [...prev, { ...wonPrize, won_at: now }];
+              const storageKey = `won_prizes_${player.model_id}_${player.id}`;
+              localStorage.setItem(storageKey, JSON.stringify(newWon));
+              return newWon;
+          });
+      }
+
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
+    }, SPIN_DURATION + 100);
   };
 
-  // Funções de Resgate para a aba Perfil
   const whatsappBase = player ? `https://wa.me/${player.whatsapp_model?.replace(/\D/g, '')}?text=` : '';
   const getPrizeAction = (prize: any) => {
       const name = String(prize.name).toUpperCase();
@@ -377,7 +387,6 @@ export default function GamePage() {
                   ))}
             </div>
 
-            {/* 🔥 TABELA DE PRÊMIOS MOVIDA PARA DENTRO DO PERFIL 🔥 */}
             {wonPrizes && wonPrizes.length > 0 && (
                 <div className="mt-8 border-t border-white/10 pt-6 text-left flex-1 overflow-hidden flex flex-col">
                     <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest shrink-0"><Trophy size={14} className="text-[#FFD700]"/> Prêmios Ganhos</h3>
@@ -438,7 +447,6 @@ export default function GamePage() {
                  <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
                  <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR" className="w-48 h-48" /></div>
                  
-                 {/* 🔥 CRONÔMETRO DE URGÊNCIA ADICIONADO AQUI 🔥 */}
                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
                     ⏱ {formatTime(pixTimeLeft)}
                  </div>
