@@ -42,6 +42,9 @@ export default function GamePage() {
   const [modalOpen, setModalOpen] = useState(false);
   
   const [wonPrizes, setWonPrizes] = useState<any[]>([]);
+  
+  // 🔥 NOVO ESTADO: Mensagem sedutora do Super Giro 🔥
+  const [superMsg, setSuperMsg] = useState("");
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -206,24 +209,27 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 O MOTOR DEFINITIVO: MATEMÁTICA ABSOLUTA + PESO DO BANCO 🔥
-  const runSpin = async () => {
+  // 🔥 MOTOR INTELIGENTE: Recebe o custo do giro (3 ou 6) 🔥
+  const runSpin = async (cost: number = 3) => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0 || !player) return;
-    if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
+    if ((player?.credits || 0) < cost) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
     if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
 
+    // 🔥 O ILUSIONISMO DO SUPER GIRO: Mostra a mensagem de sedução 🔥
+    if (cost === 6) {
+        setSuperMsg("🔥 Isso amor! Agora com o Super Giro você tem MUITO mais chances de ganhar um encontro comigo ou faturar os R$ 100 no PIX! Boa sorte... 🍀💖");
+    }
+
     const validOptions: { originalIndex: number, weight: number }[] = [];
     let totalWeight = 0;
     
-    // 1. Busca os pesos reais configurados no painel
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
-        // Iscas nunca participam do sorteio, garantido 100%
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            const w = parseFloat(p.weight) || 1; // Pega exatamente o peso do banco (ex: 60 para Tente Outra Vez)
+            const w = parseFloat(p.weight) || 1; 
             validOptions.push({ originalIndex: i, weight: w });
             totalWeight += w;
         }
@@ -231,7 +237,6 @@ export default function GamePage() {
 
     let targetIndex = 0;
 
-    // 2. Seleciona o prêmio com base na probabilidade real
     if (validOptions.length > 0) {
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
@@ -243,27 +248,20 @@ export default function GamePage() {
         }
     }
 
-    const creditCost = 3;
-    const optimisticBalance = player.credits - creditCost;
+    // Deduz o custo dinâmico (3 ou 6)
+    const optimisticBalance = player.credits - cost;
     setPlayer({ ...player, credits: optimisticBalance });
 
-    // 3. A FÍSICA MATEMÁTICA PERFEITA (Sem acúmulo de erros)
     setRotation(prevRotation => {
         const sliceAngle = 360 / prizes.length;
-        
-        // O seu componente RouletteWheel.tsx JÁ CENTRA a fatia em 0 graus.
-        // A única coisa que precisamos fazer é girar exatamente (360 - índice * sliceAngle).
         const absoluteTarget = (360 - (targetIndex * sliceAngle)) % 360;
-        
-        // Pegamos quantas voltas completas a roleta já deu, para continuar girando pra frente
         const currentSpins = Math.floor(prevRotation / 360);
-        
-        // Adicionamos 10 voltas de emoção + o ângulo cirúrgico absoluto
         return ((currentSpins + 10) * 360) + absoluteTarget;
     });
 
     setTimeout(async () => {
       setIsSpinning(false); 
+      setSuperMsg(""); // Limpa a mensagem do Super Giro
       setSelectedPrize(prizes[targetIndex]); 
       setModalOpen(true);
       
@@ -285,7 +283,6 @@ export default function GamePage() {
       
       const wonPrize = prizes[targetIndex];
       const n = String(wonPrize.name).toUpperCase();
-      // Salva no perfil apenas prêmios válidos (Tira iscas e tente outra vez)
       if(!n.includes("TENTE") && !n.includes("PIX") && !n.includes("100") && !n.includes("R$")) {
           setWonPrizes(prev => {
               const now = new Date().toISOString();
@@ -341,8 +338,17 @@ export default function GamePage() {
           </div>
 
           <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
-             <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[3px] opacity-40 grayscale-[0.4]' : ''}`}>
-                <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin()} />
+             
+             {/* 🔥 POPUP FLUTUANTE DO SUPER GIRO 🔥 */}
+             {superMsg && (
+                 <div className="absolute top-4 left-4 right-4 z-[60] bg-gradient-to-r from-[#FFD700]/20 via-[#D946EF]/30 to-[#FFD700]/20 border border-[#FFD700]/50 backdrop-blur-md p-4 rounded-2xl text-center animate-in slide-in-from-top-4 fade-in duration-300 shadow-[0_0_30px_rgba(217,70,239,0.5)]">
+                     <p className="text-[11px] font-black text-white italic drop-shadow-md leading-relaxed">{superMsg}</p>
+                 </div>
+             )}
+
+             {/* Adicionado o efeito de "Poder" (scale e brilho) quando o Super Giro tá ativo */}
+             <div className={`transition-all duration-700 w-full flex justify-center ${!isAuthorized ? 'blur-[3px] opacity-40 grayscale-[0.4]' : ''} ${superMsg ? 'scale-105 drop-shadow-[0_0_40px_rgba(255,215,0,0.3)]' : ''}`}>
+                <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(3)} />
              </div>
              {!isAuthorized && (
                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
@@ -361,8 +367,11 @@ export default function GamePage() {
                <button onClick={() => isAuthorized ? setShowDeposit(true) : setShowAuthModal(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5"><ShoppingCart size={14}/> Depositar</button>
             </div>
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <button onClick={() => runSpin()} disabled={isSpinning} className="bg-[#D946EF] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 shadow-lg transition-all"><span className="text-xs font-black uppercase italic">Giro Normal</span><span className="text-[9px] font-bold text-white/60">3 CR</span></button>
-              <button onClick={() => runSpin()} disabled={isSpinning} className="bg-[#FFD700] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 text-black shadow-lg transition-all"><span className="text-xs font-black uppercase italic flex items-center gap-1"><Zap size={14}/> Super Giro</span><span className="text-[9px] font-bold text-black/60">6 CR</span></button>
+              {/* 🔥 BOTÃO DE 3CR MANDA O VALOR 3 🔥 */}
+              <button onClick={() => runSpin(3)} disabled={isSpinning} className="bg-[#D946EF] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 shadow-lg transition-all"><span className="text-xs font-black uppercase italic">Giro Normal</span><span className="text-[9px] font-bold text-white/60">3 CR</span></button>
+              
+              {/* 🔥 BOTÃO DE 6CR MANDA O VALOR 6 🔥 */}
+              <button onClick={() => runSpin(6)} disabled={isSpinning} className="bg-[#FFD700] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 text-black shadow-lg transition-all"><span className="text-xs font-black uppercase italic flex items-center gap-1"><Zap size={14}/> Super Giro</span><span className="text-[9px] font-bold text-black/60">6 CR</span></button>
             </div>
           </div>
         </div>
