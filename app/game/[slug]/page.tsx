@@ -65,6 +65,7 @@ export default function GamePage() {
         }
 
         const fetchPromises: any[] = [
+          // Conforme analise sênior, confiamos na ordenação de inserção do Supabase como hierarquia (Topo = Mais Antigo = Mais Fácil)
           fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()),
           fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json())
         ];
@@ -77,9 +78,7 @@ export default function GamePage() {
 
         const results = await Promise.all(fetchPromises);
 
-        // Garante a ordem de criação no frontend (mesmo sem o order do backend) para a hierarquia não falhar
         const fetchedPrizes = Array.isArray(results[0]) ? results[0] : [];
-        fetchedPrizes.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
         setPrizes(fetchedPrizes);
         
         const dataConfig = results[1];
@@ -178,36 +177,46 @@ export default function GamePage() {
     } finally { setPixLoading(false); }
   };
 
-  // 🔥 O MOTOR SÊNIOR ABSOLUTO: HIERARQUIA + PRECISÃO MATEMÁTICA + ANTI-ISCA 🔥
+  // 🔥 MOTOR SÊNIOR V3: PRECISAO MILIMÉTRICA + HIERARQUIA REVERSA + MUDO FIX 🔥
   const runSpin = async () => {
     if (!isAuthorized) { setShowAuthModal(true); return; }
     if (isSpinning || prizes.length === 0) return;
     if ((player?.credits || 0) < 3) { setShowDeposit(true); return; }
 
     setIsSpinning(true);
-    spinAudioRef.current?.play().catch(() => {});
+    // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de giro
+    if (soundEnabled) spinAudioRef.current?.play().catch(() => {});
 
-    console.log("🕵️ ESPIÃO LABZ: Iniciando Motor Sênior...");
+    console.log("🕵️ ESPIÃO LABZ: Iniciando Motor Sênior V3...");
 
     // 1. ISOLANDO OS PRÊMIOS PERMITIDOS
     const validOptions: { originalIndex: number, weight: number }[] = [];
-    let totalWeight = 0;
     
+    // Filtro inicial anti-isca
     prizes.forEach((p, i) => {
         const n = String(p.name).toUpperCase();
         // CADEADO DE SEGURANÇA MÁXIMA: NUNCA Sorteia Iscas
         if (!n.includes("PIX") && !n.includes("PRESENCIAL") && !n.includes("100") && !n.includes("R$")) {
-            // HIERARQUIA LOGARÍTMICA: A Base (últimos itens) domina o sorteio.
-            const weight = Math.pow((i + 1), 3); 
-            validOptions.push({ originalIndex: i, weight });
-            totalWeight += weight;
+            validOptions.push({ originalIndex: i, weight: 0 }); // Peso temporário
         }
     });
 
-    let targetIndex = 0;
+    let totalWeight = 0;
+    const numValid = validOptions.length;
 
-    if (validOptions.length > 0) {
-        // 2. SORTEIO HIERÁRQUICO (Rodando os pesos)
+    if (numValid > 0) {
+        // 🔥 FIX 2: HIERARQUIA REVERSA (Topo da lista = Super Fácil, Base = Super Difícil)
+        validOptions.forEach((option, idx) => {
+            // idx=0 é o primeiro item válido da lista (topo). idx=(numValid-1) é o último (base).
+            // Elevamos ao cubo a diferença reversa para criar uma rampa de probabilidade agressiva no topo.
+            // Ex: Se tem 5 itens válidos: Item 0 ganha peso 125 ($5^3$), Item 4 ganha peso 1 ($1^3$).
+            const reverseWeight = Math.pow((numValid - idx), 3); 
+            option.weight = reverseWeight;
+            totalWeight += reverseWeight;
+        });
+
+        // 2. SORTEIO HIERÁRQUICO
+        let targetIndex = validOptions[0].originalIndex; // Fallback para o primeiro item (mais fácil)
         let random = Math.random() * totalWeight;
         for (let option of validOptions) {
             if (random < option.weight) {
@@ -216,51 +225,51 @@ export default function GamePage() {
             }
             random -= option.weight;
         }
-    } else {
-        targetIndex = 0; // Fallback extremo
+
+        console.log(`🕵️ ESPIÃO LABZ: Sorteio concluído via Hierarquia Reversa. Alvo Visual Index: [${targetIndex}] -> Nome: "${prizes[targetIndex].name}"`);
+
+        // 🔥 FIX 3: MIRA LASER VISUAL (Matemática de sincronia perfeita para ponteiro no TOPO)
+        setRotation(prevRotation => {
+            const arcSize = 360 / prizes.length;
+            // O ângulo para o CENTRO da fatia exata ficar apontando para cima (12 horas / 270 graus CSS)
+            // Assumimos que a fatia 0 começa em 0 graus (3 horas) e cresce no sentido horário.
+            const centerAngleOfTarget = (targetIndex * arcSize) + (arcSize / 2);
+            
+            // O ponteiro visual do layout está no topo (12h), que corresponde a 270 graus na rotação SVG/CSS padrão.
+            // Calculamos a diferença que o disco precisa girar para levar esse centro até o ponteiro.
+            let diff = 270 - centerAngleOfTarget;
+            
+            // Normaliza a diferença para garantir que o disco gire sempre para a frente (sentido horário)
+            if (diff <= 0) diff += 360; 
+            
+            // Adiciona 10 voltas completas para emoção visual + a diferença milimétrica calculada
+            const newRotation = prevRotation + (360 * 10) + diff;
+            
+            console.log(`🕵️ ESPIÃO LABZ: Mira Laser -> Rotação Anterior: ${prevRotation} | Alvo Angular (Topo): 270 | Centro da Fatia: ${centerAngleOfTarget} | Nova Rotação Certa: ${newRotation}`);
+            
+            return newRotation;
+        });
+
+        // 4. FINALIZAÇÃO APÓS A ANIMAÇÃO (Sincronizado com SPIN_DURATION)
+        setTimeout(async () => {
+          setIsSpinning(false); 
+          setSelectedPrize(prizes[targetIndex]); // O prêmio exato da matemática visual
+          setModalOpen(true);
+          
+          const newBal = (player?.credits || 0) - 3;
+          setPlayer({ ...player, credits: newBal });
+          
+          await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
+            method: "PATCH", 
+            headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+            body: JSON.stringify({ credits: newBal }) 
+          });
+          
+          // 🔥 FIX 1: Verificação do botão Mudo antes de tocar som de vitória
+          if (soundEnabled) winAudioRef.current?.play().catch(() => {});
+          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
+        }, SPIN_DURATION + 100);
     }
-
-    console.log(`🕵️ ESPIÃO LABZ: Sorteio concluído. Alvo Visual Index: [${targetIndex}] -> Nome: "${prizes[targetIndex].name}"`);
-
-    // 3. A MATEMÁTICA DE SINCRONIA PERFEITA (Onde a mágica visual acontece)
-    setRotation(prevRotation => {
-        const arcSize = 360 / prizes.length;
-        // O ângulo para a fatia exata ficar apontando para cima (com correção para o CENTRO da fatia)
-        const targetAngle = 360 - (targetIndex * arcSize) - (arcSize / 2);
-        
-        // Calcula onde o disco está fisicamente agora (ignorando as voltas completas)
-        const currentMod = prevRotation % 360;
-        
-        // Calcula a diferença exata de graus para chegar no alvo
-        let diff = targetAngle - currentMod;
-        if (diff <= 0) diff += 360; // Garante que o disco gire sempre para frente
-        
-        // Adiciona 10 voltas completas para a emoção visual + a diferença milimétrica calculada
-        const newRotation = prevRotation + (360 * 10) + diff;
-        
-        console.log(`🕵️ ESPIÃO LABZ: Rotação Anterior: ${prevRotation} | Alvo Angular: ${targetAngle} | Nova Rotação Certa: ${newRotation}`);
-        
-        return newRotation;
-    });
-
-    // 4. FINALIZAÇÃO APÓS A ANIMAÇÃO (Sincronizado com SPIN_DURATION)
-    setTimeout(async () => {
-      setIsSpinning(false); 
-      setSelectedPrize(prizes[targetIndex]); // O prêmio exato da matemática visual
-      setModalOpen(true);
-      
-      const newBal = (player?.credits || 0) - 3;
-      setPlayer({ ...player, credits: newBal });
-      
-      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
-        method: "PATCH", 
-        headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-        body: JSON.stringify({ credits: newBal }) 
-      });
-      
-      winAudioRef.current?.play().catch(() => {});
-      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-    }, SPIN_DURATION + 100);
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-black uppercase text-[10px] tracking-widest animate-pulse">Carregando...</div>;
