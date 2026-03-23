@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, User, Coins, ShoppingCart, X as CloseIcon, 
@@ -27,11 +27,10 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
-// O Motor da Raspadinha Real (Canvas)
+// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [percentScratched, setPercentScratched] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,7 +38,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    // Desenha a camada prateada/metalizada
     const width = canvas.width;
     const height = canvas.height;
     
@@ -52,29 +50,26 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Adiciona textura granulada para parecer raspadinha real
-    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    // Textura
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
     for(let i=0; i<3000; i++) {
         ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
     }
 
-    // Texto central
     ctx.fillStyle = "#333";
-    ctx.font = "900 24px sans-serif";
+    ctx.font = "900 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
     
-    // Configura pincel de raspagem
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = 45; // Grosso do pincel
+    ctx.lineWidth = 50; 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
   }, [coverText]);
 
   useEffect(() => {
     if (isRevealed && canvasRef.current) {
-        // Se foi revelado por código (ex: timeout), limpa tudo
         const ctx = canvasRef.current.getContext('2d');
         if(ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
@@ -87,7 +82,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     
-    // Calcula escala caso o canvas CSS seja diferente do width/height original
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
@@ -99,7 +93,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleStart = (e: any) => {
     if (isRevealed) return;
-    e.preventDefault(); // Previne scroll no mobile
+    if (e.cancelable) e.preventDefault();
     setIsDrawing(true);
     const { x, y } = getPointerPos(e);
     const ctx = canvasRef.current?.getContext('2d');
@@ -111,7 +105,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleMove = (e: any) => {
     if (!isDrawing || isRevealed) return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -125,24 +119,20 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   const handleEnd = () => setIsDrawing(false);
 
   const checkReveal = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-      // Amostragem de pixels para checar % raspada (roda a cada movimento, simplificado por performance)
-      if (Math.random() > 0.1) return; // Checa apenas 10% das vezes para não travar
+      if (Math.random() > 0.1) return; // Otimização de performance
       
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
       const totalPixels = pixels.length / 4;
       
-      // Amostra 1 a cada 32 pixels
       for (let i = 3; i < pixels.length; i += 128) {
           if (pixels[i] === 0) transparent++;
       }
       
       const percent = (transparent / (totalPixels / 32)) * 100;
-      setPercentScratched(percent);
       
-      // Revela com 40% raspado
       if (percent > 40 && !isRevealed) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpa o resto
+          ctx.clearRect(0, 0, canvas.width, canvas.height); 
           onReveal();
       }
   };
@@ -187,12 +177,12 @@ export default function RaspadinhaPage() {
   const [showDeposit, setShowDeposit] = useState(false);
   const [notice, setNotice] = useState("");
   
-  // Sistema de Fila de Raspadinhas
-  const [scratchQueue, setScratchQueue] = useState<any[]>([]); // Lista de resultados pendentes (foto ou 'X')
-  const [currentScratch, setCurrentScratch] = useState<any>(null); // O resultado atual na tela
-  const [isRevealed, setIsRevealed] = useState(false); // Se o jogador já raspou a atual
-  const [queueIndex, setQueueIndex] = useState(0); // Qual raspada do pacote estamos
-  const [totalInPackage, setTotalInPackage] = useState(0); // Tamanho total do pacote comprado
+  // Sistema de Fila
+  const [scratchQueue, setScratchQueue] = useState<any[]>([]); 
+  const [currentScratch, setCurrentScratch] = useState<any>(null); 
+  const [isRevealed, setIsRevealed] = useState(false); 
+  const [queueIndex, setQueueIndex] = useState(0); 
+  const [totalInPackage, setTotalInPackage] = useState(0); 
   
   // PIX
   const [pixData, setPixData] = useState<any>(null);
@@ -239,9 +229,9 @@ export default function RaspadinhaPage() {
     }
   }
 
-  // --- COMPRA DE PACOTES ---
+  // --- LÓGICA DE PACOTES DE COMPRA ---
   const buyPackage = async (bundleSize: number) => {
-    if (scratchQueue.length > 0) return setNotice("Termine de raspar seu pacote atual primeiro!");
+    if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
     if (!player) return setNotice("Faça login para jogar.");
     if (unlockedPhotos.length >= 10) return setNotice("Coleção completa! Você já tem todas as fotos VIP dessa musa.");
 
@@ -251,13 +241,10 @@ export default function RaspadinhaPage() {
     const winThreshold = bundleSize === 10 ? 0.30 : bundleSize === 5 ? 0.50 : 0.65;
     let currentCredits = player.credits - cost;
     
-    // Deduz Saldo Imediato
     await supabase.from('Players').update({ credits: currentCredits }).eq('id', player.id);
     setPlayer({...player, credits: currentCredits});
 
-    // Gera a Fila de Resultados
     const availablePhotos = modelPhotos.filter(mp => !unlockedPhotos.find(up => up.photo_url === mp.photo_url));
-    // Cria uma cópia mutável para não repetir na mesma compra
     let pool = [...availablePhotos]; 
     let generatedQueue = [];
 
@@ -267,7 +254,7 @@ export default function RaspadinhaPage() {
             const wonPhoto = pool.splice(randomIndex, 1)[0];
             generatedQueue.push(wonPhoto);
         } else {
-            generatedQueue.push({ type: 'loss' }); // O "X"
+            generatedQueue.push({ type: 'loss' }); 
         }
     }
 
@@ -278,11 +265,9 @@ export default function RaspadinhaPage() {
     setIsRevealed(false);
   };
 
-  // --- AÇÃO: QUANDO O USUÁRIO RASPA TUDO ---
+  // --- AÇÃO DE REVELAÇÃO DA RASPADA ---
   const handleReveal = async () => {
       setIsRevealed(true);
-      
-      // Se for vitória, salva no banco imediatamente
       if (currentScratch && currentScratch.photo_url) {
           try {
               await supabase.from('ScratchHistory').insert([{
@@ -290,8 +275,6 @@ export default function RaspadinhaPage() {
                   model_id: model.id,
                   photo_url: currentScratch.photo_url
               }]);
-              
-              // Atualiza estado local da galeria
               setUnlockedPhotos(prev => [...prev, { photo_url: currentScratch.photo_url }]);
               confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 999 });
           } catch(e) {
@@ -300,21 +283,18 @@ export default function RaspadinhaPage() {
       }
   };
 
-  // --- AÇÃO: PRÓXIMA RASPADA NA FILA ---
   const nextScratch = () => {
       if (queueIndex < scratchQueue.length) {
           setCurrentScratch(scratchQueue[queueIndex]);
           setQueueIndex(prev => prev + 1);
           setIsRevealed(false);
       } else {
-          // Acabou o pacote
           setScratchQueue([]);
           setCurrentScratch(null);
           setQueueIndex(0);
           setTotalInPackage(0);
       }
   };
-
 
   // --- MONITORAMENTO PIX ---
   useEffect(() => {
@@ -358,16 +338,17 @@ export default function RaspadinhaPage() {
   if (loading) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-[#D946EF] font-black uppercase text-xs animate-pulse tracking-widest">Carregando Labz...</div>;
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans select-none">
+    // Aqui está a chave do Layout: Adicionado overflow-y-auto para permitir rolagem caso a tela seja pequena
+    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center font-sans select-none overflow-hidden">
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-hidden">
+      <div className="relative w-full min-h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-x-hidden overflow-y-auto custom-scrollbar">
         
         {/* Background Estilo Roleta */}
-        <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000" style={{ backgroundImage: `url(${backgroundUrl})` }} />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-transparent to-black" />
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-transparent to-black fixed" />
         </div>
 
         {/* Header Premium */}
@@ -394,11 +375,12 @@ export default function RaspadinhaPage() {
         </div>
 
         {/* Área Central: O Jogo Real */}
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6">
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 px-4 min-h-[380px]">
           
-          <div className="w-full aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden">
+          {/* Card com Restrição de Tamanho (Para não empurrar os botões pra fora da tela) */}
+          <div className="w-full max-w-[300px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
              
-             {/* CONTEÚDO REVELADO (Abaixo do Canvas) */}
+             {/* CONTEÚDO REVELADO */}
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
                      {currentScratch.photo_url ? (
@@ -413,20 +395,20 @@ export default function RaspadinhaPage() {
                          <div className="flex flex-col items-center justify-center p-6 text-center animate-in zoom-in">
                              <CloseIcon size={60} className="text-red-500/50 mb-4 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]" />
                              <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-2">Veio o X</h3>
-                             <p className="text-[10px] text-white/50 uppercase font-bold tracking-widest leading-relaxed">Que pena amor!<br/>Sua foto secreta estava quase saindo.</p>
+                             <p className="text-[10px] text-white/50 uppercase font-bold tracking-widest leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
                          </div>
                      )}
                  </div>
              ) : (
-                 // Placeholder quando não tem jogo ativo
+                 // Placeholder Inicial
                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#151515] to-[#050505]">
                     <ImageIcon size={50} className="text-[#D946EF]/20 mb-4" />
-                    <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Aguardando...</h3>
+                    <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Raspadinha VIP</h3>
                     <p className="text-[9px] font-black text-white/20 uppercase mt-2 text-center px-8">Compre um pacote abaixo para raspar</p>
                  </div>
              )}
 
-             {/* CAMADA RASPADINHA (Canvas por cima de tudo) */}
+             {/* CAMADA DE RASPADINHA (Canvas) */}
              {currentScratch && (
                 <ScratchCanvas 
                     isRevealed={isRevealed} 
@@ -438,22 +420,22 @@ export default function RaspadinhaPage() {
 
           {/* Dica Visual */}
           {currentScratch && !isRevealed && (
-              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-4 animate-pulse">Raspe a tela com o dedo</p>
+              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-4 animate-pulse shrink-0">Raspe a tela com o dedo</p>
           )}
 
-          {/* Botão Próxima (Se estiver no meio de um pacote) */}
+          {/* Próxima Raspada */}
           {currentScratch && isRevealed && (
-              <div className="mt-6 w-full px-2 animate-in slide-in-from-bottom-4 fade-in">
+              <div className="mt-4 w-full max-w-[300px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
                   <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Ir para Raspada ${queueIndex + 1} de ${totalInPackage}` : "Finalizar Pacote"}
                   </button>
               </div>
           )}
 
-          {/* Saldo e Progresso (Oculto durante o pacote ativo para focar no jogo) */}
+          {/* Saldo e Progresso Ocultos durante a Raspada */}
           {!currentScratch && (
-              <div className="mt-8 flex flex-col items-center gap-3 w-full animate-in fade-in">
-                 <div className="px-6 py-2.5 bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg">
+              <div className="mt-6 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
+                 <div className="px-6 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg">
                     <Coins size={16} className="text-[#FFD700]" />
                     <span className="text-lg font-black italic text-white">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
                  </div>
@@ -467,26 +449,31 @@ export default function RaspadinhaPage() {
           )}
         </div>
 
-        {/* Footer: Sistema de Compra Premium */}
-        <div className={`relative z-10 p-6 bg-gradient-to-t from-black via-black/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'translate-y-full absolute bottom-0 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-             <button onClick={() => buyPackage(1)} className="bg-white/5 border border-white/10 h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all">
+        {/* 🔥 FOOTER: Os 3 Botões de Compra 🔥 */}
+        <div className={`relative z-10 p-4 bg-gradient-to-t from-black via-black/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+          
+          <div className="grid grid-cols-2 gap-2 mb-2">
+             {/* Botão 1x */}
+             <button onClick={() => buyPackage(1)} className="bg-white/5 border border-white/10 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all">
                 <span className="text-[9px] font-black uppercase text-white/40">1 Raspada</span>
                 <span className="text-sm font-black text-white italic">2 CR</span>
              </button>
-             <button onClick={() => buyPackage(5)} className="bg-[#D946EF]/10 border border-[#D946EF]/40 h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group">
-                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[7px] font-black px-2 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
+             {/* Botão 5x */}
+             <button onClick={() => buyPackage(5)} className="bg-[#D946EF]/10 border border-[#D946EF]/40 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group">
+                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-1.5 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
                 <span className="text-[9px] font-black uppercase text-white/60">Combo 5x</span>
                 <span className="text-sm font-black text-[#D946EF] italic">8 CR</span>
              </button>
           </div>
 
+          {/* Super Pack Dourado 10x */}
           <button onClick={() => buyPackage(10)} className="w-full py-4 bg-[#FFD700] text-black rounded-2xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all mb-4 border border-white/20">
              <span className="flex items-center gap-2 italic"><Zap size={14} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
              <span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
           </button>
           
-          <div className="grid grid-cols-2 gap-3">
+          {/* Navegação Secundária */}
+          <div className="grid grid-cols-2 gap-2">
             <button onClick={() => router.push(`/${slug}`)} className="py-3 bg-white/5 border border-white/10 text-white/40 rounded-xl font-black uppercase text-[9px] flex items-center justify-center gap-2 hover:text-white transition-all"><LayoutGrid size={14} /> Vitrine</button>
             <button onClick={() => setShowDeposit(true)} className="py-3 bg-white/5 border border-white/10 text-white/40 rounded-xl font-black uppercase text-[9px] flex items-center justify-center gap-2 hover:text-[#D946EF] transition-all"><ShoppingCart size={14} /> Depositar</button>
           </div>
@@ -502,7 +489,7 @@ export default function RaspadinhaPage() {
               <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-6 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
               
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 border-t border-white/10 pt-6">
-                <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest"><Trophy size={14} className="text-[#FFD700]"/> Galeria Secreta ({unlockedPhotos.length}/10)</h3>
+                <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest"><Trophy size={14} className="text-[#FFD700]"/> Galeria ({unlockedPhotos.length}/10)</h3>
                 {unlockedPhotos.length === 0 ? (
                   <div className="py-10 text-center opacity-20"><ImageIcon size={40} className="mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Você não tem fotos</p></div>
                 ) : (
@@ -521,7 +508,7 @@ export default function RaspadinhaPage() {
           </div>
         )}
 
-        {/* Modal PIX Labz */}
+        {/* Modal PIX */}
         {showDeposit && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200">
             <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)]">
