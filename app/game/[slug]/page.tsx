@@ -106,16 +106,19 @@ export default function GamePage() {
 
             const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
             
+            // Busca Perfil
             const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers }).then(r => r.json());
             if (!resMod || !resMod[0]) return router.push('/vitrine');
             const mData = resMod[0]; setModel(mData);
 
+            // Busca Prêmios (FONTE DA VERDADE DO DISCO)
             const resPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mData.id}&select=*`, { headers }).then(r => r.json());
             if (resPrizes && resPrizes.length >= 2) {
-                // Sincroniza a ordem alfabética para garantir mapeamento visual perfeito
+                // Sincroniza a ordem alfabética para garantir mapeamento perfeito
                 setPrizes(resPrizes.sort((a:any, b:any) => a.name.localeCompare(b.name)));
             }
 
+            // Busca Jogador para Saldo Real
             const resPl = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&model_id=eq.${mData.id}&select=*`, { headers }).then(r => r.json());
             if (resPl && resPl[0]) { setPlayerId(resPl[0].id); setCredits(resPl[0].credits || 0); }
         } catch (e) { console.error("Erro Crítico:", e); } finally { setLoading(false); }
@@ -127,7 +130,7 @@ export default function GamePage() {
     if (credits < spinCost || isSpinning || authLoading || !model || !playerId || prizes.length < 2) return;
     
     setIsSpinning(true); setWonPrize(null);
-    setCredits(prev => prev - spinCost); // UX Visual Imediata
+    setCredits(prev => prev - spinCost); // Dedução visual imediata (UX)
 
     try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
@@ -139,44 +142,33 @@ export default function GamePage() {
         if (dataSpin.error || !dataSpin.prizeId) { throw new Error(dataSpin.error || "Erro no sorteio do banco"); }
 
         const prizeIdWon = dataSpin.prizeId;
-        const wonObjFromBanco = prizes.find(p => p.id === prizeIdWon);
-        
-        if (!wonObjFromBanco) throw new Error("Prêmio sorteado não encontrado na lista local de visualização");
-
-        // PROTOCOLO ESPIÃO DE PREVENÇÃO VISUAL TOTAL 🕵️
-        // Se o banco mandou uma ISCA (PIX, Presencial, R$100), bloqueamos a parada visual nela.
-        let finalVisualPrize = wonObjFromBanco;
-        const n = String(wonObjFromBanco.name).toUpperCase();
-        if (n.includes("PIX") || n.includes("PRESENCIAL") || n.includes("100") || n.includes("R$")) {
-            console.log("🕵️ ESPIÃO: Bait detectado pelo banco. Redirecionando visual para Créditos.");
-            // Busca o prêmio de Créditos na lista da modelo
-            const creditPrize = prizes.find(p => String(p.name).toUpperCase().includes("CRÉDITO"));
-            if (creditPrize) finalVisualPrize = creditPrize;
-        }
+        const wonObj = prizes.find(p => p.id === prizeIdWon);
+        if (!wonObj) throw new Error("Prêmio sorteado não encontrado na lista local");
 
         // CÁLCULO DE ÂNGULO BLINDADO 🕵️
-        // Sincronização visual final (para o prêmio seguro)
+        // Sincronização Perfeita entre Banco (ID) e Visual (Index do Array)
         const totalSegments = prizes.length;
         const arcSize = 360 / totalSegments;
-        const prizeIndexVisual = prizes.findIndex(p => p.id === finalVisualPrize.id);
+        const prizeIndex = prizes.findIndex(p => p.id === prizeIdWon);
         
-        const voltasCompletas = 6; // UX Viciante
-        const baseAngle = 360 - (prizeIndexVisual * arcSize) - (arcSize / 2); // Centro da fatia segura
+        const voltasCompletas = 5; // UX Viciante
+        const baseAngle = 360 - (prizeIndex * arcSize) - (arcSize / 2); // Ângulo para o centro exato da fatia
         const targetRotation = (360 * voltasCompletas) + baseAngle;
 
-        console.log(`🕵️ ESPIÃO: Girando visualmente para Prêmio Index: ${prizeIndexVisual}, Nome Visual: ${finalVisualPrize.name}, Ângulo Parada: ${baseAngle}deg`);
+        console.log(`🕵️ ESPIÃO: Girando para Prêmio ID: ${prizeIdWon}, Index: ${prizeIndex}, Nome: ${wonObj.name}, Ângulo Parada: ${baseAngle}deg`);
 
         setRotation(targetRotation); // Inicia o giro visual
 
+        // Guardamos o prêmio para o modal final (sem recálculos arriscados)
         setTimeout(() => {
-            setWonPrize(finalVisualPrize); // Abre o modal com o prêmio seguro
+            setWonPrize(wonObj); // Abre o modal baseado na Fonte da Verdade do Banco
             setIsSpinning(false);
-            // Saldo real já foi deduzido no backend e UX pre-giro
+            // Saldo real é atualizado no fechamento do modal
         }, 8500); // Tempo exato da animação (ver CSS)
 
     } catch (err) {
       console.error("Giro falhou:", err);
-      // Reembolso visual local se falhar
+      // Reembolso local se falhar
       setCredits(prev => prev + spinCost);
       setIsSpinning(false);
       alert("Falha na conexão. Recarregue a página e tente novamente.");
@@ -193,16 +185,16 @@ export default function GamePage() {
       <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-105" style={{ backgroundImage: `url(${modelConfig?.bg_url})` }} />
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      <header className="fixed top-0 left-0 w-full h-20 bg-black/50 backdrop-blur-xl border-b border-white/5 z-[100] px-6 flex items-center justify-between shadow-xl">
-          <button onClick={() => router.push(`/profile/${model.slug}`)} className="p-3 bg-white/5 rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
-          <div className="text-center"><h1 className="text-lg font-black uppercase italic text-[#D946EF] tracking-tighter">ROLETA VIP: <span className="text-white">{modelName}</span></h1><p className="text-[9px] text-white/30 uppercase font-black tracking-widest">{playerPhone}</p></div>
-          <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 px-5 py-3 rounded-full text-emerald-400 font-black text-xs shadow-inner"><Wallet size={16}/> {credits} CR</div>
+      <header className="fixed top-0 left-0 w-full h-20 bg-black/50 backdrop-blur-xl border-b border-white/5 z-[100] px-6 flex items-center justify-between">
+          <button onClick={() => router.push(`/profile/${model.slug}`)} className="p-3 bg-white/5 rounded-full border border-white/10"><ArrowLeft size={20}/></button>
+          <div className="text-center"><h1 className="text-lg font-black uppercase italic text-[#D946EF] tracking-tighter">ROLETA VIP: <span className="text-white">{modelName}</span></h1><p className="text-[9px] text-white/30 uppercase font-black">{playerPhone}</p></div>
+          <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 px-5 py-3 rounded-full text-emerald-400 font-black text-xs"><Wallet size={16}/> {credits} CR</div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 mt-28 flex flex-col items-center gap-10 relative z-10 animate-in fade-in duration-700">
-        <div className="w-full max-w-[500px] aspect-square relative flex items-center justify-center scale-90 sm:scale-100">
+      <main className="max-w-7xl mx-auto p-6 mt-28 flex flex-col items-center gap-10 relative z-10">
+        <div className="w-full max-w-[500px] aspect-square relative flex items-center justify-center">
             {/* O PONTEIRO FIXO (Topo, 0deg) */}
-            <div className="absolute top-[-25px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[40px] border-t-white z-50 drop-shadow-[0_5px_15px_rgba(255,255,255,0.7)]"></div>
+            <div className="absolute top-[-15px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[30px] border-t-white z-50 drop-shadow-[0_5px_15px_rgba(255,255,255,0.5)]"></div>
             
             {/* O DISCO QUE GIRA */}
             <div className="w-full h-full relative" style={{ transform: `rotate(${rotation}deg)`, transition: isSpinning ? 'transform 8s cubic-bezier(0.1, 0, 0.2, 1)' : 'none' }}>
@@ -210,18 +202,17 @@ export default function GamePage() {
             </div>
             
             {/* CENTRO DA ROLETA */}
-            <div className="absolute inset-[37%] bg-[#0a0a0a] rounded-full border-[6px] border-[#D946EF] shadow-[0_0_40px_rgba(217,70,239,1)] z-30 flex items-center justify-center p-1 relative overflow-hidden">
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm rounded-full"/>
-                {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover rounded-full relative z-10" /> : <User className="text-[#D946EF] relative z-10" size={30}/>}
+            <div className="absolute inset-[38%] bg-[#0a0a0a] rounded-full border-[6px] border-[#D946EF] shadow-[0_0_40px_rgba(217,70,239,0.8)] z-30 flex items-center justify-center">
+                {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover rounded-full" /> : <User className="text-[#D946EF]" size={30}/>}
             </div>
         </div>
 
-        <button onClick={handleSpin} disabled={credits < spinCost || isSpinning} className="flex items-center justify-center gap-3 px-12 py-6 bg-[#D946EF] rounded-2xl text-xs font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.5)] hover:bg-[#f062ff] hover:scale-105 disabled:opacity-50 transition-all active:scale-95 disabled:hover:scale-100 disabled:bg-[#444] tracking-widest"><Gamepad2 size={18}/> {isSpinning ? 'Girando...' : `Girar (Custo: ${spinCost} CR)`}</button>
+        <button onClick={handleSpin} disabled={credits < spinCost || isSpinning} className="flex items-center justify-center gap-3 px-12 py-6 bg-[#D946EF] rounded-2xl text-xs font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.4)] hover:bg-[#f062ff] hover:scale-105 disabled:opacity-50 transition-all active:scale-95 disabled:hover:scale-100 disabled:bg-[#444]"><Gamepad2 size={18}/> {isSpinning ? 'Girando...' : `Girar (Custo: ${spinCost} CR)`}</button>
 
-        <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem] w-full max-w-xl animate-pulse">Histórico de prêmios em breve...</div>
+        <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem] w-full max-w-xl">Histórico de prêmios em breve...</div>
       </main>
 
-      {/* MODAL DE VENCEDOR: Sincronizado com a Fonte da Verdade do Disco Segura */}
+      {/* MODAL DE VENCEDOR: Sincronizado com o ID Real do Banco */}
       {wonPrize && !isSpinning && (
           <WinnerModal prize={wonPrize} onClose={() => { setWonPrize(null); router.refresh(); }} />
       )}
