@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense, useMemo, Component } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
-  Image as ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
+  ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
   HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star
@@ -23,6 +23,7 @@ class ErrorBoundary extends Component<any, any> {
       return (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#7f1d1d', color: 'white', zIndex: 99999, padding: '24px', overflowY: 'auto', fontFamily: 'monospace' }}>
           <h1 style={{ fontSize: '20px', fontWeight: '900', marginBottom: '10px', textTransform: 'uppercase' }}>⚠️ O Espião Labz pegou um Erro!</h1>
+          <p style={{ marginBottom: '20px', fontSize: '14px' }}>Tire um print dessa tela e mande para o dev:</p>
           <button onClick={() => window.location.reload()} style={{ marginTop: '30px', backgroundColor: 'white', color: '#7f1d1d', padding: '16px', borderRadius: '12px', width: '100%', fontWeight: '900', textTransform: 'uppercase' }}>Recarregar Página</button>
         </div>
       );
@@ -50,6 +51,8 @@ function DashboardContent() {
   const [salesHistory, setSalesHistory] = useState<any[]>([]); 
   const [scratchPhotos, setScratchPhotos] = useState<any[]>([]); 
 
+  const [globalAnnouncement, setGlobalAnnouncement] = useState(""); // 🔥 Variável para o comunicado 🔥
+  
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
   const [pixKey1, setPixKey1] = useState("");
@@ -92,7 +95,8 @@ function DashboardContent() {
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-      const [resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch] = await Promise.all([
+      const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()), // 🔥 Carrega o GlobalSettings 🔥
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
@@ -103,6 +107,8 @@ function DashboardContent() {
         fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
+      if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); // 🔥 Define a mensagem 🔥
+      
       if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
       }
@@ -258,6 +264,26 @@ function DashboardContent() {
                     <button onClick={() => copyToClipboard(`${modelUrl}/game/${modelSlug}/raspadinha`, "Raspadinha")} className="flex items-center justify-between bg-white/5 border border-white/10 p-3.5 rounded-xl hover:bg-white/10 transition-all group"> <span className="text-[9px] font-black uppercase text-white/50 tracking-widest"><Sparkles size={12} className="inline mr-2 text-[#FFD700]/50"/> Link Raspadinha</span> <Copy size={14} className="text-[#FFD700]" /> </button>
                 </div>
             </div>
+        )}
+
+        {/* 🔥 COMUNICADO GLOBAL VISUAL (BANCO DE DADOS) 🔥 */}
+        {globalAnnouncement && (
+          <div className="mb-8 bg-[#FF1493]/10 border border-[#FF1493]/30 p-6 rounded-[2rem] shadow-2xl relative overflow-hidden animate-in slide-in-from-top-4 duration-500">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Megaphone size={40} className="text-[#FF1493] rotate-12" />
+            </div>
+            <div className="flex items-start gap-4 relative z-10">
+              <div className="p-3 bg-[#FF1493] rounded-2xl shadow-lg shadow-[#FF1493]/20">
+                <Bell size={20} className="text-white animate-ring" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-[10px] font-black text-[#FF1493] uppercase tracking-[0.2em] mb-1">Comunicado Oficial Savanah</h3>
+                <p className="text-sm font-bold text-white/90 leading-relaxed italic">
+                  "{globalAnnouncement}"
+                </p>
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
@@ -584,7 +610,23 @@ function DashboardContent() {
           </div>
       )}
 
-      <style jsx global>{` .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }`}</style>
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
+        
+        /* 🔥 Animação do Sino 🔥 */
+        @keyframes ring {
+          0% { transform: rotate(0); }
+          10% { transform: rotate(15deg); }
+          20% { transform: rotate(-15deg); }
+          30% { transform: rotate(10deg); }
+          40% { transform: rotate(-10deg); }
+          50% { transform: rotate(0); }
+          100% { transform: rotate(0); }
+        }
+        .animate-ring { animation: ring 2s ease infinite; }
+      `}</style>
     </div>
   );
 }
