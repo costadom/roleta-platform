@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2
+  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
@@ -169,10 +169,20 @@ export default function ModelProfile() {
           <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-48 md:h-48 rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.4)] shrink-0 bg-black">
             <img src={modelConfig?.profile_url} className="w-full h-full object-cover" />
           </div>
-          <div className="flex-1 text-left pb-2 sm:pb-4">
+          <div className="flex-1 text-left pb-2 sm:pb-4 w-full">
             <h1 className="text-4xl sm:text-5xl font-black uppercase italic tracking-tighter drop-shadow-2xl mb-3 sm:mb-4">{modelConfig?.model_name || model?.slug}</h1>
             <p className="text-white/70 text-sm sm:text-base italic max-w-xl mb-6 leading-relaxed">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
-            <button onClick={() => router.push(`/game/${slug}`)} className="flex items-center justify-center gap-3 px-8 py-4 w-full sm:w-auto bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all"><Gamepad2 size={18}/> Jogar Roleta VIP</button>
+            
+            {/* 🔥 OS DOIS BOTÕES: ROLETA E RASPADINHA LADO A LADO 🔥 */}
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-max">
+                <button onClick={() => router.push(`/game/${slug}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all">
+                    <Gamepad2 size={18}/> Jogar Roleta VIP
+                </button>
+                <button onClick={() => router.push(`/game/${slug}/raspadinha`)} className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all">
+                    <Sparkles size={18} fill="currentColor"/> Raspadinha Sexy
+                </button>
+            </div>
+
           </div>
         </div>
       </div>
