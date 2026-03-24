@@ -56,41 +56,79 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         const dataCheck = await resCheck.json();
 
         if (dataCheck && dataCheck.length > 0) {
-          const userBase = dataCheck[0];
+          // Procura se o cliente já tem carteira NESSA modelo específica
+          let userForThisModel = dataCheck.find((p: any) => p.model_id === currentModelId);
 
-          if (!userBase.full_name || !userBase.nickname || !userBase.cpf) {
-            setWhatsapp(userBase.whatsapp);
-            setEmail(userBase.email || "");
+          if (!userForThisModel) {
+            // 🔥 O SEGREDO DO ISOLAMENTO DE CRÉDITOS 🔥
+            // Ele tem conta no Labz, mas é a primeira vez na vitrine DESSA modelo.
+            // Em vez de dar PATCH (roubar a conta), fazemos POST criando uma conta clone zerada.
+            const baseUser = dataCheck[0];
+            const newPlayerPayload = {
+              whatsapp: baseUser.whatsapp,
+              password: baseUser.password,
+              email: baseUser.email,
+              full_name: baseUser.full_name,
+              nickname: baseUser.nickname,
+              cpf: baseUser.cpf,
+              name: baseUser.name,
+              credits: 0, // Saldo isolado zerado!
+              model_id: currentModelId
+            };
+            
+            const insertRes = await fetch(`${supabaseUrl}/rest/v1/Players`, {
+              method: "POST", headers, body: JSON.stringify(newPlayerPayload)
+            });
+            
+            if (!insertRes.ok) {
+                setError("Erro de Banco de Dados. Verifique se o whatsapp NÃO está como UNIQUE no Supabase.");
+                setLoading(false);
+                return;
+            }
+            
+            const insertedData = await insertRes.json();
+            userForThisModel = insertedData[0];
+          }
+
+          if (!userForThisModel.full_name || !userForThisModel.nickname || !userForThisModel.cpf) {
+            setWhatsapp(userForThisModel.whatsapp);
+            setEmail(userForThisModel.email || "");
             setView("update");
             setLoading(false);
             return;
           }
 
-          const hasLink = dataCheck.find((p: any) => p.model_id === currentModelId);
-          
-          if (!hasLink) {
-            // EM VEZ DE CRIAR NOVO (ERRO 409), ATUALIZA O EXISTENTE COM O NOVO MODEL_ID
-            await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${userBase.id}`, {
-              method: "PATCH", headers,
-              body: JSON.stringify({ model_id: currentModelId })
-            });
-          }
-          
           localStorage.setItem("labz_player_logged", "true");
           localStorage.setItem("labz_player_phone", cleanWhatsapp);
           window.location.reload();
         } else setError("WhatsApp ou senha incorretos.");
       } 
       else {
+        // Tratamento para Cadastro / Atualização
+        if (view === "register") {
+           // Checa se o cara já não tem conta com essa exata modelo para não duplicar
+           const checkExist = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWhatsapp}&model_id=eq.${currentModelId}&select=id`, { headers }).then(r=>r.json());
+           if (checkExist && checkExist.length > 0) {
+               setError("Você já tem uma conta nesta Musa. Faça Login.");
+               setLoading(false);
+               return;
+           }
+        }
+
         const payload = { whatsapp: cleanWhatsapp, email, cpf: cpf.replace(/\D/g,""), password, full_name: fullName, nickname, credits: 0, model_id: currentModelId, name: nickname };
 
         if (view === "register") {
            const res = await fetch(`${supabaseUrl}/rest/v1/Players`, { method: "POST", headers, body: JSON.stringify(payload) });
-           if (!res.ok) throw new Error();
+           if (!res.ok) {
+               setError("Erro ao cadastrar. O whatsapp pode estar restrito no Supabase.");
+               setLoading(false);
+               return;
+           }
         } else {
+           // UPDATE: Se ele atualizar o nome/cpf, atualizamos em todas as contas dele no Labz
            await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWhatsapp}`, {
              method: "PATCH", headers,
-             body: JSON.stringify({ full_name: fullName, nickname, name: nickname, cpf: cpf.replace(/\D/g,""), email, model_id: currentModelId })
+             body: JSON.stringify({ full_name: fullName, nickname, name: nickname, cpf: cpf.replace(/\D/g,""), email })
            });
         }
         localStorage.setItem("labz_player_logged", "true");
@@ -131,7 +169,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} /><input type="password" placeholder="Crie uma Senha" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-[#111] border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF]" /></div>
           )}
           {error && <p className="text-red-500 text-[10px] text-center font-black uppercase bg-red-500/10 py-3 rounded-xl border border-red-500/20">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-[#D946EF] to-[#9c18ae] text-white font-black uppercase py-5 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center">{loading ? <Loader2 className="animate-spin" /> : view === "update" ? "Concluir Cadastro" : "Acessar Roleta"}</button>
+          <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-[#D946EF] to-[#9c18ae] text-white font-black uppercase py-5 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center">{loading ? <Loader2 className="animate-spin" /> : view === "update" ? "Concluir Cadastro" : "Acessar"}</button>
         </form>
       </div>
     </div>
