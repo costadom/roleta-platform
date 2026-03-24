@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import PlayersManager from "./players";
 
-// 🔥 ESPIÃO LABZ: Captura qualquer tela preta e mostra o erro exato na tela do celular 🔥
+// 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) {
     super(props);
@@ -32,18 +32,9 @@ class ErrorBoundary extends Component<any, any> {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#7f1d1d', color: 'white', zIndex: 99999, padding: '24px', overflowY: 'auto', fontFamily: 'monospace' }}>
           <h1 style={{ fontSize: '20px', fontWeight: '900', marginBottom: '10px', textTransform: 'uppercase' }}>⚠️ O Espião Labz pegou um Erro!</h1>
           <p style={{ marginBottom: '20px', fontSize: '14px' }}>Tire um print dessa tela e mande para o dev:</p>
-          
           <h3 style={{ fontWeight: 'bold', color: '#fca5a5', fontSize: '16px' }}>O que quebrou:</h3>
           <p style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '8px', wordBreak: 'break-all', marginTop: '5px' }}>{this.state.error && this.state.error.toString()}</p>
-          
-          <h3 style={{ fontWeight: 'bold', color: '#fca5a5', marginTop: '20px', fontSize: '16px' }}>Onde quebrou (Pilha):</h3>
-          <pre style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '11px', marginTop: '5px' }}>
-            {this.state.errorInfo && this.state.errorInfo.componentStack}
-          </pre>
-          
-          <button onClick={() => window.location.reload()} style={{ marginTop: '30px', backgroundColor: 'white', color: '#7f1d1d', padding: '16px', borderRadius: '12px', width: '100%', fontWeight: '900', textTransform: 'uppercase' }}>
-            Recarregar Página
-          </button>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '30px', backgroundColor: 'white', color: '#7f1d1d', padding: '16px', borderRadius: '12px', width: '100%', fontWeight: '900', textTransform: 'uppercase' }}>Recarregar Página</button>
         </div>
       );
     }
@@ -471,10 +462,18 @@ function DashboardContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <button onClick={async () => { if(confirm("Tem certeza que deseja apagar essa foto da raspadinha? Quem já comprou não perde o acesso.")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={24}/></button>
-                            </div>
+                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 transition-all duration-500"/>
+                            
+                            {/* 🔥 Lixeira sempre acessível no mobile 🔥 */}
+                            <button onClick={async () => { 
+                                if(confirm("Tem certeza que deseja apagar essa foto da raspadinha? Quem já comprou não perde o acesso.")) { 
+                                    await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); 
+                                    loadData(); 
+                                } 
+                            }} className="absolute bottom-2 right-2 p-2.5 bg-red-500/80 backdrop-blur-md text-white rounded-full active:scale-95 transition-all shadow-lg z-10 hover:bg-red-500">
+                                <Trash2 size={16}/>
+                            </button>
+
                             <div className="absolute top-4 left-4"><Star size={16} fill="#FFD700" className="text-[#FFD700] drop-shadow-md" /></div>
                         </div>
                     )) : <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem]">Sua coleção de raspadinha está vazia.</div>}
@@ -508,7 +507,7 @@ function DashboardContent() {
                             {!galleryPreviewUrl ? (
                                 <label className="w-full bg-white/5 text-white py-6 rounded-2xl cursor-pointer hover:bg-white/10 border border-white/10 flex items-center justify-center gap-3 font-black uppercase text-[10px] mt-6 transition-all">
                                     <Upload size={20}/> Escolher Arquivo (Máx 10MB)
-                                    <input type="file" hidden accept="image/*" onChange={onChooseGalleryFile} />
+                                    <input type="file" className="hidden" accept="image/*" onChange={onChooseGalleryFile} />
                                 </label>
                             ) : (
                                 <div className="mt-6 space-y-3">
@@ -528,18 +527,17 @@ function DashboardContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {mediaList.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
+                            <img src={item.url} className="w-full h-full object-cover opacity-70 transition-all duration-500"/>
                             
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <button onClick={async () => { 
-                                    if(confirm("ATENÇÃO: Apagar esta foto vai removê-la da sua vitrine pública. Quem já comprou não perde o acesso. Deseja mesmo apagar?")) { 
-                                        await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); 
-                                        loadData(); 
-                                    } 
-                                }} className="p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg">
-                                    <Trash2 size={24}/>
-                                </button>
-                            </div>
+                            {/* 🔥 Lixeira sempre acessível no mobile 🔥 */}
+                            <button onClick={async () => { 
+                                if(confirm("ATENÇÃO: Apagar esta foto vai removê-la da sua vitrine pública. Quem já comprou não perde o acesso. Deseja mesmo apagar?")) { 
+                                    await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); 
+                                    loadData(); 
+                                } 
+                            }} className="absolute bottom-2 right-2 p-2.5 bg-red-500/80 backdrop-blur-md text-white rounded-full active:scale-95 transition-all shadow-lg z-10 hover:bg-red-500">
+                                <Trash2 size={16}/>
+                            </button>
 
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
                         </div>
