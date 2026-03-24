@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2 } from "lucide-react";
+import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2, Video } from "lucide-react";
 
 export default function SuperAdmin() {
   const router = useRouter();
@@ -18,6 +18,7 @@ export default function SuperAdmin() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [abandoned, setAbandoned] = useState<any[]>([]); 
+  const [videoRequests, setVideoRequests] = useState<any[]>([]); // 🔥 LISTA DE VÍDEOS
   const [totalPlayers, setTotalPlayers] = useState(0); 
   
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ export default function SuperAdmin() {
         "Cache-Control": "no-cache" 
       };
 
-      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers, resAbandon] = await Promise.all([
+      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers, resAbandon, resVideos] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
         Promise.resolve({ ok: true, json: async () => [] }), 
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
@@ -52,7 +53,8 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=50`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=50`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers }) // 🔥 BUSCA VÍDEOS PAGOS
       ]);
 
       const range = resPlayers.headers.get("content-range");
@@ -66,6 +68,7 @@ export default function SuperAdmin() {
       setHistory(dataHist);
       if (resTrans.ok) setTransactions(await resTrans.json());
       if (resWith.ok) setWithdrawals(await resWith.json());
+      if (resVideos.ok) setVideoRequests(await resVideos.json()); // 🔥 SETA VÍDEOS
       
       if (resApp.ok) {
         const apps = await resApp.json();
@@ -163,7 +166,6 @@ export default function SuperAdmin() {
       const generatedEmail = `${app.nickname.toLowerCase()}@admin.com`;
       const generatedPass = `${capNick}Admin26`;
       
-      // 🔥 AQUI ESTÁ A CORREÇÃO: O referred_by vai junto na criação da Modelo
       const payloadModel = { 
           slug: app.nickname.toLowerCase(), 
           email: generatedEmail, 
@@ -197,7 +199,6 @@ export default function SuperAdmin() {
     e.preventDefault(); setLoading(true);
     try {
       const now = new Date().toISOString(); 
-      // 🔥 AQUI ESTÁ A CORREÇÃO: O referred_by vai junto na criação Manual da Modelo
       const payloadModel = { 
           slug: newModel.slug.toLowerCase(), 
           email: newModel.email, 
@@ -252,6 +253,33 @@ export default function SuperAdmin() {
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button>
           </div>
         </div>
+
+        {/* 🔥 NOVOS ALERTAS: VÍDEOS SOLICITADOS 🔥 */}
+        {videoRequests.length > 0 && (
+          <div className="mb-12 bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(59,130,246,0.1)]">
+            <h2 className="text-xs font-black uppercase text-blue-400 mb-4 flex items-center gap-2 tracking-widest"><Video size={16}/> {videoRequests.length} Novos Pedidos de Vídeo VIP</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {videoRequests.map(req => (
+                <div key={req.id} className="bg-black border border-blue-500/20 p-5 rounded-3xl flex flex-col justify-between">
+                  <div className="mb-4">
+                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-1">Musa: @{req.Models?.slug}</p>
+                    <p className="text-[12px] text-white font-bold leading-relaxed mb-2">"{req.description}"</p>
+                    <div className="flex justify-between text-[9px] text-white/50 font-mono uppercase">
+                        <span>💰 R$ {req.price}</span>
+                        <span>⏱ {req.duration} min</span>
+                    </div>
+                  </div>
+                  <button onClick={() => {
+                    const msg = encodeURIComponent(`Oi linda! Você tem um novo Vídeo VIP pago de ${req.duration} minutos! O pedido é: "${req.description}". Aceite no seu painel para garantir seu saldo! 💸🚀`);
+                    window.open(`https://wa.me/${req.Models?.whatsapp?.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                  }} className="w-full bg-blue-600 text-white py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-500 transition-all">
+                    <MessageCircle size={14}/> Enviar para Modelo
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* PIX ABANDONADOS - CARD VERMELHO */}
         {abandoned.length > 0 && (
@@ -369,7 +397,6 @@ export default function SuperAdmin() {
                     <div className="flex gap-2">
                       <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
                       
-                      {/* 🔥 O SEU BOTÃO DE CLIENTES RESTAURADO AQUI 🔥 */}
                       <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes">
                         <Users size={16}/>
                       </button>
