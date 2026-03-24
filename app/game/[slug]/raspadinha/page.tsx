@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, User, Coins, ShoppingCart, X as CloseIcon, 
   Image as ImageIcon, Lock, CheckCircle2, Copy, Loader2, 
-  LayoutGrid, Zap, Trophy, MessageCircle, Star, Home, Heart, 
-  Sparkles, AlertTriangle, Gift
+  LayoutGrid, Zap, Trophy, MessageCircle, Star, Home, Heart, Sparkles, AlertTriangle, Gift
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import confetti from "canvas-confetti";
@@ -354,16 +353,16 @@ export default function RaspadinhaPage() {
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-y-auto overflow-x-hidden custom-scrollbar">
+      <div className="relative w-full min-h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-y-auto overflow-x-hidden custom-scrollbar">
         
         <div className="absolute inset-0 z-0 pointer-events-none fixed">
-          <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+          <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505]" />
         </div>
 
         <div className="relative z-10 p-4 flex flex-col gap-3 shrink-0">
            <div className="flex justify-between items-center px-1">
-              <button onClick={() => router.push(`/${slug}`)} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><ArrowLeft size={12} /> Vitrine</button>
+              <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><ArrowLeft size={12} /> Vitrine</button>
               <div className="flex gap-2">
                  <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all"><User size={16}/></button>
               </div>
@@ -416,8 +415,10 @@ export default function RaspadinhaPage() {
                  </div>
              )}
 
+             {/* 🔥 O SEGREDO DO RESET DA RASPADA ESTÁ AQUI NO KEY 🔥 */}
              {currentScratch && (
                 <ScratchCanvas 
+                    key={queueIndex} 
                     isRevealed={isRevealed} 
                     onReveal={handleReveal} 
                     coverText="RASPE AQUI" 
@@ -432,7 +433,7 @@ export default function RaspadinhaPage() {
           )}
 
           {currentScratch && isRevealed && (
-              <div className="mt-6 w-full max-w-[320px] animate-in slide-in-from-bottom-4 fade-in shrink-0">
+              <div className="mt-6 w-full max-w-[320px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
                   <button onClick={nextScratch} className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-[0_10px_30px_rgba(255,255,255,0.2)] active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
@@ -475,9 +476,9 @@ export default function RaspadinhaPage() {
              <span className="text-[8px] font-extrabold opacity-75 uppercase tracking-[0.2em] mt-1">10 RASPADAS • 14 CRÉDITOS</span>
           </button>
           
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => router.push(`/${slug}`)} className="py-3.5 bg-white/5 border border-white/10 text-white/50 rounded-xl font-black uppercase text-[9px] tracking-widest flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all"><LayoutGrid size={14} /> Vitrine</button>
-            <button onClick={() => setShowDeposit(true)} className="py-3.5 bg-[#D946EF]/10 border border-[#D946EF]/30 text-[#D946EF] rounded-xl font-black uppercase text-[9px] tracking-widest flex items-center justify-center gap-2 hover:bg-[#D946EF]/20 transition-all shadow-[0_0_15px_rgba(217,70,239,0.1)]"><ShoppingCart size={14} /> Depositar</button>
+          {/* 🔥 BOTÃO ÚNICO DE VOLTAR PARA VITRINE 🔥 */}
+          <div className="w-full">
+            <button onClick={() => router.push('/vitrine')} className="w-full py-4 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all shadow-lg"><LayoutGrid size={16} /> Voltar Para a Vitrine</button>
           </div>
         </div>
 
