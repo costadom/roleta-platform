@@ -119,7 +119,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   const handleEnd = () => setIsDrawing(false);
 
   const checkReveal = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-      if (Math.random() > 0.1) return; // Otimização de performance
+      if (Math.random() > 0.1) return; 
       
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
@@ -168,16 +168,13 @@ export default function RaspadinhaPage() {
   const [loading, setLoading] = useState(true);
   const [player, setPlayer] = useState<any>(null);
   
-  // Galerias
   const [unlockedPhotos, setUnlockedPhotos] = useState<any[]>([]);
   const [modelPhotos, setModelPhotos] = useState<any[]>([]);
   
-  // Modais
   const [showProfile, setShowProfile] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
   const [notice, setNotice] = useState("");
   
-  // Sistema de Fila
   const [scratchQueue, setScratchQueue] = useState<any[]>([]); 
   const [currentScratch, setCurrentScratch] = useState<any>(null); 
   const [isRevealed, setIsRevealed] = useState(false); 
@@ -185,7 +182,6 @@ export default function RaspadinhaPage() {
   const [totalInPackage, setTotalInPackage] = useState(0); 
   const [isProcessingBuy, setIsProcessingBuy] = useState(false);
   
-  // PIX
   const [pixData, setPixData] = useState<any>(null);
   const [pixLoading, setPixLoading] = useState(false);
   const [pixPaid, setPixPaid] = useState(false);
@@ -230,7 +226,16 @@ export default function RaspadinhaPage() {
     }
   }
 
-  // --- LÓGICA DE PACOTES DE COMPRA ---
+  const shuffleArray = (array: any[]) => {
+    let newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  }
+
+  // 🔥 LÓGICA DE COMPRA C/ MOTOR GACHA (ESCASSEZ) 🔥
   const buyPackage = async (bundleSize: number) => {
     if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
     if (!player) return setNotice("Faça login para jogar.");
@@ -242,16 +247,32 @@ export default function RaspadinhaPage() {
     setIsProcessingBuy(true);
 
     try {
-        const winThreshold = bundleSize === 10 ? 0.30 : bundleSize === 5 ? 0.50 : 0.65;
-        let currentCredits = player.credits - cost;
+        // MOTOR DE CASSINO VIP: 
+        // 1x (10% base), 5x (18% base), 10x (25% base)
+        let winChance = bundleSize === 10 ? 0.25 : bundleSize === 5 ? 0.18 : 0.10;
         
+        // FATOR ESCASSEZ: Avalia o inventário do cliente.
+        if (unlockedPhotos.length >= 8) {
+            // Faltam só 2: A chance despenca em 75%! Fica entre 2.5% e 6.2%
+            winChance = winChance * 0.25; 
+        } else if (unlockedPhotos.length >= 5) {
+            // Já passou da metade: A chance cai em 40%. Fica entre 6% e 15%
+            winChance = winChance * 0.60; 
+        }
+
+        // Inverte a porcentagem para bater no Math.random() (ex: 25% vira 0.75)
+        const winThreshold = 1 - winChance;
+        
+        let currentCredits = player.credits - cost;
         await supabase.from('Players').update({ credits: currentCredits }).eq('id', player.id);
         setPlayer({...player, credits: currentCredits});
 
+        // Pegar só fotos que ele não tem
         const availablePhotos = modelPhotos.filter(mp => !unlockedPhotos.find(up => up.photo_url === mp.photo_url));
         let pool = [...availablePhotos]; 
         let generatedQueue = [];
 
+        // Monta o lote
         for (let i = 0; i < bundleSize; i++) {
             if (Math.random() > winThreshold && pool.length > 0) {
                 const randomIndex = Math.floor(Math.random() * pool.length);
@@ -261,6 +282,9 @@ export default function RaspadinhaPage() {
                 generatedQueue.push({ type: 'loss' }); 
             }
         }
+
+        // Embaralha para o "ganho" não vir sempre primeiro
+        generatedQueue = shuffleArray(generatedQueue);
 
         setScratchQueue(generatedQueue);
         setTotalInPackage(bundleSize);
@@ -274,7 +298,6 @@ export default function RaspadinhaPage() {
     }
   };
 
-  // --- AÇÃO DE REVELAÇÃO DA RASPADA ---
   const handleReveal = async () => {
       setIsRevealed(true);
       if (currentScratch && currentScratch.type === 'win' && currentScratch.photo_url) {
@@ -355,13 +378,11 @@ export default function RaspadinhaPage() {
 
       <div className="relative w-full min-h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-x-hidden overflow-y-auto custom-scrollbar">
         
-        {/* Background Estilo Roleta */}
         <div className="absolute inset-0 z-0 pointer-events-none fixed">
           <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505] fixed" />
         </div>
 
-        {/* Header Premium */}
         <div className="relative z-10 p-4 flex flex-col gap-3 shrink-0">
            <div className="flex justify-between items-center px-1">
               <button onClick={() => router.push(`/profile/${slug}`)} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><ArrowLeft size={12} /> Voltar</button>
@@ -375,7 +396,6 @@ export default function RaspadinhaPage() {
            </div>
         </div>
 
-        {/* Marquee Ganhadores */}
         <div className="w-full h-9 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0">
           <div className="flex whitespace-nowrap animate-marquee">
             { NAMES.map((name, i) => (
@@ -384,12 +404,10 @@ export default function RaspadinhaPage() {
           </div>
         </div>
 
-        {/* Área Central: O Jogo Real */}
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 px-4 min-h-[380px]">
           
           <div className="w-full max-w-[300px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
              
-             {/* CONTEÚDO REVELADO */}
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
                      {currentScratch.type === 'win' ? (
@@ -411,7 +429,6 @@ export default function RaspadinhaPage() {
                      )}
                  </div>
              ) : (
-                 // Placeholder Inicial
                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#151515] to-[#050505]">
                     <ImageIcon size={50} className="text-[#D946EF]/20 mb-4" />
                     <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Raspadinha VIP</h3>
@@ -419,7 +436,6 @@ export default function RaspadinhaPage() {
                  </div>
              )}
 
-             {/* CAMADA DE RASPADINHA (Canvas) */}
              {currentScratch && (
                 <ScratchCanvas 
                     key={queueIndex}
@@ -430,12 +446,10 @@ export default function RaspadinhaPage() {
              )}
           </div>
 
-          {/* Dica Visual */}
           {currentScratch && !isRevealed && (
               <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-4 animate-pulse shrink-0">Raspe a tela com o dedo</p>
           )}
 
-          {/* Próxima Raspada */}
           {currentScratch && isRevealed && (
               <div className="mt-4 w-full max-w-[300px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
                   <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
@@ -444,7 +458,6 @@ export default function RaspadinhaPage() {
               </div>
           )}
 
-          {/* Saldo e Progresso Ocultos durante a Raspada */}
           {!currentScratch && (
               <div className="mt-6 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
                  <div className="px-6 py-2 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg">
@@ -463,8 +476,7 @@ export default function RaspadinhaPage() {
           )}
         </div>
 
-        {/* 🔥 FOOTER: Os 3 Botões de Compra 🔥 */}
-        <div className={`relative z-10 p-4 bg-gradient-to-t from-black via-black/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`relative z-10 p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
           
           <div className="grid grid-cols-2 gap-2 mb-2">
              <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
@@ -520,7 +532,7 @@ export default function RaspadinhaPage() {
         {/* Modal PIX */}
         {showDeposit && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_60px_rgba(217,70,239,0.15)]">
+            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)]">
               <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
               {pixPaid ? (
                  <div className="py-10 text-center animate-in zoom-in">
@@ -545,6 +557,7 @@ export default function RaspadinhaPage() {
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                   {[ { rs: 20, cr: 25 }, { rs: 40, cr: 55 }, { rs: 70, cr: 100 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
                       <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em]">R$ {p.rs},00</span></div>
                       <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                     </button>
