@@ -162,9 +162,21 @@ export default function SuperAdmin() {
       const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
       const generatedEmail = `${app.nickname.toLowerCase()}@admin.com`;
       const generatedPass = `${capNick}Admin26`;
+      
+      // 🔥 AQUI ESTÁ A CORREÇÃO: O referred_by vai junto na criação da Modelo
+      const payloadModel = { 
+          slug: app.nickname.toLowerCase(), 
+          email: generatedEmail, 
+          password: generatedPass, 
+          full_name: app.full_name, 
+          whatsapp: app.whatsapp, 
+          created_at: now,
+          referred_by: app.referred_by || null 
+      };
+
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
         method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ slug: app.nickname.toLowerCase(), email: generatedEmail, password: generatedPass, full_name: app.full_name, whatsapp: app.whatsapp, created_at: now }),
+        body: JSON.stringify(payloadModel),
       });
       const dataMod = await resMod.json();
       if(dataMod && dataMod[0]) {
@@ -185,7 +197,16 @@ export default function SuperAdmin() {
     e.preventDefault(); setLoading(true);
     try {
       const now = new Date().toISOString(); 
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ slug: newModel.slug.toLowerCase(), email: newModel.email, password: newModel.password, created_at: now }), });
+      // 🔥 AQUI ESTÁ A CORREÇÃO: O referred_by vai junto na criação Manual da Modelo
+      const payloadModel = { 
+          slug: newModel.slug.toLowerCase(), 
+          email: newModel.email, 
+          password: newModel.password, 
+          created_at: now,
+          referred_by: newModel.referred_by || null
+      };
+
+      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(payloadModel), });
       const dataMod = await resMod.json();
       if(dataMod && dataMod[0]) {
           const mId = dataMod[0].id;
@@ -361,7 +382,7 @@ export default function SuperAdmin() {
                   <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
                   <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                   
-                  {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por: {m.referred_by.split('-')[0]}</span></div>)}
+                  {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por Afiliado</span></div>)}
                   
                   <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10 mb-4"><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div></div>
 
@@ -409,12 +430,13 @@ export default function SuperAdmin() {
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
             <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
             <h2 className="text-2xl font-black uppercase mb-6 text-indigo-400 italic tracking-tighter">Analisar Perfil</h2>
-          
+            
             <div className="flex gap-6 mb-6">
               <div className="w-32 h-40 bg-black border border-white/10 rounded-2xl overflow-hidden shrink-0"><img src={selectedApp.profile_url || selectedApp.bg_url} className="w-full h-full object-cover" /></div>
               <div className="flex-1 space-y-2">
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
+                {selectedApp.referred_by && <div><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest mt-2">👑 Indicação Ativa</p></div>}
               </div>
             </div>
 
@@ -436,6 +458,10 @@ export default function SuperAdmin() {
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug</label><input type="text" required value={newModel.slug} onChange={e => setNewModel({ ...newModel, slug: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Ex: savanah" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
+              
+              {/* Opcional: Linkar manual */}
+              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug da Madrinha (Opcional)</label><input type="text" value={newModel.referred_by} onChange={e => setNewModel({ ...newModel, referred_by: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-amber-500 text-sm outline-none focus:border-amber-500" placeholder="Ex: raphasavanah" /></div>
+
               <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
             </form>
           </div>
