@@ -15,28 +15,22 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// --- COMPONENTES AUXILIARES ---
+
 const NoticeModal = ({ message, onClose }: { message: string, onClose: () => void }) => (
   <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-    <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[2rem] w-full max-w-sm text-center shadow-[0_0_50px_rgba(217,70,239,0.2)] animate-in zoom-in-95">
-      <AlertTriangle size={40} className="text-[#D946EF] mx-auto mb-5 drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]" />
-      <p className="text-white font-black uppercase italic text-sm mb-8 leading-relaxed tracking-widest">{message}</p>
-      <button onClick={onClose} className="bg-[#D946EF] text-white w-full py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all shadow-[0_5px_20px_rgba(217,70,239,0.4)]">Entendi</button>
+    <div className="bg-[#111] border border-[#D946EF]/30 p-6 rounded-3xl w-full max-w-xs text-center shadow-[0_0_40px_rgba(217,70,239,0.2)] animate-in zoom-in-95">
+      <AlertTriangle size={32} className="text-[#D946EF] mx-auto mb-4" />
+      <p className="text-white font-bold text-sm mb-6 leading-relaxed">{message}</p>
+      <button onClick={onClose} className="bg-[#D946EF] text-white w-full py-3 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Entendi</button>
     </div>
   </div>
 );
 
+// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const revealedRef = useRef(false);
-
-  useEffect(() => {
-    revealedRef.current = isRevealed;
-    if (isRevealed && canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        if(ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    }
-  }, [isRevealed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -47,32 +41,39 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     const width = canvas.width;
     const height = canvas.height;
     
-    ctx.globalCompositeOperation = 'source-over';
-    
+    // Gradiente metálico
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, "#888");
-    gradient.addColorStop(0.5, "#e0e0e0");
+    gradient.addColorStop(0.5, "#ccc");
     gradient.addColorStop(1, "#666");
     
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
+    // Textura
     ctx.fillStyle = "rgba(255,255,255,0.15)";
-    for(let i=0; i<4000; i++) {
+    for(let i=0; i<3000; i++) {
         ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
     }
 
-    ctx.fillStyle = "#222";
-    ctx.font = "900 32px sans-serif";
+    ctx.fillStyle = "#333";
+    ctx.font = "900 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
     
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = 55; 
+    ctx.lineWidth = 50; 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
   }, [coverText]);
+
+  useEffect(() => {
+    if (isRevealed && canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        if(ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
+  }, [isRevealed]);
 
   const getPointerPos = (e: any) => {
     const canvas = canvasRef.current;
@@ -91,7 +92,8 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   };
 
   const handleStart = (e: any) => {
-    if (revealedRef.current) return;
+    if (isRevealed) return;
+    if (e.cancelable) e.preventDefault();
     setIsDrawing(true);
     const { x, y } = getPointerPos(e);
     const ctx = canvasRef.current?.getContext('2d');
@@ -102,7 +104,8 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   };
 
   const handleMove = (e: any) => {
-    if (!isDrawing || revealedRef.current) return;
+    if (!isDrawing || isRevealed) return;
+    if (e.cancelable) e.preventDefault();
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -116,7 +119,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   const handleEnd = () => setIsDrawing(false);
 
   const checkReveal = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-      if (Math.random() > 0.15) return; 
+      if (Math.random() > 0.1) return; // Otimização de performance
       
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
@@ -128,8 +131,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       
       const percent = (transparent / (totalPixels / 32)) * 100;
       
-      if (percent > 40 && !revealedRef.current) {
-          revealedRef.current = true;
+      if (percent > 40 && !isRevealed) {
           ctx.clearRect(0, 0, canvas.width, canvas.height); 
           onReveal();
       }
@@ -140,7 +142,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       ref={canvasRef}
       width={400}
       height={500}
-      className={`absolute inset-0 w-full h-full cursor-crosshair touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-700' : ''}`}
+      className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
       onMouseUp={handleEnd}
@@ -151,6 +153,9 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     />
   );
 };
+
+
+// --- PÁGINA PRINCIPAL ---
 
 export default function RaspadinhaPage() {
   const params = useParams();
@@ -163,13 +168,16 @@ export default function RaspadinhaPage() {
   const [loading, setLoading] = useState(true);
   const [player, setPlayer] = useState<any>(null);
   
+  // Galerias
   const [unlockedPhotos, setUnlockedPhotos] = useState<any[]>([]);
   const [modelPhotos, setModelPhotos] = useState<any[]>([]);
   
+  // Modais
   const [showProfile, setShowProfile] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
   const [notice, setNotice] = useState("");
   
+  // Sistema de Fila
   const [scratchQueue, setScratchQueue] = useState<any[]>([]); 
   const [currentScratch, setCurrentScratch] = useState<any>(null); 
   const [isRevealed, setIsRevealed] = useState(false); 
@@ -177,6 +185,7 @@ export default function RaspadinhaPage() {
   const [totalInPackage, setTotalInPackage] = useState(0); 
   const [isProcessingBuy, setIsProcessingBuy] = useState(false);
   
+  // PIX
   const [pixData, setPixData] = useState<any>(null);
   const [pixLoading, setPixLoading] = useState(false);
   const [pixPaid, setPixPaid] = useState(false);
@@ -221,17 +230,9 @@ export default function RaspadinhaPage() {
     }
   }
 
-  const shuffleArray = (array: any[]) => {
-    let newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
-  }
-
+  // --- LÓGICA DE PACOTES DE COMPRA ---
   const buyPackage = async (bundleSize: number) => {
-    if (scratchQueue.length > 0) return setNotice("Termine de raspar seu pacote atual primeiro!");
+    if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
     if (!player) return setNotice("Faça login para jogar.");
     if (unlockedPhotos.length >= 10) return setNotice("Coleção completa! Você já tem todas as fotos VIP dessa musa.");
 
@@ -261,8 +262,6 @@ export default function RaspadinhaPage() {
             }
         }
 
-        generatedQueue = shuffleArray(generatedQueue);
-
         setScratchQueue(generatedQueue);
         setTotalInPackage(bundleSize);
         setQueueIndex(1);
@@ -275,9 +274,9 @@ export default function RaspadinhaPage() {
     }
   };
 
+  // --- AÇÃO DE REVELAÇÃO DA RASPADA ---
   const handleReveal = async () => {
       setIsRevealed(true);
-      
       if (currentScratch && currentScratch.type === 'win' && currentScratch.photo_url) {
           try {
               await supabase.from('ScratchHistory').insert([{
@@ -306,6 +305,7 @@ export default function RaspadinhaPage() {
       }
   };
 
+  // --- MONITORAMENTO PIX ---
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid) {
@@ -349,30 +349,33 @@ export default function RaspadinhaPage() {
   if (loading) return <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center text-[#D946EF] font-black uppercase text-xs animate-pulse tracking-widest">Carregando Labz...</div>;
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center font-sans select-none">
+    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center font-sans select-none overflow-hidden">
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      <div className="relative w-full min-h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-y-auto overflow-x-hidden custom-scrollbar">
+      <div className="relative w-full min-h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-x-hidden overflow-y-auto custom-scrollbar">
         
-        <div className="absolute inset-0 z-0 pointer-events-none fixed">
+        {/* Background Estilo Roleta */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
           <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505] fixed" />
         </div>
 
+        {/* Header Premium */}
         <div className="relative z-10 p-4 flex flex-col gap-3 shrink-0">
            <div className="flex justify-between items-center px-1">
-              <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><ArrowLeft size={12} /> Vitrine</button>
+              <button onClick={() => router.push(`/model/${slug}`)} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><ArrowLeft size={12} /> Voltar</button>
               <div className="flex gap-2">
                  <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all"><User size={16}/></button>
               </div>
            </div>
            <div className="flex flex-col items-center">
-              <span className="text-[#D946EF] font-black italic text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
-              <span className="text-[9px] text-[#FFD700] font-black uppercase mt-1 tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
+              <span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
+              <span className="text-[10px] text-[#FFD700] font-black uppercase mt-1 tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
            </div>
         </div>
 
+        {/* Marquee Ganhadores */}
         <div className="w-full h-9 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0">
           <div className="flex whitespace-nowrap animate-marquee">
             { NAMES.map((name, i) => (
@@ -381,23 +384,25 @@ export default function RaspadinhaPage() {
           </div>
         </div>
 
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-6 px-4">
+        {/* Área Central: O Jogo Real */}
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 px-4 min-h-[380px]">
           
-          <div className="w-full max-w-[320px] aspect-[4/5] bg-[#0a0a0a]/90 backdrop-blur-xl border border-[#D946EF]/40 rounded-[2.5rem] shadow-[0_0_60px_rgba(217,70,239,0.2)] relative overflow-hidden shrink-0">
+          <div className="w-full max-w-[300px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
              
+             {/* CONTEÚDO REVELADO */}
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
                      {currentScratch.type === 'win' ? (
                          <>
                              <img src={currentScratch.photo_url} className="absolute inset-0 w-full h-full object-cover" alt="VIP" />
                              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent" />
-                             <div className="absolute bottom-0 left-0 w-full p-6 text-center animate-in slide-in-from-bottom-4">
+                             <div className="absolute bottom-6 left-0 right-0 text-center animate-in slide-in-from-bottom-4">
                                  <span className="bg-[#D946EF] border border-[#D946EF]/50 text-white px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-[0_10px_30px_rgba(217,70,239,0.5)] flex items-center justify-center gap-2 mx-auto w-max"><Gift size={14}/> FOTO REVELADA</span>
                              </div>
                          </>
                      ) : (
-                         <div className="flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full">
-                             <div className="w-24 h-24 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
+                         <div className="flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
+                             <div className="w-20 h-20 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
                                <CloseIcon size={40} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
                              </div>
                              <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter mb-3 drop-shadow-lg">Veio o X</h3>
@@ -406,19 +411,18 @@ export default function RaspadinhaPage() {
                      )}
                  </div>
              ) : (
-                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#111] to-[#050505]">
-                    <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6">
-                        <ImageIcon size={40} className="text-[#D946EF]/50" />
-                    </div>
-                    <h3 className="text-white/60 font-black uppercase italic text-lg tracking-widest drop-shadow-md">Raspadinha VIP</h3>
-                    <p className="text-[9px] font-black text-white/30 uppercase mt-4 text-center px-8 tracking-widest leading-relaxed">Compre um pacote abaixo e raspe de verdade</p>
+                 // Placeholder Inicial
+                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#151515] to-[#050505]">
+                    <ImageIcon size={50} className="text-[#D946EF]/20 mb-4" />
+                    <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Raspadinha VIP</h3>
+                    <p className="text-[9px] font-black text-white/20 uppercase mt-2 text-center px-8">Compre um pacote abaixo para raspar</p>
                  </div>
              )}
 
-             {/* 🔥 O SEGREDO DO RESET DA RASPADA ESTÁ AQUI NO KEY 🔥 */}
+             {/* CAMADA DE RASPADINHA (Canvas) */}
              {currentScratch && (
                 <ScratchCanvas 
-                    key={queueIndex} 
+                    key={queueIndex}
                     isRevealed={isRevealed} 
                     onReveal={handleReveal} 
                     coverText="RASPE AQUI" 
@@ -426,118 +430,115 @@ export default function RaspadinhaPage() {
              )}
           </div>
 
+          {/* Dica Visual */}
           {currentScratch && !isRevealed && (
-              <div className="mt-5 px-4 py-2 bg-white/5 border border-white/10 rounded-full animate-pulse">
-                <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest flex items-center gap-2"><Sparkles size={12}/> Raspe com o dedo ou mouse</p>
-              </div>
+              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-4 animate-pulse shrink-0">Raspe a tela com o dedo</p>
           )}
 
+          {/* Próxima Raspada */}
           {currentScratch && isRevealed && (
-              <div className="mt-6 w-full max-w-[320px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
-                  <button onClick={nextScratch} className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-[0_10px_30px_rgba(255,255,255,0.2)] active:scale-95 transition-all">
+              <div className="mt-4 w-full max-w-[300px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
+                  <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
               </div>
           )}
 
+          {/* Saldo e Progresso Ocultos durante a Raspada */}
           {!currentScratch && (
-              <div className="mt-8 flex flex-col items-center gap-4 w-full animate-in fade-in shrink-0">
-                 <div className="px-8 py-3 bg-[#111]/80 backdrop-blur-xl border border-white/10 rounded-[1.5rem] flex items-center gap-3 shadow-2xl">
-                    <Coins size={20} className="text-[#FFD700] drop-shadow-[0_0_10px_rgba(255,215,0,0.5)]" />
-                    <span className="text-xl font-black italic text-white tracking-tighter">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
+              <div className="mt-6 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
+                 <div className="px-6 py-2 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg">
+                    <Coins size={16} className="text-[#FFD700]" />
+                    <span className="text-lg font-black italic text-white">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
                  </div>
-                 <div className="flex flex-col items-center gap-2 w-full max-w-[240px]">
-                    <div className="h-2 w-full bg-[#111] rounded-full overflow-hidden border border-white/5 shadow-inner">
+                 <div className="flex flex-col items-center gap-1.5 w-full max-w-[200px]">
+                    <div className="h-1.5 w-full bg-[#111] rounded-full overflow-hidden border border-white/5">
                         <div className="h-full bg-gradient-to-r from-[#D946EF] to-[#FFD700] transition-all duration-1000 relative" style={{ width: `${(unlockedPhotos.length / 10) * 100}%` }}>
                             <div className="absolute inset-0 bg-white/20 animate-pulse"/>
                         </div>
                     </div>
-                    <span className="text-[9px] text-white/50 font-black uppercase tracking-[0.2em]">Sua Coleção: <span className="text-[#FFD700]">{unlockedPhotos.length}/10 FOTOS</span></span>
+                    <span className="text-[9px] text-white/50 font-black uppercase tracking-widest">Coleção: <span className="text-[#FFD700]">{unlockedPhotos.length}/10 FOTOS</span></span>
                  </div>
               </div>
           )}
         </div>
 
-        <div className={`relative z-10 p-5 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none grayscale' : 'opacity-100'}`}>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-             <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg hover:border-white/20">
-                <span className="text-[9px] font-black uppercase text-white/40 tracking-widest mb-0.5">1 Raspada</span>
+        {/* 🔥 FOOTER: Os 3 Botões de Compra 🔥 */}
+        <div className={`relative z-10 p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+          
+          <div className="grid grid-cols-2 gap-2 mb-2">
+             <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
+                <span className="text-[9px] font-black uppercase text-white/40 mb-0.5">1 Raspada</span>
                 <span className="text-sm font-black text-white italic">2 CR</span>
              </button>
-             <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group shadow-lg hover:border-[#D946EF]/60">
-                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-1.5 py-0.5 rounded-bl-lg shadow-md">ECONOMIZE 20%</div>
-                <span className="text-[9px] font-black uppercase text-white/60 tracking-widest mb-0.5">Combo 5x</span>
+             <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-1.5 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
+                <span className="text-[9px] font-black uppercase text-white/60 mb-0.5">Combo 5x</span>
                 <span className="text-sm font-black text-[#D946EF] italic">8 CR</span>
              </button>
           </div>
 
-          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl font-black uppercase flex flex-col items-center justify-center shadow-[0_10px_40px_rgba(255,215,0,0.25)] active:scale-95 transition-all mb-5 border border-white/20">
-             <span className="flex items-center gap-2 italic text-sm tracking-tighter"><Zap size={16} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
-             <span className="text-[8px] font-extrabold opacity-75 uppercase tracking-[0.2em] mt-1">10 RASPADAS • 14 CRÉDITOS</span>
+          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all mb-0 border border-white/20">
+             <span className="flex items-center gap-2 font-black italic text-sm"><Zap size={14} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
+             <span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
           </button>
-          
-          {/* 🔥 BOTÃO ÚNICO DE VOLTAR PARA VITRINE 🔥 */}
-          <div className="w-full">
-            <button onClick={() => router.push('/vitrine')} className="w-full py-4 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all shadow-lg"><LayoutGrid size={16} /> Voltar Para a Vitrine</button>
-          </div>
         </div>
 
+        {/* Modal Perfil/Galeria */}
         {showProfile && player && (
           <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-[0_0_60px_rgba(217,70,239,0.15)]">
-              <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/20 hover:text-white bg-white/5 p-2 rounded-full"><CloseIcon size={20} /></button>
-              <div className="w-20 h-20 bg-gradient-to-br from-[#D946EF]/20 to-transparent border border-[#D946EF]/30 rounded-[2rem] flex items-center justify-center mx-auto mb-4 rotate-3 shadow-lg"><User size={36} className="text-[#D946EF]"/></div>
-              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter text-center mb-1">{player.nickname || player.full_name || 'Jogador'}</h2>
-              <div className="flex items-center justify-center gap-2 mb-8 bg-white/5 w-max mx-auto px-4 py-1.5 rounded-full border border-white/10">
-                  <Coins size={12} className="text-[#FFD700]" />
-                  <p className="text-[10px] text-[#FFD700] font-black uppercase tracking-widest">{player.credits} CRÉDITOS</p>
-              </div>
+            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-2xl">
+              <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
+              <div className="w-16 h-16 bg-[#D946EF]/10 border border-[#D946EF]/30 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3"><User size={30} className="text-[#D946EF]"/></div>
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">{player.nickname || player.full_name || 'Jogador'}</h2>
+              <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-6 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
               
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 border-t border-white/10 pt-6">
-                <h3 className="text-[10px] text-white/40 uppercase font-black mb-5 flex items-center gap-2 tracking-[0.2em]"><Trophy size={14} className="text-[#FFD700]"/> Galeria Desbloqueada</h3>
+                <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest"><Trophy size={14} className="text-[#FFD700]"/> Galeria ({unlockedPhotos.length}/10)</h3>
                 {unlockedPhotos.length === 0 ? (
-                  <div className="py-12 text-center opacity-20"><ImageIcon size={40} className="mx-auto mb-4" /><p className="text-[9px] font-black uppercase tracking-widest">Nenhuma foto ainda</p></div>
+                  <div className="py-10 text-center opacity-20"><ImageIcon size={40} className="mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Você não tem fotos</p></div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
                     {unlockedPhotos.map((img, i) => (
-                      <div key={i} className="aspect-[3/4] rounded-[1.5rem] overflow-hidden border border-white/10 bg-black shadow-lg relative group cursor-pointer">
-                        <img src={img.photo_url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="Galeria" />
-                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md p-1.5 rounded-full border border-white/10"><Star size={10} fill="#FFD700" className="text-[#FFD700]" /></div>
+                      <div key={i} className="aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-[#111] shadow-lg relative group cursor-pointer">
+                        <img src={img.photo_url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="Galeria" />
+                        <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm p-1.5 rounded-full"><Star size={10} fill="#FFD700" className="text-[#FFD700]" /></div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-8 text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-red-500 transition-colors text-center shrink-0">Sair da Conta</button>
+              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-6 text-[9px] font-black uppercase text-white/20 hover:text-red-500 transition-colors text-center shrink-0">Sair da Conta</button>
             </div>
           </div>
         )}
 
+        {/* Modal PIX */}
         {showDeposit && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_60px_rgba(217,70,239,0.2)]">
-              <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/20 hover:text-white bg-white/5 p-2 rounded-full"><CloseIcon size={20} /></button>
+            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)]">
+              <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
               {pixPaid ? (
-                 <div className="py-12 text-center animate-in zoom-in">
-                    <div className="w-24 h-24 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.3)] rotate-3"><CheckCircle2 className="text-emerald-500" size={48} /></div>
-                    <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-2">Aprovado!</h2>
-                    <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-10">Seus créditos já caíram na conta.</p>
-                    <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg active:scale-95 transition-all tracking-widest">Voltar ao Jogo</button>
+                 <div className="py-10 text-center animate-in zoom-in">
+                    <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle2 className="text-emerald-500" size={40} /></div>
+                    <h2 className="text-2xl font-black text-white uppercase italic mb-2 tracking-tighter">Aprovado!</h2>
+                    <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Créditos liberados.</p>
+                    <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg active:scale-95 transition-all">Voltar ao Jogo</button>
                  </div>
               ) : pixLoading ? (
-                <div className="py-24 flex flex-col items-center text-[#D946EF] font-black text-[10px] tracking-widest uppercase animate-pulse"><Loader2 className="animate-spin mb-4" size={40} /> Gerando Pix...</div>
+                <div className="py-20 flex flex-col items-center text-[#D946EF] font-black text-xs uppercase animate-pulse tracking-widest"><Loader2 className="animate-spin mb-4" size={40} /> Gerando Pix...</div>
               ) : pixData ? (
-                <div className="text-center p-2 animate-in fade-in">
-                  <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter mb-6">Pagar com PIX</h2>
-                  <div className="bg-white p-4 rounded-[2rem] inline-block mb-8 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} className="w-52 h-52" alt="QR Code" /></div>
-                  <div className="mb-8 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
-                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all">
+                <div className="text-center p-2">
+                  <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
+                  <div className="bg-white p-4 rounded-[2rem] inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} className="w-52 h-52" alt="QR Code" /></div>
+                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
+                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
                     {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
                   </button>
                 </div>
               ) : (
                 <div className="space-y-4 pt-4">
-                  <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter text-center mb-8">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
+                  <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                   {[ { rs: 20, cr: 25, b: 5 }, { rs: 40, cr: 55, b: 15 }, { rs: 70, cr: 100, b: 30 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-black border border-white/10 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
                       <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
