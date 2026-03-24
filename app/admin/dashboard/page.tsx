@@ -107,7 +107,8 @@ function DashboardContent() {
     setIsMounted(true);
     setIsSuper(localStorage.getItem("super_admin_auth") === "true");
     if (modelSlug && typeof window !== 'undefined') {
-        setModelUrl(`${window.location.origin}/${modelSlug}`);
+        // 🔥 CORREÇÃO: O modelUrl agora é apenas a raiz do site, o slug é adicionado no botão 🔥
+        setModelUrl(window.location.origin);
     }
   }, [modelSlug]);
 
@@ -273,13 +274,14 @@ function DashboardContent() {
                             <p className="text-[9px] sm:text-[10px] text-white/70 font-bold uppercase tracking-widest mt-1">Copie o link abaixo, mande para amigas e receba 5% de todas as vendas delas por 3 meses!</p>
                         </div>
                     </div>
-                    <button onClick={() => copyToClipboard(`${window.location.origin}/cadastro?ref=${modelSlug}`, "Indicação de Afiliado")} className="w-full md:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black px-6 py-4 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all shadow-[0_0_20px_rgba(255,215,0,0.3)] shrink-0">
+                    <button onClick={() => copyToClipboard(`${modelUrl}/cadastro?ref=${modelSlug}`, "Indicação de Afiliado")} className="w-full md:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black px-6 py-4 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all shadow-[0_0_20px_rgba(255,215,0,0.3)] shrink-0">
                         <LinkIcon size={14} /> Copiar Link de Indicação
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <button onClick={() => copyToClipboard(modelUrl, "Vitrine")} className="flex items-center justify-between bg-white/5 border border-white/10 p-3.5 rounded-xl hover:bg-white/10 transition-all group">
+                    {/* 🔥 CORREÇÃO: O modelUrl agora é a raiz, então montamos o /profile/aqui 🔥 */}
+                    <button onClick={() => copyToClipboard(`${modelUrl}/profile/${modelSlug}`, "Vitrine")} className="flex items-center justify-between bg-white/5 border border-white/10 p-3.5 rounded-xl hover:bg-white/10 transition-all group">
                         <span className="text-[9px] font-black uppercase text-white/50 tracking-widest"><LayoutGrid size={12} className="inline mr-2 text-white/30"/> Link Vitrine</span>
                         <Copy size={14} className="text-[#FF1493] group-hover:scale-110 transition-transform" />
                     </button>
@@ -463,7 +465,7 @@ function DashboardContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
+                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 transition-all duration-500"/>
                             
                             <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                                 <button onClick={async () => { 
