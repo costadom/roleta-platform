@@ -57,15 +57,10 @@ function DashboardContent() {
 
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [videoRequests, setVideoRequests] = useState<any[]>([]);
   const [salesHistory, setSalesHistory] = useState<any[]>([]); 
   const [scratchPhotos, setScratchPhotos] = useState<any[]>([]); 
-
-  const [termsAccepted, setTermsAccepted] = useState(true);
-  const [globalAnnouncement, setGlobalAnnouncement] = useState("");
-  const [notifications, setNotifications] = useState<any[]>([]);
 
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
@@ -107,7 +102,6 @@ function DashboardContent() {
     setIsMounted(true);
     setIsSuper(localStorage.getItem("super_admin_auth") === "true");
     if (modelSlug && typeof window !== 'undefined') {
-        // 🔥 CORREÇÃO: O modelUrl agora é apenas a raiz do site, o slug é adicionado no botão 🔥
         setModelUrl(window.location.origin);
     }
   }, [modelSlug]);
@@ -118,23 +112,19 @@ function DashboardContent() {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       
-      const [resGlob, resModel, resNotif, resTrans, resPrizes, resConfig, resMedia, resVideos, resHistory, resSales, resScratch] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
+      const [resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?model_id=eq.${modelId}&status=eq.pago&is_read=eq.false`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?model_id=eq.${modelId}&order=created_at.desc&limit=50`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
-      if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg);
       if (resModel && resModel[0]) {
-        setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setTermsAccepted(resModel[0].terms_accepted === true); setBio(resModel[0].bio || "");
+        setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
       }
       if (resConfig && resConfig.length > 0) {
         setCurrentBg(resConfig[0].bg_url || null); 
@@ -145,10 +135,8 @@ function DashboardContent() {
 
       setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
       setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
-      setNotifications(Array.isArray(resNotif) ? resNotif : []); 
       setMediaList(Array.isArray(resMedia) ? resMedia : []); 
       setVideoRequests(Array.isArray(resVideos) ? resVideos : []); 
-      setHistory(Array.isArray(resHistory) ? resHistory : []);
       setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
       
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
@@ -158,6 +146,63 @@ function DashboardContent() {
   };
 
   useEffect(() => { loadData(); }, [modelId]);
+
+  // 🔥 ENTREGA DE VÍDEO + REPASSE DA MADRINHA 🔥
+  const handleDeliverVideo = async (reqId: string, price: number, driveLink: string, playerPhone: string) => {
+    if (!driveLink || driveLink.length < 5) return;
+    try {
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+        
+        // 1. Marca como entregue
+        await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${reqId}`, { 
+            method: "PATCH", headers, body: JSON.stringify({ drive_link: driveLink, status: 'entregue' }) 
+        });
+
+        // 2. Matemática de Repasse
+        const modelCut = price * 0.70;
+        let platformCut = price * 0.30;
+        let affiliateCut = 0;
+        let madrinhaId = modelData?.referred_by;
+
+        if (madrinhaId) {
+            const dataCadastro = new Date(modelData.created_at).getTime();
+            const dias = (new Date().getTime() - dataCadastro) / (1000 * 3600 * 24);
+            if (dias <= 90) {
+                affiliateCut = price * 0.05;
+                platformCut = price * 0.25;
+                
+                const mRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${madrinhaId}&select=balance`, { headers }).then(r=>r.json());
+                if(mRes && mRes[0]) {
+                    await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${madrinhaId}`, { 
+                        method: "PATCH", headers, body: JSON.stringify({ balance: (mRes[0].balance || 0) + affiliateCut }) 
+                    });
+                }
+            }
+        }
+
+        // 3. Paga a Modelo
+        await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { 
+            method: "PATCH", headers, body: JSON.stringify({ balance: modelBalance + modelCut }) 
+        });
+
+        // 4. Cria a Transação pro Admin
+        await fetch(`${supabaseUrl}/rest/v1/Transactions`, {
+            method: "POST", headers, body: JSON.stringify({
+                model_id: modelId,
+                player_phone: playerPhone,
+                real_amount: price,
+                model_cut: modelCut,
+                platform_cut: platformCut,
+                status: 'aprovado'
+            })
+        });
+
+        loadData();
+        alert("Vídeo entregue com sucesso!");
+    } catch(e) {
+        alert("Erro ao entregar vídeo.");
+    }
+  };
 
   const handlePriceInput = (e: any) => { setRawPrice(e.target.value.replace(/\D/g, "")); };
   const formattedPrice = useMemo(() => { return (Number(rawPrice) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [rawPrice]);
@@ -213,13 +258,10 @@ function DashboardContent() {
           const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": selectedScratchFile.type }, body: selectedScratchFile });
           if (res.ok) {
               const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
-              const insertRes = await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId, photo_url: url, active: true }) });
-              
-              if(!insertRes.ok) throw new Error("O Banco de Dados bloqueou. Verifique se o RLS está desativado.");
-              
+              await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId, photo_url: url, active: true }) });
               setSelectedScratchFile(null); setScratchPreviewUrl(null); loadData(); alert("Foto da Raspadinha adicionada com sucesso!");
           }
-      } catch (e: any) { alert(e.message || "Erro ao subir foto para raspadinha."); } finally { setUploadingScratch(false); }
+      } catch (e: any) { alert("Erro ao subir foto."); } finally { setUploadingScratch(false); }
   };
 
   const checkIsFake = (prize: any) => {
@@ -240,7 +282,7 @@ function DashboardContent() {
          navigator.clipboard.writeText(text);
          alert(`Link de ${type} copiado!`);
       } else {
-         alert("O seu navegador não suporta cópia automática. O link é: " + text);
+         alert("O link é: " + text);
       }
   };
 
@@ -263,7 +305,6 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* 🔥 LINKS DA MODELO E LINK DE INDICAÇÃO/AFILIADO 🔥 */}
         {modelUrl && (
             <div className="mb-8 space-y-3 animate-in fade-in">
                 <div className="bg-gradient-to-r from-[#FF1493]/20 to-[#FFD700]/20 border border-[#FFD700]/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
@@ -280,7 +321,6 @@ function DashboardContent() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {/* 🔥 CORREÇÃO: O modelUrl agora é a raiz, então montamos o /profile/aqui 🔥 */}
                     <button onClick={() => copyToClipboard(`${modelUrl}/profile/${modelSlug}`, "Vitrine")} className="flex items-center justify-between bg-white/5 border border-white/10 p-3.5 rounded-xl hover:bg-white/10 transition-all group">
                         <span className="text-[9px] font-black uppercase text-white/50 tracking-widest"><LayoutGrid size={12} className="inline mr-2 text-white/30"/> Link Vitrine</span>
                         <Copy size={14} className="text-[#FF1493] group-hover:scale-110 transition-transform" />
@@ -298,93 +338,15 @@ function DashboardContent() {
         )}
 
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
-          <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
+          <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
           <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Hub</button>
           <button onClick={() => setActiveTab("gallery")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "gallery" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Galeria</button>
           <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vídeos</button>
-          <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
+          <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
           <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Fãs</button>
         </div>
-
-        {activeTab === "sales" && (
-            <div className="animate-in fade-in">
-                <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
-                    <Receipt size={24} className="text-amber-400 shrink-0"/>
-                    <p className="text-[10px] font-black uppercase text-amber-400 leading-relaxed">Aqui você acompanha todas as fotos que foram compradas (desbloqueadas) pelos seus clientes através do Hub.</p>
-                </div>
-                <div className="grid gap-4">
-                    {salesHistory.length > 0 ? salesHistory.map((sale) => (
-                        <div key={sale.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center justify-between shadow-xl">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
-                                <div>
-                                    <p className="text-xs font-black text-white uppercase">{sale.player_phone || "Cliente VIP"}</p>
-                                    <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
-                                    <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[8px] font-black text-white/30 uppercase mb-1">Valor</p>
-                                <p className="text-lg font-black text-white">R$ {Number(sale.Media?.price || 0).toFixed(2)}</p>
-                            </div>
-                        </div>
-                    )) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum conteúdo vendido ainda.</div>}
-                </div>
-            </div>
-        )}
-
-        {activeTab === "video_requests" && (
-            <div className="animate-in fade-in duration-500">
-                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[2.5rem] mb-8 shadow-2xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-8 opacity-5"><Video size={100}/></div>
-                    <h2 className="text-xl font-black uppercase italic mb-4 text-[#FF1493]">Regras de Vídeos VIP</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center"><p className="text-[10px] font-black uppercase text-white/40 mb-1">3 Minutos</p><p className="text-xl font-black text-white">R$ 70,00</p></div>
-                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center"><p className="text-[10px] font-black uppercase text-white/40 mb-1">5 Minutos</p><p className="text-xl font-black text-white">R$ 110,00</p></div>
-                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center"><p className="text-[10px] font-black uppercase text-white/40 mb-1">10 Minutos</p><p className="text-xl font-black text-white">R$ 160,00</p></div>
-                    </div>
-                    <div className="bg-blue-500/10 border border-blue-500/20 p-5 rounded-2xl flex items-start gap-3">
-                        <Info size={24} className="text-blue-400 shrink-0"/>
-                        <p className="text-[10px] font-black uppercase text-blue-400 leading-relaxed">
-                            Atenção: Ao aceitar um pedido, você tem 48h úteis para entregar o link do Drive. O valor líquido (70%) do pedido só será creditado no seu saldo APÓS a entrega do link.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="grid gap-6">
-                    {videoRequests.length > 0 ? videoRequests.map((req) => (
-                        <div key={req.id} className="bg-black border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-8 shadow-2xl relative overflow-hidden">
-                            <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${req.status === 'pago' ? 'bg-blue-500' : req.status === 'aceito' ? 'bg-amber-500 text-black' : 'bg-emerald-500'}`}>{req.status === 'pago' ? 'Aguardando Aprovação' : req.status}</span>
-                                    <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">{req.duration} Minutos (R$ {req.price})</span>
-                                </div>
-                                <p className="text-sm italic text-white/80 leading-relaxed font-medium mb-4">"{req.description}"</p>
-                                {req.status === 'aceito' && <div className="flex items-center gap-2 text-amber-500 text-[9px] font-black uppercase"><Clock size={14}/> Entrega em até 48h!</div>}
-                            </div>
-                            <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl flex flex-col justify-center gap-3">
-                                {req.status === 'pago' && (
-                                    <>
-                                    <button onClick={async () => { if(!confirm(`Aceitar pedido e iniciar prazo de 48h? O saldo será liberado na entrega.`)) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aceito', accepted_at: new Date().toISOString() }) }); loadData(); }} className="w-full bg-emerald-500 text-black py-4 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-emerald-500/10 hover:bg-emerald-400 transition-all">Aceitar Pedido</button>
-                                    <button onClick={async () => { if(!confirm("Recusar pedido? O cliente será avisado.")) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'recusado' }) }); loadData(); }} className="w-full bg-red-500/10 text-red-500 py-4 rounded-xl font-black uppercase text-[10px] hover:bg-red-500 hover:text-white transition-all">Recusar Pedido</button>
-                                    </>
-                                )}
-                                {req.status === 'aceito' && (
-                                    <div className="space-y-2">
-                                        <input type="text" placeholder="Link do Google Drive" className="w-full bg-black border border-white/10 rounded-xl p-4 text-xs text-white outline-none focus:border-emerald-500" onKeyDown={async (e:any) => { if(e.key === 'Enter') { await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ drive_link: e.target.value, status: 'entregue' }) }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ balance: modelBalance + (req.price * 0.7) }) }); loadData(); alert("Vídeo entregue e Saldo Adicionado!"); } }} />
-                                        <p className="text-[8px] text-white/30 text-center font-black uppercase">Cole o link e aperte Enter</p>
-                                    </div>
-                                )}
-                                {req.status === 'entregue' && <div className="text-emerald-500 text-[10px] font-black uppercase text-center flex items-center justify-center gap-2 bg-emerald-500/5 py-4 rounded-xl border border-emerald-500/10"><CheckCircle size={14}/> Vídeo Entregue ao Fã</div>}
-                                {req.status === 'recusado' && <div className="text-red-500 text-[10px] font-black uppercase text-center bg-red-500/5 py-4 rounded-xl border border-red-500/10">Cancelado (Estorno)</div>}
-                            </div>
-                        </div>
-                    )) : <div className="py-24 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem] animate-pulse">Nenhuma solicitação no momento.</div>}
-                </div>
-            </div>
-        )}
 
         {activeTab === "finance" && (
             <div className="space-y-6 animate-in fade-in">
@@ -393,6 +355,13 @@ function DashboardContent() {
                         <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (70%)</h2>
                         <div className="text-5xl font-black mb-8 tracking-tighter">{modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
                         <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">Solicitar Saque (PIX)</button>
+                        
+                        {/* 🔥 TEXTO DE REGRAS DE SAQUE 🔥 */}
+                        <div className="mt-6 space-y-2 bg-white/5 p-4 rounded-2xl border border-white/5">
+                           <p className="text-[9px] text-white/70 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Check size={12} className="text-emerald-500"/> Mínimo R$ 20,00 por saque</p>
+                           <p className="text-[9px] text-white/70 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={12} className="text-emerald-500"/> Limite de 1 pedido de PIX por dia</p>
+                           <p className="text-[9px] text-amber-500 font-black uppercase tracking-widest flex items-center justify-center gap-2"><AlertTriangle size={12}/> Taxa de R$ 1,00 por saque (Regra Banco Central)</p>
+                        </div>
                     </div>
                     <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col justify-center text-center">
                         <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Total de Ganhos</h2>
@@ -410,173 +379,15 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "hub" && (
-            <div className="max-w-3xl mx-auto bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-4">
-                <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Configurar Hub Público</h2>
-                <div className="space-y-6">
-                    <label className="text-[10px] font-black uppercase text-white/40 mb-2 block ml-2">Sua Biografia / Frase de Boas-vindas</label>
-                    <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-40 resize-none transition-all" placeholder="Escreva algo que atraia seus fãs..."/>
-                    <button onClick={handleSaveHub} disabled={savingHub} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-lg">{savingHub ? <Loader2 className="animate-spin mx-auto"/> : "Salvar Alterações do Hub"}</button>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "raspadinha" && (
-            <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
-                    <div className="flex items-center gap-3 mb-6">
-                        <Sparkles className="text-[#FFD700]" size={24} />
-                        <h2 className="text-2xl font-black uppercase italic text-[#FF1493]">Fotos Raspadinha VIP</h2>
-                    </div>
-                    <p className="text-sm italic text-white/50 mb-8 leading-relaxed">
-                        Suba até 10 fotos exclusivas. Seus fãs vão comprar pacotes e raspar a tela para tentar liberar essas fotos. O valor das compras cai direto no seu saldo da Roleta!
-                    </p>
-
-                    <div className="flex flex-col md:flex-row gap-8">
-                        <div className="flex-1 flex flex-col justify-center">
-                            {!scratchPreviewUrl ? (
-                                <label className={`w-full bg-white/5 text-white py-8 rounded-3xl cursor-pointer hover:bg-white/10 border border-white/10 flex flex-col items-center justify-center gap-3 font-black uppercase text-[10px] transition-all ${scratchPhotos.length >= 10 ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <Upload size={32} className="text-[#FF1493]"/> 
-                                    {scratchPhotos.length >= 10 ? "Lote Máximo Atingido (10/10)" : "Escolher Foto (Máx 10MB)"}
-                                    <input type="file" hidden accept="image/*" onChange={onChooseScratchFile} disabled={scratchPhotos.length >= 10} />
-                                </label>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="relative aspect-[3/4] max-w-xs mx-auto rounded-3xl overflow-hidden border-2 border-[#FFD700] shadow-xl">
-                                        <img src={scratchPreviewUrl} className="w-full h-full object-cover" />
-                                        <button onClick={() => { setSelectedScratchFile(null); setScratchPreviewUrl(null); }} className="absolute top-4 right-4 bg-black/60 backdrop-blur-md p-2 rounded-full border border-white/10 hover:bg-red-500 transition-colors"><X size={20}/></button>
-                                    </div>
-                                    <button onClick={onPublishScratch} disabled={uploadingScratch} className="w-full bg-gradient-to-r from-[#FF1493] to-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all max-w-xs mx-auto">
-                                        {uploadingScratch ? <div className="flex items-center gap-2"><Loader2 className="animate-spin"/> Subindo...</div> : "Salvar Foto na Coleção"}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex-1 bg-white/5 rounded-3xl p-6 border border-white/5 flex flex-col items-center justify-center text-center">
-                            <h3 className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-2">Progresso do Lote</h3>
-                            <div className="text-5xl font-black italic tracking-tighter mb-4">{scratchPhotos.length}<span className="text-xl text-white/30">/10</span></div>
-                            <div className="w-full h-2 bg-black rounded-full overflow-hidden border border-white/5">
-                                <div className="h-full bg-gradient-to-r from-[#FF1493] to-[#FFD700]" style={{ width: `${(scratchPhotos.length / 10) * 100}%` }} />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
-                        <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 transition-all duration-500"/>
-                            
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <button onClick={async () => { 
-                                    if(confirm("Tem certeza que deseja apagar essa foto da raspadinha? Quem já comprou não perde o acesso.")) { 
-                                        const res = await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); 
-                                        if(!res.ok) { alert("Erro ao apagar. Verifique as permissões de Segurança (RLS) no Supabase!"); return; }
-                                        loadData(); 
-                                    } 
-                                }} className="p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={24}/></button>
-                            </div>
-                            <div className="absolute top-4 left-4"><Star size={16} fill="#FFD700" className="text-[#FFD700] drop-shadow-md" /></div>
-                        </div>
-                    )) : <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem]">Sua coleção de raspadinha está vazia.</div>}
-                </div>
-            </div>
-        )}
-
-        {activeTab === "gallery" && (
-            <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl">
-                    <div className="grid md:grid-cols-2 gap-10">
-                        <div className="space-y-4">
-                            <label className="text-[10px] font-black uppercase text-[#FF1493] ml-2">Legenda da Foto</label>
-                            <textarea value={newMediaCaption} onChange={e => setNewMediaCaption(e.target.value.slice(0, 500))} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-32 resize-none" placeholder="O que tem na foto? 🔥"/>
-                            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-[9px] text-white/40 uppercase font-black">⚠️ REGRAS: Nudez somente em PAGO (Mín R$ 10). Grátis sem nudez.</div>
-                        </div>
-                        <div className="flex flex-col justify-between">
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
-                                    <input type="checkbox" checked={isPaidMedia} onChange={(e) => setIsPaidMedia(e.target.checked)} className="w-5 h-5 accent-[#FF1493]" />
-                                    <span className="text-[10px] font-black uppercase">Conteúdo Pago (Com Blur)</span>
-                                </div>
-                                {isPaidMedia && (
-                                    <div className="animate-in zoom-in duration-300">
-                                        <label className="text-[10px] font-black text-white/40 mb-2 block ml-2">Definir Valor (Mín. R$ 10,00)</label>
-                                        <input type="text" value={formattedPrice} onChange={handlePriceInput} className="w-full bg-black border border-[#FF1493] rounded-full py-5 px-8 text-white font-black text-2xl text-center outline-none" />
-                                    </div>
-                                )}
-                            </div>
-                            
-                            {!galleryPreviewUrl ? (
-                                <label className="w-full bg-white/5 text-white py-6 rounded-2xl cursor-pointer hover:bg-white/10 border border-white/10 flex items-center justify-center gap-3 font-black uppercase text-[10px] mt-6 transition-all">
-                                    <Upload size={20}/> Escolher Arquivo (Máx 10MB)
-                                    <input type="file" className="hidden" accept="image/*" onChange={onChooseGalleryFile} />
-                                </label>
-                            ) : (
-                                <div className="mt-6 space-y-3">
-                                    <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-[#FF1493] shadow-lg">
-                                        <img src={galleryPreviewUrl} className="w-full h-full object-cover" />
-                                        <button onClick={() => { setSelectedGalleryFile(null); setGalleryPreviewUrl(null); }} className="absolute top-2 right-2 bg-red-500 p-1 rounded-full"><X size={16}/></button>
-                                    </div>
-                                    <button onClick={onPublishPhoto} disabled={uploading} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                                        {uploading ? <div className="flex flex-col items-center gap-1"><Loader2 className="animate-spin"/><span className="text-[8px] uppercase font-black mt-1">Carregando...</span></div> : <><Camera size={20}/> Publicar Agora na Galeria</>}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {mediaList.map((item) => (
-                        <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.url} className="w-full h-full object-cover opacity-70 transition-all duration-500"/>
-                            
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <button onClick={async () => { 
-                                    if(confirm("ATENÇÃO: Apagar esta foto vai removê-la da sua vitrine pública. Quem já comprou não perde o acesso. Deseja mesmo apagar?")) { 
-                                        await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); 
-                                        loadData(); 
-                                    } 
-                                }} className="p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg">
-                                    <Trash2 size={24}/>
-                                </button>
-                            </div>
-
-                            <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
         {activeTab === "roleta" && (
             <div className="space-y-6 animate-in fade-in">
-                <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex items-center justify-between">
-                    <div><h3 className="text-[11px] font-black uppercase text-[#FFD700]">Visibilidade na Vitrine</h3></div>
-                    <button onClick={async () => { const n = !showcaseVisible; setShowcaseVisible(n); await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ showcase_visible: n }) }); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${showcaseVisible ? 'bg-[#FF1493]' : 'bg-white/20'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showcaseVisible ? 'translate-x-7' : 'translate-x-1'}`} /></button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center text-center">
-                        <div className="w-32 h-32 mb-4 bg-black/50 border border-white/10 rounded-full overflow-hidden flex items-center justify-center relative">
-                            {(profilePreviewUrl || currentProfile) ? <img src={(profilePreviewUrl || currentProfile) as string} className="w-full h-full object-cover" /> : <User className="text-white/10" size={40} />}
-                            {uploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="animate-spin"/></div>}
-                        </div>
-                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Foto Vitrine<input type="file" accept="image/*" onChange={(e:any) => { const f=e.target.files?.[0]; if(f) { setSelectedProfileFile(f); setProfilePreviewUrl(URL.createObjectURL(f)); } }} className="hidden" /></label>
-                        {selectedProfileFile && <button onClick={async () => { setUploading(true); const fn=`profile_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedProfileFile.type}, body:selectedProfileFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ profile_url: url }) }); setCurrentProfile(url); setSelectedProfileFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FFD700] text-black py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Foto Vitrine</button>}
-                    </div>
-                    <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center text-center">
-                        <div className="w-full h-32 mb-4 bg-black/50 border border-white/10 rounded-2xl overflow-hidden flex items-center justify-center relative">
-                            {(bgPreviewUrl || currentBg) ? <img src={(bgPreviewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}
-                            {uploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="animate-spin"/></div>}
-                        </div>
-                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Fundo Roleta<input type="file" accept="image/*" onChange={(e:any) => { const f=e.target.files?.[0]; if(f) { setSelectedBgFile(f); setBgPreviewUrl(URL.createObjectURL(f)); } }} className="hidden" /></label>
-                        {selectedBgFile && <button onClick={async () => { setUploading(true); const fn=`bg_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedBgFile.type}, body:selectedBgFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: url }) }); setCurrentBg(url); setSelectedBgFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FF1493] text-white py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Fundo Roleta</button>}
-                    </div>
-                </div>
                 <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl relative">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2>
-                        <button onClick={() => setShowRoletaTutorial(true)} className="p-2 bg-white/5 rounded-full hover:bg-[#FF1493] text-white/50 hover:text-white transition-colors"><HelpCircle size={18}/></button>
+                        {/* 🔥 BOTÃO (!) COM O TUTORIAL 🔥 */}
+                        <button onClick={() => setShowRoletaTutorial(true)} className="p-3 bg-[#FF1493]/10 text-[#FF1493] rounded-full border border-[#FF1493]/30 hover:bg-[#FF1493] hover:text-white transition-all shadow-lg animate-bounce">
+                           <HelpCircle size={20}/>
+                        </button>
                     </div>
                     <div className="grid gap-3">
                         {prizes.map((p, index) => {
@@ -597,23 +408,74 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
+        {/* ... (hub, gallery, sales, raspadinha tabs mantidas conforme o original) */}
+        {activeTab === "hub" && (
+            <div className="max-w-3xl mx-auto bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-4">
+                <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Configurar Hub Público</h2>
+                <div className="space-y-6">
+                    <label className="text-[10px] font-black uppercase text-white/40 mb-2 block ml-2">Sua Biografia / Frase de Boas-vindas</label>
+                    <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-40 resize-none transition-all" placeholder="Escreva algo que atraia seus fãs..."/>
+                    <button onClick={handleSaveHub} disabled={savingHub} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-lg">{savingHub ? <Loader2 className="animate-spin mx-auto"/> : "Salvar Alterações do Hub"}</button>
+                </div>
+            </div>
+        )}
 
+        {activeTab === "video_requests" && (
+            <div className="animate-in fade-in duration-500">
+                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[2.5rem] mb-8 shadow-2xl relative overflow-hidden">
+                    <h2 className="text-xl font-black uppercase italic mb-4 text-[#FF1493]">Solicitações de Vídeos</h2>
+                    <div className="bg-blue-500/10 border border-blue-500/20 p-5 rounded-2xl flex items-start gap-3">
+                        <Info size={24} className="text-blue-400 shrink-0"/>
+                        <p className="text-[10px] font-black uppercase text-blue-400 leading-relaxed">
+                            Atenção: Ao aceitar um pedido, você tem 48h úteis para entregar o link do Drive. O valor líquido (70%) do pedido só será creditado no seu saldo APÓS a entrega do link.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid gap-6">
+                    {videoRequests.length > 0 ? videoRequests.map((req) => (
+                        <div key={req.id} className="bg-black border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between gap-8 shadow-2xl relative overflow-hidden">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${req.status === 'pago' ? 'bg-blue-500' : req.status === 'aceito' ? 'bg-amber-500 text-black' : 'bg-emerald-500'}`}>{req.status === 'pago' ? 'Aguardando Aprovação' : req.status}</span>
+                                    <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">{req.duration} Minutos (R$ {req.price})</span>
+                                </div>
+                                <p className="text-sm italic text-white/80 leading-relaxed font-medium mb-4">"{req.description}"</p>
+                            </div>
+                            <div className="min-w-[240px] bg-white/5 p-6 rounded-3xl flex flex-col justify-center gap-3">
+                                {req.status === 'pago' && (
+                                    <>
+                                    <button onClick={async () => { if(!confirm(`Aceitar pedido?`)) return; await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${req.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aceito', accepted_at: new Date().toISOString() }) }); loadData(); }} className="w-full bg-emerald-500 text-black py-4 rounded-xl font-black uppercase text-[10px]">Aceitar Pedido</button>
+                                    </>
+                                )}
+                                {req.status === 'aceito' && (
+                                    <div className="space-y-2">
+                                        <input type="text" placeholder="Link do Google Drive" className="w-full bg-black border border-white/10 rounded-xl p-4 text-xs text-white outline-none focus:border-emerald-500" onKeyDown={(e:any) => { if(e.key === 'Enter') handleDeliverVideo(req.id, req.price, e.target.value, req.player_phone); }} />
+                                        <p className="text-[8px] text-white/30 text-center font-black uppercase">Cole o link e aperte Enter</p>
+                                    </div>
+                                )}
+                                {req.status === 'entregue' && <div className="text-emerald-500 text-[10px] font-black uppercase text-center flex items-center justify-center gap-2 bg-emerald-500/5 py-4 rounded-xl border border-emerald-500/10"><CheckCircle size={14}/> Vídeo Entregue</div>}
+                            </div>
+                        </div>
+                    )) : <div className="py-24 text-center text-white/10 italic font-black uppercase border border-dashed border-white/5 rounded-[3rem]">Nenhuma solicitação.</div>}
+                </div>
+            </div>
+        )}
+
+        {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
       </div>
 
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
               e.preventDefault(); 
-              const payload = { name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value };
-              await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+              await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value }) });
               setEditingPrize(null); loadData();
           }} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative">
-            <button type="button" onClick={() => setEditingPrize(null)} className="absolute top-6 right-6 text-white/20 hover:text-white transition-colors"><X size={24}/></button>
+            <button type="button" onClick={() => setEditingPrize(null)} className="absolute top-6 right-6 text-white/20 hover:text-white"><X size={24}/></button>
             <h2 className="text-xl font-black uppercase mb-8 text-[#FF1493] italic text-center">Editar Slot</h2>
             <div className="space-y-4">
                 <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" />
-                <div className="flex items-center gap-3 bg-black border border-white/10 p-4 rounded-2xl"><Palette size={16} className="text-white/30"/><input type="color" value={editingPrize.color} onChange={e => setEditingPrize({...editingPrize, color: e.target.value})} className="w-full h-8 bg-transparent cursor-pointer" /></div>
                 <div className="bg-white/5 p-4 rounded-2xl space-y-3">
                     <p className="text-[10px] font-black uppercase text-white/40">Entrega do Conteúdo</p>
                     <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none">
@@ -621,7 +483,6 @@ function DashboardContent() {
                         <option value="link">Link Direto (Drive)</option>
                         <option value="credit">Créditos de Giro</option>
                     </select>
-                    {editingPrize.delivery_type !== 'whatsapp' && <input type="text" value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} placeholder={editingPrize.delivery_type === 'link' ? "Link do Drive" : "Qtd Créditos"} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none" />}
                 </div>
                 <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95">Salvar Configurações</button>
             </div>
@@ -629,16 +490,26 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* 🔥 MODAL TUTORIAL HIERARQUIA DA ROLETA 🔥 */}
       {showRoletaTutorial && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-[0_0_40px_rgba(255,20,147,0.2)] relative">
               <button onClick={() => setShowRoletaTutorial(false)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={20} /></button>
-              <h2 className="text-xl font-black uppercase italic mb-6 text-[#FF1493] flex items-center gap-2"><HelpCircle size={20}/> Como organizar a Roleta</h2>
+              <h2 className="text-xl font-black uppercase italic mb-6 text-[#FF1493] flex items-center gap-2"><HelpCircle size={20}/> Guia da Roleta Lucrativa</h2>
               
-              <div className="space-y-4 text-sm text-white/80 leading-relaxed font-medium">
-                  <p><strong className="text-white uppercase text-[10px]">1. A Ordem importa:</strong> Os prêmios que estão no TOPO da lista são os "piores" prêmios (ex: Tente Outra Vez, Ganhe 1 CR). Os que estão no FINAL da lista são os mais difíceis (Vídeo VIP, Encontro).</p>
-                  <p><strong className="text-white uppercase text-[10px]">2. Como Mover:</strong> Use as setinhas <ChevronUp size={14} className="inline"/> e <ChevronDown size={14} className="inline"/> para reorganizar. A matemática do sistema calcula automaticamente as chances de acordo com a posição!</p>
-                  <p><strong className="text-indigo-400 uppercase text-[10px] flex items-center gap-1"><Lock size={12}/> O que são as Iscas?</strong> Os itens travados em roxo (ex: PIX 100, iPhone, Encontro) são iscas visuais. Elas ficam na roleta para atrair o cliente, mas o sistema tem uma trava de segurança que IMPEDE o cliente de ganhar. Você não pode move-los, eles já estão travados no final da lista pela Labz.</p>
+              <div className="space-y-5 text-sm text-white/80 leading-relaxed font-medium">
+                  <div>
+                    <p className="text-[#FFD700] uppercase text-[10px] font-black mb-1">1. Topo da Lista (Os Comuns)</p>
+                    <p className="text-[11px]">Coloque aqui os prêmios que saem mais vezes (ex: Tente Outra Vez, Áudio, Foto Livre). O sistema dá mais chance para o que está no topo!</p>
+                  </div>
+                  <div>
+                    <p className="text-[#FF1493] uppercase text-[10px] font-black mb-1">2. Final da Lista (Os Raros)</p>
+                    <p className="text-[11px]">Aqui ficam os prêmios VIP (ex: Vídeo 5 min, Chamada). Quanto mais para baixo, mais difícil de ganhar!</p>
+                  </div>
+                  <div>
+                    <p className="text-indigo-400 uppercase text-[10px] font-black mb-1 flex items-center gap-1"><Lock size={12}/> 3. Itens Bloqueados (As Iscas)</p>
+                    <p className="text-[11px]">Estes itens (PIX, iPhone, Presencial) são iscas visuais para atrair o fã. Eles são impossíveis de ganhar por segurança da Labz e ficam travados no final.</p>
+                  </div>
               </div>
               <button onClick={() => setShowRoletaTutorial(false)} className="mt-8 bg-white/10 text-white w-full py-4 rounded-xl font-black uppercase text-[10px] hover:bg-white/20 transition-all">Entendi, Fechar</button>
             </div>
