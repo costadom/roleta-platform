@@ -8,6 +8,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function POST(req: Request) {
   try {
     const rawText = await req.text();
+    
+    // PEGANDO O ID DIRETO DO ENDEREÇO DA URL
     const { searchParams } = new URL(req.url);
     const userIdDaUrl = searchParams.get('userId');
 
@@ -21,72 +23,101 @@ export async function POST(req: Request) {
 
     if (body.status === 'paid' || body.status === 'PAID') {
       const userId = userIdDaUrl || body.external_id; 
-      if (!userId || userId === 'undefined') throw new Error("ID do fã sumiu!");
+      
+      if (!userId || userId === 'undefined') {
+         throw new Error("O ID do fã sumiu completamente!");
+      }
 
+      // 1. Pega o valor real pago em REAIS
       const amountPaid = Number(body.value) / 100;
-      
-      // 1. Créditos do Fã (Com os Bônus)
-      let creditosGanhos = amountPaid;
+      console.log(`✅ PIX PAGO! Fã: ${userId} | Valor: R$ ${amountPaid}`);
+
+      // 2. Mapeia os pacotes (Valor em R$ -> Créditos)
+      let creditosGanhos = amountPaid; // Fallback
       if (amountPaid === 15) creditosGanhos = 20;
-      if (amountPaid === 25) creditosGanhos = 30;
-      if (amountPaid === 35) creditosGanhos = 40;
-      if (amountPaid === 55) creditosGanhos = 60;
+      else if (amountPaid === 25) creditosGanhos = 30;
+      else if (amountPaid === 35) creditosGanhos = 40;
+      else if (amountPaid === 55) creditosGanhos = 60;
 
-      // 2. Buscando quem é o Jogador e a Modelo dona da roleta
-      const { data: player } = await supabase.from('Players').select('credits, model_id').eq('id', userId).single();
-      if (!player) throw new Error("Jogador não encontrado.");
+      // 3. Busca o jogador para saber de qual modelo ele é
+      const { data: userData, error: fetchError } = await supabase
+        .from('Players')
+        .select('credits, model_id')
+        .eq('id', userId)
+        .single();
 
-      const { data: model } = await supabase.from('Models').select('balance, referred_by, created_at').eq('id', player.model_id).single();
-      if (!model) throw new Error("Modelo não encontrada.");
-
-      // 3. A MÁGICA DA DIVISÃO DE LUCROS
-      let modelCut = amountPaid * 0.70; // 70% pra dona da roleta
-      let platformCut = amountPaid * 0.30; // 30% pra plataforma (inicialmente)
-      let referrerCut = 0;
-      let referrerId = null;
-
-      // Se ela foi indicada, verifica a regra dos 3 meses (90 dias)
-      if (model.referred_by) {
-        const createdDate = new Date(model.created_at);
-        const now = new Date();
-        const diffDays = Math.ceil(Math.abs(now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (diffDays <= 90) {
-          referrerCut = amountPaid * 0.05; // 5% de comissão
-          platformCut = amountPaid * 0.25; // A plataforma abre mão de 5% (fica com 25%)
-          referrerId = model.referred_by;
-        }
+      if (fetchError || !userData) {
+        throw new Error("Erro ao buscar jogador no banco.");
       }
 
-      // 4. Atualizando os Saldos Financeiros (Depositando o dinheiro real)
-      await supabase.from('Models').update({ balance: (model.balance || 0) + modelCut }).eq('id', player.model_id);
-      
-      // Depositando a comissão da modelo que indicou
-      if (referrerCut > 0 && referrerId) {
-        const { data: refModel } = await supabase.from('Models').select('balance').eq('id', referrerId).single();
-        if (refModel) {
-          await supabase.from('Models').update({ balance: (refModel.balance || 0) + referrerCut }).eq('id', referrerId);
+      const modelId = userData.model_id;
+      const novoSaldo = (userData.credits || 0) + creditosGanhos;
+
+      // 4. Atualiza os créditos do Jogador
+      await supabase
+        .from('Players')
+        .update({ credits: novoSaldo })
+        .eq('id', userId);
+
+      // --- A MATEMÁTICA FINANCEIRA (COM SISTEMA DE AFILIADOS) --- //
+      if (modelId) {
+        // Busca os dados da Modelo que está vendendo para checar se ela tem madrinha
+        const { data: modelData } = await supabase
+          .from('Models')
+          .select('balance, referred_by, created_at')
+          .eq('id', modelId)
+          .single();
+
+        let modelCut = amountPaid * 0.70; // 70% pra Modelo (Fixo)
+        let platformCut = amountPaid * 0.30; // 30% pra Savanah Labz (Padrão)
+        let affiliateCut = 0;
+        let madrinhaId = null;
+
+        // 🔥 LÓGICA DE AFILIADO (5% POR 3 MESES) 🔥
+        if (modelData?.referred_by) {
+            const dataCadastro = new Date(modelData.created_at).getTime();
+            const dataAtual = new Date().getTime();
+            const diasDesdeCadastro = (dataAtual - dataCadastro) / (1000 * 3600 * 24);
+
+            // Só paga se fizer menos de 90 dias (3 meses) que a modelo entrou no Labz
+            if (diasDesdeCadastro <= 90) {
+                affiliateCut = amountPaid * 0.05; // 5% para a madrinha
+                platformCut = amountPaid * 0.25;  // Plataforma cede 5% da sua parte
+                madrinhaId = modelData.referred_by;
+
+                // Adiciona o saldo na conta da Madrinha
+                const { data: madrinhaData } = await supabase.from('Models').select('balance').eq('id', madrinhaId).single();
+                if (madrinhaData) {
+                    await supabase.from('Models').update({ balance: (madrinhaData.balance || 0) + affiliateCut }).eq('id', madrinhaId);
+                }
+            }
         }
+
+        // 5. Registra a venda na tabela (Agora com informações de comissão)
+        await supabase.from('Transactions').insert({
+          model_id: modelId,
+          player_phone: userId, // Salva quem pagou
+          amount: creditosGanhos,
+          real_amount: amountPaid,
+          model_cut: modelCut,
+          platform_cut: platformCut,
+          status: 'aprovado'
+        });
+
+        // 7. Atualiza o cofre da modelo vendedora
+        const currentBalance = Number(modelData?.balance) || 0;
+        await supabase
+          .from('Models')
+          .update({ balance: currentBalance + modelCut })
+          .eq('id', modelId);
       }
 
-      // 5. Registrando a transação no Livro Caixa (Para o Super Admin ver)
-      await supabase.from('Transactions').insert({
-        model_id: player.model_id,
-        real_amount: amountPaid,
-        model_cut: modelCut,
-        platform_cut: platformCut,
-        created_at: new Date().toISOString()
-      });
-
-      // 6. Finalmente, liberando os Créditos na roleta do fã
-      await supabase.from('Players').update({ credits: (player.credits || 0) + creditosGanhos }).eq('id', userId);
-
-      console.log(`✅ PIX PAGO! Fã: ${userId} | Pagou R$ ${amountPaid} | Mod: R$ ${modelCut} | Ref: R$ ${referrerCut} | Plat: R$ ${platformCut}`);
+      console.log(`💰 SUCESSO ABSOLUTO! Saldo da modelo e da plataforma atualizados!`);
     }
 
     return NextResponse.json({ status: 'ok' });
   } catch (error: any) {
-    console.error("💥 ERRO FATAL NO WEBHOOK:", error.message);
+    console.error("💥 ERRO FATAL:", error.message);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
