@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles, MessageCircle
@@ -21,7 +21,8 @@ export default function ModelProfile() {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [videoDesc, setVideoDesc] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<3 | 5 | 10>(3);
-  const pricing = { 3: 70, 5: 110, 10: 160 };
+  // 🔥 VALOR DE 10 MINUTOS AJUSTADO PARA R$ 150 🔥
+  const pricing = { 3: 70, 5: 110, 10: 150 };
 
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
@@ -152,8 +153,7 @@ export default function ModelProfile() {
 
   const handleChatClick = () => {
     if (!isLoggedIn) return setShowAuth(true);
-    // Redireciona o cliente para o Hub dele, onde a lógica de chat já está montada
-    router.push('/hub');
+    router.push('/hub'); // Redireciona o fã pro painel dele onde a sala de chat com a Musa já existe
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /></div>;
@@ -164,37 +164,39 @@ export default function ModelProfile() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden">
       
-      {/* 🔥 HEADER / HERO SECTION OTIMIZADO PARA MOBILE 🔥 */}
-      <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end">
-        <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-105" style={{ backgroundImage: `url(${modelConfig?.bg_url})` }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent" />
+      {/* 🔥 HEADER / HERO SECTION OTIMIZADO 🔥 */}
+      <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end bg-black">
+        {/* A Capa agora respeita os limites e fica mais natural sem "borrar" embaixo de forma agressiva */}
+        <div className="absolute inset-0 w-full h-full">
+            <img src={modelConfig?.bg_url} className="w-full h-full object-cover opacity-60" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
+        </div>
         
-        <div className="absolute top-8 left-8 flex flex-wrap gap-3 sm:gap-4 z-50">
-            <button onClick={() => router.push('/vitrine')} className="p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
-            <button onClick={() => router.push('/vitrine')} className="px-5 sm:px-6 py-3 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[10px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all"><LayoutGrid size={16}/> <span className="hidden sm:inline">Vitrine</span></button>
+        <div className="absolute top-6 left-6 sm:top-8 sm:left-8 flex flex-wrap gap-3 sm:gap-4 z-50">
+            <button onClick={() => router.push('/vitrine')} className="p-3 sm:p-4 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={18}/></button>
+            <button onClick={() => router.push('/vitrine')} className="px-4 sm:px-6 py-3 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] sm:text-[10px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all"><LayoutGrid size={14}/> <span className="hidden sm:inline">Vitrine</span></button>
         </div>
 
-        <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto">
-          {/* FOTO PERFIL CENTRALIZADA NO MOBILE */}
-          <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-48 md:h-48 rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.4)] shrink-0 bg-black mx-auto md:mx-0">
+        <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto pb-8">
+          {/* FOTO PERFIL */}
+          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-black mx-auto md:mx-0">
             <img src={modelConfig?.profile_url} className="w-full h-full object-cover" />
           </div>
           
-          <div className="flex-1 text-center md:text-left pb-2 sm:pb-4 w-full flex flex-col items-center md:items-start">
-            <h1 className="text-4xl sm:text-5xl font-black uppercase italic tracking-tighter drop-shadow-2xl mb-3 sm:mb-4">{modelConfig?.model_name || model?.slug}</h1>
-            <p className="text-white/70 text-sm sm:text-base italic max-w-xl mb-6 leading-relaxed px-4 md:px-0">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
+          <div className="flex-1 text-center md:text-left w-full flex flex-col items-center md:items-start">
+            <h1 className="text-3xl sm:text-5xl font-black uppercase italic tracking-tighter drop-shadow-2xl mb-2 sm:mb-3">{modelConfig?.model_name || model?.slug}</h1>
+            <p className="text-white/80 text-xs sm:text-sm italic max-w-xl mb-6 leading-relaxed px-4 md:px-0 drop-shadow-md">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
             
-            {/* 🔥 BOTÕES DE AÇÃO LADO A LADO 🔥 */}
-            <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-max">
-                <button onClick={() => router.push(`/game/${slug}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 sm:px-8 py-4 bg-[#D946EF] rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all min-w-[140px]">
+            {/* 🔥 BOTÕES DE AÇÃO: ROLETA, RASPADINHA E CHAT COMIGO 🔥 */}
+            <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-auto">
+                <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px] order-1 md:order-last">
+                    <MessageCircle size={16} className="text-[#D946EF]"/> Chat Comigo!
+                </button>
+                <button onClick={() => router.push(`/game/${slug}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-[#D946EF] rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all min-w-[120px]">
                     <Gamepad2 size={16}/> Roleta
                 </button>
-                <button onClick={() => router.push(`/game/${slug}/raspadinha`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 sm:px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all min-w-[140px]">
+                <button onClick={() => router.push(`/game/${slug}/raspadinha`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all min-w-[120px]">
                     <Sparkles size={16} fill="currentColor"/> Raspadinha
-                </button>
-                {/* BOTÃO DO CHAT */}
-                <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl text-[9px] sm:text-[10px] font-black uppercase hover:bg-white/20 transition-all shadow-lg min-w-[140px]">
-                    <MessageCircle size={16}/> Chat Comigo!
                 </button>
             </div>
           </div>
@@ -207,7 +209,7 @@ export default function ModelProfile() {
                 <div className="flex items-center justify-center md:justify-start gap-2 mb-4 text-[#D946EF]"><Video size={20} fill="currentColor"/><h2 className="text-xl font-black uppercase italic">Vídeos Exclusivos</h2></div>
                 <p className="text-white/60 text-sm italic mb-6 leading-relaxed">Peça um vídeo personalizado. Entrega garantida em 2 dias úteis.</p>
             </div>
-            <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); setShowVideoModal(true); }} className="w-full md:w-auto bg-white text-black px-10 py-6 rounded-3xl font-black uppercase text-xs hover:bg-[#D946EF] transition-all">Encomendar Vídeo</button>
+            <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); setShowVideoModal(true); }} className="w-full md:w-auto bg-white text-black px-10 py-6 rounded-3xl font-black uppercase text-xs hover:bg-[#D946EF] hover:text-white transition-all shadow-lg">Encomendar Vídeo</button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-8">
