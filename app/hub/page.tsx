@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Loader2, Play, ArrowLeft, Camera, Gamepad2, X, Video, Clock, 
-  Wallet, HelpCircle, Heart, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell
+  Wallet, HelpCircle, Heart, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, CheckCircle2 // 🔥 ESSE É O CARA QUE FALTAVA 🔥
 } from "lucide-react";
 
 // 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
@@ -56,6 +56,7 @@ export default function PlayerPersonalHub() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const centralWa = "5515996587248";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -226,7 +227,6 @@ export default function PlayerPersonalHub() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
-  // 🔥 SISTEMA DE PAGAMENTO OTIMIZADO PARA A ROTA /api/checkout/hub 🔥
   const handleGiftPriceInput = (e: any) => { setGiftAmount(e.target.value.replace(/\D/g, "")); };
   const formattedGiftAmount = useMemo(() => { return (Number(giftAmount) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [giftAmount]);
 
@@ -236,7 +236,6 @@ export default function PlayerPersonalHub() {
           const playerId = currentChatModel?.player_id;
           if (!playerId) throw new Error("Erro de ID de jogador");
 
-          // ENVIA EXATAMENTE OS DADOS QUE A ROTA HUB ESPERA
           const response = await fetch('/api/checkout/hub', {
               method: 'POST', 
               headers: { 'Content-Type': 'application/json' },
@@ -245,7 +244,7 @@ export default function PlayerPersonalHub() {
                   userId: playerId,
                   type: isGift ? 'gift' : 'chat_media',
                   modelId: currentChatModel.model_id,
-                  mediaId: msgId // Passamos o ID da mensagem como ID da mídia no chat
+                  mediaId: msgId 
               }),
           });
           
