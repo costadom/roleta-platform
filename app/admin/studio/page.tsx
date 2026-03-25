@@ -1,27 +1,16 @@
 "use client";
 
-import { useEffect, useState, Suspense, useRef } from "react";
+import { useEffect, useState, Suspense, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, 
   useTracks, ParticipantTile, useChat, useRoomContext, useParticipants 
 } from "@livekit/components-react";
-import { Track, RoomEvent, Participant, DataPacket_Kind } from "livekit-client";
+import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, MessageCircle, Video, DollarSign, Send, Gift, Users, Eye, Lock, X, Check } from "lucide-react";
 
-function MyVideoStage() {
-  const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
-  const localTrack = tracks.find(t => t.participant.isLocal);
-
-  return (
-    <div className="w-full h-full flex items-center justify-center bg-black relative">
-      {localTrack ? <ParticipantTile trackRef={localTrack} className="w-full h-full [&>video]:object-cover" /> : 
-      <div className="flex flex-col items-center gap-3 text-[#D946EF]/50"><Video size={48} className="animate-pulse" /><span className="font-black uppercase tracking-widest text-xs">Câmera Desligada</span></div>}
-    </div>
-  );
-}
-
+// MODAL VIP: Não trava a câmera!
 function PrivateRequestModal({ request, onAccept, onDecline }: { request: any, onAccept: () => void, onDecline: () => void }) {
   if (!request) return null;
   return (
@@ -42,10 +31,32 @@ function PrivateRequestModal({ request, onAccept, onDecline }: { request: any, o
   );
 }
 
-// 🔥 NOVO: PAINEL DE ESPECTADORES 🔥
+function MyVideoStage() {
+  const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
+  const localTrack = tracks.find(t => t.participant.isLocal);
+
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-black relative">
+      {localTrack ? <ParticipantTile trackRef={localTrack} className="w-full h-full [&>video]:object-cover" /> : 
+      <div className="flex flex-col items-center gap-3 text-[#D946EF]/50"><Video size={48} className="animate-pulse" /><span className="font-black uppercase tracking-widest text-xs">Câmera Desligada</span></div>}
+    </div>
+  );
+}
+
+// 🔥 LISTA DE ESPECTADORES (Bug do saldo oscilante corrigido!)
 function ViewerList() {
   const participants = useParticipants();
-  const viewers = participants.filter(p => !p.isLocal); // Filtra para não mostrar a própria modelo
+  const viewers = participants.filter(p => !p.isLocal);
+
+  // Gera saldos fixos baseados no ID do cliente para não ficar piscando
+  const balances = useMemo(() => {
+    const map = new Map();
+    viewers.forEach(p => {
+      // Cria um valor falso estático usando o tamanho do ID
+      map.set(p.identity, (100 + (p.identity.length * 2)).toFixed(2));
+    });
+    return map;
+  }, [viewers]);
 
   return (
     <div className="p-4 border-b border-white/5 bg-[#050505] shrink-0">
@@ -56,16 +67,12 @@ function ViewerList() {
          {viewers.length === 0 ? (
             <span className="text-white/30 text-[10px] uppercase font-bold">Nenhum fã na sala.</span>
          ) : (
-            viewers.map(p => {
-               // Gerando um saldo aleatório pra MVP. Depois puxaremos do banco.
-               const mockBalance = (Math.random() * 200 + 50).toFixed(2);
-               return (
-                 <div key={p.identity} className="flex items-center justify-between bg-white/5 p-2 rounded-lg border border-white/5">
-                    <span className="text-white text-[10px] font-bold uppercase truncate max-w-[120px]">{p.name || p.identity}</span>
-                    <span className="text-emerald-400 text-[10px] font-black tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-sm">R$ {mockBalance}</span>
-                 </div>
-               )
-            })
+            viewers.map(p => (
+               <div key={p.identity} className="flex items-center justify-between bg-white/5 p-2 rounded-lg border border-white/5">
+                  <span className="text-white text-[10px] font-bold uppercase truncate max-w-[120px]">{p.name || p.identity}</span>
+                  <span className="text-emerald-400 text-[10px] font-black tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-sm">R$ {balances.get(p.identity)}</span>
+               </div>
+            ))
          )}
       </div>
     </div>
@@ -100,18 +107,21 @@ function CustomChat({ modelName }: { modelName: string }) {
   );
 }
 
-function DataListener({ onPrivateRequest }: { onPrivateRequest: (request: any) => void }) {
+// Escuta Pedidos de Privado
+function InteractiveModelRoom({ onPrivateRequest }: { onPrivateRequest: (req: any) => void }) {
   const room = useRoomContext();
+  
   useEffect(() => {
-    const handleDataReceived = (payload: Uint8Array) => {
+    const handleData = (payload: Uint8Array) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
         if (data.type === "PRIVATE_REQUEST") onPrivateRequest(data);
       } catch (e) {}
     };
-    room.on(RoomEvent.DataReceived, handleDataReceived);
-    return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
+    room.on(RoomEvent.DataReceived, handleData);
+    return () => { room.off(RoomEvent.DataReceived, handleData); };
   }, [room, onPrivateRequest]);
+
   return null;
 }
 
@@ -124,13 +134,13 @@ function StudioContent() {
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
   const [preJoinChoices, setPreJoinChoices] = useState<LocalUserChoices | undefined>(undefined);
+  
   const [isPrivateMode, setIsPrivateMode] = useState(false);
   const [currentPrivateRequest, setCurrentPrivateRequest] = useState<any>(null);
+  const [showExitModal, setShowExitModal] = useState(false);
 
-  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
-  
-  // 🔥 A MÁGICA DA SINCRONIA: A sala da modelo é o próprio SLUG dela!
   const roomName = `live_${modelSlug}`;
+  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
 
   useEffect(() => {
     if (!modelId || !modelSlug) return router.push("/admin");
@@ -145,8 +155,27 @@ function StudioContent() {
     fetchToken();
   }, [router, modelId, modelSlug, roomName]);
 
+  // 🔥 MODELO ACEITA O PRIVADO E AVISA O CLIENTE 🔥
+  const handleAcceptPrivate = async (roomContext: any) => {
+    setIsPrivateMode(true);
+    
+    // Envia mensagem pelo DataChannel dizendo "ACEITEI"
+    const payload = JSON.stringify({ 
+      type: "PRIVATE_ACCEPTED", 
+      targetClient: currentPrivateRequest.senderName 
+    });
+    
+    try {
+      await roomContext.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
+    } catch (e) {
+      console.log("Erro ao avisar cliente", e);
+    }
+    setCurrentPrivateRequest(null);
+  };
+
   if (error) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
   if (!token) return <div className="min-h-screen bg-[#050505] flex items-center justify-center"><Loader2 className="animate-spin text-[#D946EF]" size={50} /></div>;
+  
   if (!preJoinChoices) return (
     <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-2xl bg-[#0a0a0a] border border-[#D946EF]/30 rounded-[3rem] p-12"><PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={setPreJoinChoices} className="!bg-transparent !p-0" joinLabel="Iniciar Transmissão" /></div>
@@ -155,16 +184,44 @@ function StudioContent() {
 
   return (
     <div className="h-screen w-full bg-[#050505] flex flex-col overflow-hidden">
-      <PrivateRequestModal request={currentPrivateRequest} onAccept={() => { setIsPrivateMode(true); setCurrentPrivateRequest(null); }} onDecline={() => setCurrentPrivateRequest(null)} />
+      
+      {/* Modal de Saída Limpo */}
+      {showExitModal && (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center">
+          <div className="bg-[#0a0a0a] border border-red-500 p-8 rounded-2xl text-center">
+            <h2 className="text-white text-xl font-black mb-6">Encerrar a Transmissão?</h2>
+            <div className="flex gap-4 justify-center">
+              <button onClick={() => setShowExitModal(false)} className="px-6 py-2 bg-white/10 text-white rounded-full">Cancelar</button>
+              <button onClick={() => router.push(`/admin/dashboard?model=${modelId}&slug=${modelSlug}`)} className="px-6 py-2 bg-red-500 text-white rounded-full">Sim, Encerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="h-20 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-50">
-        <button onClick={() => router.push(`/admin/dashboard?model=${modelId}&slug=${modelSlug}`)} className="bg-red-500/10 text-red-500 px-4 py-3 rounded-full text-[9px] font-black uppercase"><ArrowLeft size={14} className="inline mr-2" /> Encerrar</button>
+        <button onClick={() => setShowExitModal(true)} className="bg-red-500/10 text-red-500 px-4 py-3 rounded-full text-[9px] font-black uppercase hover:bg-red-500 hover:text-white transition"><ArrowLeft size={14} className="inline mr-2" /> Encerrar</button>
         <div className="bg-emerald-500/20 px-6 py-2 rounded-2xl flex items-center gap-4"><DollarSign size={24} className="text-emerald-400" /><div className="flex flex-col"><span className="text-[9px] text-emerald-400 uppercase">Ganhos</span><span className="text-xl font-black text-white">R$ 0,00</span></div></div>
       </header>
+      
       <main className="flex-1 relative flex overflow-hidden">
         <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={livekitUrl} className="flex flex-col lg:flex-row h-full w-full">
-          <DataListener onPrivateRequest={setCurrentPrivateRequest} />
+          
+          {/* O room hook precisa estar DENTRO do LiveKitRoom */}
+          <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} />
+          
+          {/* Capturamos o room atual para passar pro Modal de Aceite conseguir mandar a mensagem */}
+          <RoomContextConsumer>
+            {(room) => (
+               <PrivateRequestModal 
+                  request={currentPrivateRequest} 
+                  onAccept={() => handleAcceptPrivate(room)} 
+                  onDecline={() => setCurrentPrivateRequest(null)} 
+               />
+            )}
+          </RoomContextConsumer>
+
           <div className="flex-1 p-4 flex flex-col bg-[#050505] relative overflow-hidden">
-             <div className="absolute top-10 left-10 z-30 flex gap-3"><div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full ${isPrivateMode ? 'bg-indigo-500' : 'bg-red-500'}`}>{isPrivateMode ? 'PRIVADO VIP' : 'AO VIVO'}</div></div>
+             <div className="absolute top-10 left-10 z-30 flex gap-3"><div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full ${isPrivateMode ? 'bg-indigo-500' : 'bg-red-500 animate-pulse'}`}>{isPrivateMode ? 'PRIVADO VIP (R$ 3,10/m)' : 'AO VIVO'}</div></div>
              <div className="w-full h-full relative rounded-[2.5rem] overflow-hidden border-4 border-[#D946EF]"><MyVideoStage /></div>
           </div>
           <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-full z-20">
@@ -177,6 +234,12 @@ function StudioContent() {
       <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }`}</style>
     </div>
   );
+}
+
+// Mini Componente para pegar o contexto do LiveKit dentro do Render
+function RoomContextConsumer({ children }: { children: (room: any) => React.ReactNode }) {
+  const room = useRoomContext();
+  return <>{children(room)}</>;
 }
 
 export default function ModelStudio() {
