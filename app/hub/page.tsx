@@ -7,7 +7,6 @@ import {
   Wallet, HelpCircle, Heart, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, CheckCircle2
 } from "lucide-react";
 
-// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -36,27 +35,24 @@ export default function PlayerPersonalHub() {
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
-  // 🔥 ESTADOS DE NOTIFICAÇÃO 🔥
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
-  // 🔥 ESTADOS DO CHAT 🔥
   const [chatOpen, setChatOpen] = useState(false);
   const [currentChatModel, setCurrentChatModel] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔥 ESTADOS DE PAGAMENTO DO CHAT (Mídia e Presente) 🔥
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeCopiaCola: string; txId: string; value: number; msgId?: string; isGift?: boolean; giftMsg?: string } | null>(null);
   const [generatingPix, setGeneratingPix] = useState(false);
-  const [checkingPayment, setCheckingPayment] = useState(false);
-  const [selectedGift, setSelectedGift] = useState<number>(10); // Valor padrão selecionado
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [selectedGift, setSelectedGift] = useState<number>(10);
   const [giftMessage, setGiftMessage] = useState("");
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 Minutos
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); 
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -159,11 +155,11 @@ export default function PlayerPersonalHub() {
 
   useEffect(() => {
       let timer: NodeJS.Timeout;
-      if (pixData && !checkingPayment && pixTimeLeft > 0) {
+      if (pixData && !paymentSuccess && pixTimeLeft > 0) {
         timer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
       }
       return () => clearInterval(timer);
-  }, [pixData, checkingPayment, pixTimeLeft]);
+  }, [pixData, paymentSuccess, pixTimeLeft]);
 
   const formatTime = (seconds: number) => {
       const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -244,7 +240,6 @@ export default function PlayerPersonalHub() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
-  // 🔥 GERAÇÃO DE PIX INTEGRADA COM A ROTA HUB 🔥
   const generatePix = async (value: number, msgId?: string, isGift = false, giftMsg = "") => {
       setGeneratingPix(true);
       setPixTimeLeft(600); 
@@ -295,57 +290,48 @@ export default function PlayerPersonalHub() {
       }
   };
 
-  const confirmPayment = async () => {
-      if (!pixData || !currentChatModel) return;
-      setCheckingPayment(true);
-      try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
-          
-          const processPaymentLogic = async () => {
-              const modelRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}&select=balance,referred_by,created_at`, { headers });
-              const mData = await modelRes.json();
-              if (mData && mData[0]) {
-                  const modelData = mData[0];
-                  let modelCut = pixData.value * 0.70;
-                  let platformCut = pixData.value * 0.30;
-                  let affiliateCut = 0;
-
-                  if (modelData.referred_by) {
-                      const dataCadastro = new Date(modelData.created_at).getTime();
-                      const dias = (new Date().getTime() - dataCadastro) / (1000 * 3600 * 24);
-                      if (dias <= 90) {
-                          affiliateCut = pixData.value * 0.05; 
-                          platformCut = pixData.value * 0.25;
-                          const mRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelData.referred_by}&select=balance`, { headers }).then(r=>r.json());
-                          if(mRes && mRes[0]) {
-                              await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelData.referred_by}`, { method: "PATCH", headers, body: JSON.stringify({ balance: (mRes[0].balance || 0) + affiliateCut }) });
+  // 🔥 POLLING SEGURO (Substitui a aprovação do cliente) 🔥
+  useEffect(() => {
+      let interval: NodeJS.Timeout;
+      if (pixData && !paymentSuccess) {
+          interval = setInterval(async () => {
+              try {
+                  const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+                  
+                  if (pixData.msgId) {
+                      // Checa se o Webhook desbloqueou a mídia no chat
+                      const res = await fetch(`${supabaseUrl}/rest/v1/Messages?id=eq.${pixData.msgId}&select=is_unlocked`, { headers });
+                      const data = await res.json();
+                      if (data && data[0]?.is_unlocked) {
+                          clearInterval(interval);
+                          setPaymentSuccess(true);
+                          setTimeout(() => {
+                              setShowPixModal(false); setPixData(null); setPaymentSuccess(false);
+                              fetchChatMessages(currentChatModel.model_id, currentChatModel.player_id, true);
+                          }, 2500);
+                      }
+                  } else if (pixData.isGift) {
+                      // Checa se o Webhook registrou a transação do presente (Aprox < 5 mins)
+                      const res = await fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${currentChatModel?.model_id}&player_phone=eq.${encodeURIComponent(playerPhone || '')}&real_amount=eq.${pixData.value}&order=created_at.desc&limit=1`, { headers });
+                      const data = await res.json();
+                      if (data && data.length > 0) {
+                          const txDate = new Date(data[0].created_at).getTime();
+                          const now = new Date().getTime();
+                          if (now - txDate < 5 * 60 * 1000) {
+                              clearInterval(interval);
+                              setPaymentSuccess(true);
+                              setTimeout(() => {
+                                  setShowPixModal(false); setPixData(null); setPaymentSuccess(false);
+                                  fetchChatMessages(currentChatModel.model_id, currentChatModel.player_id, true);
+                              }, 2500);
                           }
                       }
                   }
-
-                  await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}`, { method: 'PATCH', headers, body: JSON.stringify({ balance: (modelData.balance || 0) + modelCut }) });
-                  await fetch(`${supabaseUrl}/rest/v1/Transactions`, { method: 'POST', headers, body: JSON.stringify({ model_id: currentChatModel.model_id, player_phone: playerPhone, real_amount: pixData.value, model_cut: modelCut, platform_cut: platformCut, status: 'aprovado' }) });
-              }
-          };
-
-          if (pixData.isGift) {
-              const giftDisplay = `Enviou um presente: ${pixData.giftMsg}`;
-              await fetch(`${supabaseUrl}/rest/v1/Messages`, {
-                  method: 'POST', headers,
-                  body: JSON.stringify({ chat_id: currentChatModel.chat_id, sender_type: 'player', content: giftDisplay, is_gift: true, price: pixData.value, media_type: 'text' })
-              });
-              await processPaymentLogic();
-              alert("Presente enviado com sucesso!");
-          } else if (pixData.msgId) {
-              await fetch(`${supabaseUrl}/rest/v1/Messages?id=eq.${pixData.msgId}`, { method: 'PATCH', headers, body: JSON.stringify({ is_unlocked: true }) });
-              await processPaymentLogic();
-              alert("Mídia desbloqueada com sucesso!");
-          }
-
-          setShowPixModal(false); setPixData(null);
-          fetchChatMessages(currentChatModel.model_id, currentChatModel.player_id, true);
-      } catch (e) { alert("Erro ao confirmar. Chame o suporte."); } finally { setCheckingPayment(false); }
-  };
+              } catch(e) {}
+          }, 4000); 
+      }
+      return () => clearInterval(interval);
+  }, [pixData, paymentSuccess, currentChatModel, playerPhone]);
 
   const handleCopyPix = () => {
       if (pixData?.qrCodeCopiaCola) { 
@@ -594,35 +580,52 @@ export default function PlayerPersonalHub() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE PAGAMENTO PIX (PPV e Presente) 🔥 */}
+      {/* 🔥 MODAL DE PAGAMENTO PIX BLINDADO (SEM BOTÃO CLIENTE) 🔥 */}
       {showPixModal && pixData && (
           <div className="fixed inset-0 z-[400] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative text-center">
-                  <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24}/></button>
-                  <h2 className="text-2xl font-black uppercase italic mb-2 text-[#D946EF]">Pagamento VIP</h2>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mb-8">Liberação Automática</p>
+                  {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24}/></button>}
+                  
+                  {paymentSuccess ? (
+                      <div className="py-10 animate-in zoom-in duration-500">
+                          <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle size={50} className="text-black"/></div>
+                          <h2 className="text-3xl font-black uppercase italic text-emerald-500 mb-2">Pago!</h2>
+                          <p className="text-xs text-white/60 uppercase font-black tracking-widest">{pixData.isGift ? 'Presente Enviado.' : 'Mídia Desbloqueada.'}</p>
+                      </div>
+                  ) : (
+                      <>
+                          <h2 className="text-2xl font-black uppercase italic mb-2 text-[#D946EF]">Pagamento VIP</h2>
+                          <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mb-8">Liberação Automática</p>
 
-                  <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 shadow-[0_0_30px_rgba(217,70,239,0.3)] flex items-center justify-center">
-                      <img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} alt="QR Code PIX" className="w-full h-full object-contain" />
-                  </div>
+                          <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 shadow-[0_0_30px_rgba(217,70,239,0.3)] flex items-center justify-center">
+                              {generatingPix && !pixData.qrCodeBase64 ? (
+                                <div className="flex flex-col items-center justify-center text-black font-black uppercase text-[10px]">
+                                  <Loader2 className="animate-spin text-[#D946EF] mb-2" size={30} />
+                                  Gerando PIX...
+                                </div>
+                              ) : (
+                                <img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} alt="QR Code PIX" className="w-full h-full object-contain rounded-xl" />
+                              )}
+                          </div>
 
-                  <p className="text-3xl font-black text-white mb-6">R$ {pixData.value.toFixed(2)}</p>
+                          <p className="text-3xl font-black text-white mb-6">R$ {pixData.value.toFixed(2)}</p>
 
-                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
-                      ⏱ {formatTime(pixTimeLeft)}
-                  </div>
+                          <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
+                              ⏱ {formatTime(pixTimeLeft)}
+                          </div>
 
-                  <div className="space-y-3">
-                      <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-white/10 transition-all">
-                          {copied ? <CheckCircle size={16} className="text-emerald-500" /> : <Copy size={16} />}
-                          {copied ? "Copiado!" : "Copiar Código PIX"}
-                      </button>
-
-                      <button onClick={confirmPayment} disabled={checkingPayment} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                          {checkingPayment ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18}/>}
-                          {checkingPayment ? "Verificando..." : "Já Fiz o Pagamento"}
-                      </button>
-                  </div>
+                          <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-5 rounded-2xl font-black uppercase text-xs hover:bg-white/10 transition-all mb-4">
+                              {copied ? <CheckCircle size={18} className="text-emerald-500" /> : <Copy size={18} />}
+                              {copied ? "Código Copiado!" : "Copiar Código PIX"}
+                          </button>
+                          
+                          {/* 🔥 AVISO DE AUTOMAÇÃO (SUBSTITUI O BOTÃO FALSO) 🔥 */}
+                          <div className="bg-[#D946EF]/10 border border-[#D946EF]/30 p-4 rounded-xl flex items-center justify-center gap-3">
+                              <Loader2 size={16} className="animate-spin text-[#D946EF]" /> 
+                              <span className="text-[9px] text-[#D946EF] uppercase font-black tracking-widest">Aguardando Confirmação Automática...</span>
+                          </div>
+                      </>
+                  )}
               </div>
           </div>
       )}
