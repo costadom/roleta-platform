@@ -226,7 +226,7 @@ function StudioContent() {
           </div>
           <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-full z-20">
              <ViewerList />
-             <CustomChat modelName={modelSlug} />
+             <CustomChat modelName={modelSlug || ""} />
           </div>
           <RoomAudioRenderer />
         </LiveKitRoom>
