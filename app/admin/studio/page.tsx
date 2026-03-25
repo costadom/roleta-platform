@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense, useRef } from "react";
+import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   LiveKitRoom, 
@@ -10,11 +10,11 @@ import {
   useTracks, 
   ParticipantTile,
   useChat,
-  useRoomContext
+  useRoomContext // Importante para ouvir sinais
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, RoomEvent, Participant, DataPacket_Kind } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, MessageCircle, Video, DollarSign, Send, Gift, Users, Eye, Lock } from "lucide-react";
+import { Loader2, ArrowLeft, MessageCircle, Video, DollarSign, Send, Gift, Users, Eye, Lock, X, Check } from "lucide-react";
 
 // 🔥 COMPONENTE DO PALCO DE VÍDEO DA MODELO 🔥
 function MyVideoStage() {
@@ -34,6 +34,47 @@ function MyVideoStage() {
           <span className="font-black uppercase tracking-widest text-xs">Câmera Desligada</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// 🔥 MODAL DE PEDIDO DE PRIVADO 🔥
+function PrivateRequestModal({ request, onAccept, onDecline }: { request: any, onAccept: () => void, onDecline: () => void }) {
+  if (!request) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fadeIn">
+      <div className="bg-[#0a0a0a] border-2 border-emerald-500 rounded-[2rem] p-10 max-w-lg w-full shadow-[0_0_60px_rgba(16,185,129,0.3)] text-center relative overflow-hidden">
+        
+        {/* Efeito de brilho de fundo */}
+        <div className="absolute -top-20 -left-20 w-40 h-40 bg-emerald-500/20 rounded-full blur-3xl opacity-60"></div>
+
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500 flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
+            <Lock size={36} className="text-emerald-400 animate-pulse" />
+          </div>
+          
+          <h2 className="text-2xl font-black text-white uppercase tracking-tighter mb-1">Pedido de Show Privado!</h2>
+          <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mb-6 bg-emerald-500/10 px-4 py-1 rounded-full">Faturamento: R$ 3,10 / minuto</p>
+          
+          <p className="text-white/80 text-lg mb-10 font-medium">O cliente <span className="text-[#D946EF] font-black uppercase bg-[#D946EF]/10 px-2.5 py-1 rounded-md text-base">{request.senderName}</span> deseja ir para o privado com você agora.</p>
+          
+          <div className="grid grid-cols-2 gap-5 w-full">
+            <button 
+              onClick={onDecline} 
+              className="flex items-center justify-center gap-2.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white py-4 rounded-full transition-all text-sm font-black uppercase tracking-widest border border-white/5"
+            >
+              <X size={18} /> Recusar
+            </button>
+            <button 
+              onClick={onAccept} 
+              className="flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-white py-4 rounded-full transition-all text-sm font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30"
+            >
+              <Check size={18} /> Aceitar e Iniciar
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -134,6 +175,42 @@ function CustomChat({ modelName }: { modelName: string }) {
   );
 }
 
+// 🔥 COMPONENTE QUE OUVE SINAIS DO DATACHANNEL 🔥
+function DataListener({ onPrivateRequest }: { onPrivateRequest: (request: any) => void }) {
+  const room = useRoomContext();
+
+  useEffect(() => {
+    // Função que roda quando chega dados na sala
+    const handleDataReceived = (payload: Uint8Array, participant?: Participant, kind?: DataPacket_Kind) => {
+      const decoder = new TextDecoder();
+      const text = decoder.decode(payload);
+      
+      try {
+        const data = JSON.parse(text);
+        
+        // Verifica se é um pedido de privado
+        if (data.type === "PRIVATE_REQUEST") {
+          console.log("Pedido de privado recebido de:", data.senderName);
+          // Toca um som de alerta opcional aqui no futuro
+          onPrivateRequest(data);
+        }
+      } catch (e) {
+        // Não é um JSON válido, ignora
+      }
+    };
+
+    // Assina o evento de recebimento de dados
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+
+    // Limpa a assinatura ao sair
+    return () => {
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [room, onPrivateRequest]);
+
+  return null; // Este componente não renderiza nada visualmente
+}
+
 function StudioContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,6 +228,9 @@ function StudioContent() {
   const [sessionEarnings, setSessionEarnings] = useState<number>(0);
   const [isPrivateMode, setIsPrivateMode] = useState(false);
   const [voyeursCount, setVoyeursCount] = useState(0);
+
+  // Estado para controlar o modal de pedido
+  const [currentPrivateRequest, setCurrentPrivateRequest] = useState<any>(null);
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
 
@@ -184,6 +264,20 @@ function StudioContent() {
 
     fetchToken();
   }, [router, modelId, modelSlug]);
+
+  // Funções do Modal
+  const handleAcceptPrivate = () => {
+    alert(`Aceitou o privado de ${currentPrivateRequest.senderName}! No próximo passo vamos implementar a lógica que muda a sala para privada e inicia a cobrança.`);
+    // TODO: Enviar sinal de aceite de volta para o cliente
+    // TODO: Mudar estado da sala para privado
+    setIsPrivateMode(true);
+    setCurrentPrivateRequest(null);
+  };
+
+  const handleDeclinePrivate = () => {
+    // TODO: Enviar sinal de recusa de volta para o cliente
+    setCurrentPrivateRequest(null);
+  };
 
   if (error) {
     return (
@@ -230,6 +324,13 @@ function StudioContent() {
   return (
     <div className="h-screen w-full bg-[#050505] flex flex-col overflow-hidden">
       
+      {/* MODAL DE PEDIDO (Aparece sobre tudo) */}
+      <PrivateRequestModal 
+        request={currentPrivateRequest} 
+        onAccept={handleAcceptPrivate} 
+        onDecline={handleDeclinePrivate} 
+      />
+
       <header className="h-20 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-50">
         <div className="flex items-center gap-4">
           <button onClick={() => {
@@ -255,7 +356,7 @@ function StudioContent() {
         </div>
       </header>
 
-      <main className="flex-1 relative flex">
+      <main className="flex-1 relative flex overflow-hidden">
         <LiveKitRoom
           video={preJoinChoices.videoEnabled} 
           audio={preJoinChoices.audioEnabled} 
@@ -264,7 +365,11 @@ function StudioContent() {
           data-lk-theme="default"
           className="flex flex-col lg:flex-row h-full w-full"
         >
-          <div className="flex-1 p-4 sm:p-6 flex flex-col items-center justify-center bg-[#050505] relative overflow-hidden">
+          {/* 🔥 Componente invisível que ouve os sinais 🔥 */}
+          <DataListener onPrivateRequest={setCurrentPrivateRequest} />
+
+          {/* VÍDEO DA MODELO */}
+          <div className="flex-1 p-2 sm:p-4 flex flex-col items-center justify-center bg-[#050505] relative overflow-hidden">
              
              <div className="absolute top-10 left-10 z-30 flex flex-col gap-3 pointer-events-none">
                 <div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full flex items-center gap-2 shadow-xl ${isPrivateMode ? 'bg-indigo-500 shadow-indigo-500/50' : 'bg-red-500 shadow-red-500/50 animate-pulse'}`}>
@@ -278,12 +383,13 @@ function StudioContent() {
                 )}
              </div>
 
-             <div className="w-full h-full max-w-5xl max-h-[85vh] relative rounded-[3rem] overflow-hidden border-4 border-[#D946EF] shadow-[0_0_50px_rgba(217,70,239,0.4)] bg-black">
-                <div className="absolute inset-0 pointer-events-none border border-[#D946EF]/50 rounded-[3rem] z-10 shadow-[inset_0_0_30px_rgba(217,70,239,0.3)]"></div>
+             <div className="w-full h-full max-w-5xl h-full relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border-4 border-[#D946EF] shadow-[0_0_50px_rgba(217,70,239,0.4)] bg-black">
+                <div className="absolute inset-0 pointer-events-none border border-[#D946EF]/50 rounded-[2.5rem] z-10 shadow-[inset_0_0_30px_rgba(217,70,239,0.3)]"></div>
                 <MyVideoStage />
              </div>
           </div>
 
+          {/* NOSSO CHAT CUSTOMIZADO VIP */}
           <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-[45vh] lg:h-full z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
              <CustomChat modelName={modelName} />
           </div>
@@ -296,6 +402,9 @@ function StudioContent() {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
       `}</style>
     </div>
   );
