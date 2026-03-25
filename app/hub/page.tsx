@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Loader2, Play, ArrowLeft, Camera, Gamepad2, X, Video, Clock, 
-  Wallet, HelpCircle, Heart, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, CheckCircle2 // 🔥 ESSE É O CARA QUE FALTAVA 🔥
+  Wallet, HelpCircle, Heart, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, CheckCircle2
 } from "lucide-react";
 
 // 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
@@ -36,27 +36,30 @@ export default function PlayerPersonalHub() {
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
+  // 🔥 ESTADOS DE NOTIFICAÇÃO 🔥
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
+  // 🔥 ESTADOS DO CHAT 🔥
   const [chatOpen, setChatOpen] = useState(false);
   const [currentChatModel, setCurrentChatModel] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // 🔥 ESTADOS DE PAGAMENTO DO CHAT (Mídia e Presente) 🔥
   const [showPixModal, setShowPixModal] = useState(false);
-  const [pixData, setPixData] = useState<{ qrcode: string; qrcodeUrl: string; value: number; msgId?: string; isGift?: boolean; giftMsg?: string } | null>(null);
+  const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeCopiaCola: string; txId: string; value: number; msgId?: string; isGift?: boolean; giftMsg?: string } | null>(null);
   const [generatingPix, setGeneratingPix] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
-  const [giftAmount, setGiftAmount] = useState("");
+  const [selectedGift, setSelectedGift] = useState<number>(10); // Valor padrão selecionado
   const [giftMessage, setGiftMessage] = useState("");
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 Minutos
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const centralWa = "5515996587248";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -154,6 +157,20 @@ export default function PlayerPersonalHub() {
     loadData();
   }, [router]);
 
+  useEffect(() => {
+      let timer: NodeJS.Timeout;
+      if (pixData && !checkingPayment && pixTimeLeft > 0) {
+        timer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
+      }
+      return () => clearInterval(timer);
+  }, [pixData, checkingPayment, pixTimeLeft]);
+
+  const formatTime = (seconds: number) => {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = (seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+  };
+
   const openChat = async (modelInfo: any, playerId: string) => {
       setCurrentChatModel({ ...modelInfo, player_id: playerId });
       setChatOpen(true);
@@ -227,42 +244,55 @@ export default function PlayerPersonalHub() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
-  const handleGiftPriceInput = (e: any) => { setGiftAmount(e.target.value.replace(/\D/g, "")); };
-  const formattedGiftAmount = useMemo(() => { return (Number(giftAmount) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [giftAmount]);
-
+  // 🔥 GERAÇÃO DE PIX INTEGRADA COM A ROTA HUB 🔥
   const generatePix = async (value: number, msgId?: string, isGift = false, giftMsg = "") => {
       setGeneratingPix(true);
+      setPixTimeLeft(600); 
       try {
           const playerId = currentChatModel?.player_id;
           if (!playerId) throw new Error("Erro de ID de jogador");
 
+          const payload = { 
+              amount: value, 
+              userId: playerId,
+              type: isGift ? 'gift' : 'chat_media',
+              modelId: currentChatModel.model_id,
+              mediaId: msgId 
+          };
+
           const response = await fetch('/api/checkout/hub', {
               method: 'POST', 
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                  amount: value, 
-                  userId: playerId,
-                  type: isGift ? 'gift' : 'chat_media',
-                  modelId: currentChatModel.model_id,
-                  mediaId: msgId 
-              }),
+              body: JSON.stringify(payload),
           });
           
+          const data = await response.json();
+
           if (!response.ok) {
-              const errData = await response.json();
-              console.error("Erro da API Hub:", errData);
-              throw new Error("Erro API Pix");
+              throw new Error(data.message || data.error || "Erro API Pix");
           }
 
-          const data = await response.json();
-          
-          setPixData({ qrcode: data.qrcode, qrcodeUrl: data.qrcodeUrl, value, msgId, isGift, giftMsg });
-          if(isGift) setShowGiftModal(false);
-          setShowPixModal(true);
-      } catch (error) {
-          console.error(error);
-          alert("Ocorreu um erro ao gerar a chave PIX no momento. Verifique se o token de pagamento está configurado na Vercel.");
-      } finally { setGeneratingPix(false); }
+          if (data.qr_code_base64 || data.qrCodeBase64) {
+              setPixData({ 
+                  qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, 
+                  qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, 
+                  txId: data.id || data.transaction_id,
+                  value: value,
+                  msgId: msgId,
+                  isGift: isGift,
+                  giftMsg: giftMsg
+              });
+              if(isGift) setShowGiftModal(false);
+              setShowPixModal(true);
+          } else {
+              throw new Error("A API não retornou o QR Code.");
+          }
+      } catch (error: any) {
+          console.error("ERRO COMPLETO:", error);
+          alert(`Falha na comunicação com o banco: ${error.message}`);
+      } finally { 
+          setGeneratingPix(false); 
+      }
   };
 
   const confirmPayment = async () => {
@@ -299,9 +329,10 @@ export default function PlayerPersonalHub() {
           };
 
           if (pixData.isGift) {
+              const giftDisplay = `Enviou um presente: ${pixData.giftMsg}`;
               await fetch(`${supabaseUrl}/rest/v1/Messages`, {
                   method: 'POST', headers,
-                  body: JSON.stringify({ chat_id: currentChatModel.chat_id, sender_type: 'player', content: pixData.giftMsg, is_gift: true, price: pixData.value })
+                  body: JSON.stringify({ chat_id: currentChatModel.chat_id, sender_type: 'player', content: giftDisplay, is_gift: true, price: pixData.value, media_type: 'text' })
               });
               await processPaymentLogic();
               alert("Presente enviado com sucesso!");
@@ -317,7 +348,11 @@ export default function PlayerPersonalHub() {
   };
 
   const handleCopyPix = () => {
-      if (pixData?.qrcode) { navigator.clipboard.writeText(pixData.qrcode); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+      if (pixData?.qrCodeCopiaCola) { 
+          navigator.clipboard.writeText(pixData.qrCodeCopiaCola); 
+          setCopied(true); 
+          setTimeout(() => setCopied(false), 2000); 
+      }
   };
 
   if (initialLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic animate-pulse">Acessando Universo Privado...</h2></div>;
@@ -443,7 +478,7 @@ export default function PlayerPersonalHub() {
                                       <Gift size={32} className="text-amber-400 mb-2"/>
                                       <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest">Presente Enviado!</p>
                                       <p className="text-xl font-black text-white mt-1">R$ {msg.price?.toFixed(2)}</p>
-                                      {msg.content && <p className="text-xs italic text-white/70 mt-2">"{msg.content}"</p>}
+                                      {msg.content && <p className="text-xs italic text-white/70 mt-2">{msg.content.replace("Enviou um presente: ", "")}</p>}
                                   </div>
                               ) : (
                                   <div className={`max-w-[80%] p-3 text-sm rounded-2xl ${msg.sender_type === 'player' ? 'bg-[#D946EF] text-white rounded-tr-sm' : 'bg-white/10 text-white rounded-tl-sm border border-white/5 shadow-lg'}`}>
@@ -460,7 +495,7 @@ export default function PlayerPersonalHub() {
                                       {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
                                           <div className="mt-2">
                                               {msg.is_locked && !msg.is_unlocked ? (
-                                                  <div onClick={() => generatePix(msg.price, msg.id)} className="relative aspect-square rounded-xl overflow-hidden border border-[#D946EF]/50 bg-black flex flex-col items-center justify-center text-center cursor-pointer group shadow-lg">
+                                                  <div onClick={() => generatePix(msg.price, msg.id)} className="relative aspect-square rounded-xl overflow-hidden border border-[#D946EF]/50 bg-black flex flex-col items-center justify-center text-center cursor-pointer group shadow-lg hover:border-[#D946EF] transition-all">
                                                       <div className="absolute inset-0 bg-black/80 backdrop-blur-xl group-hover:backdrop-blur-lg transition-all"></div>
                                                       <Lock size={32} className="text-[#D946EF] relative z-10 mb-2 group-hover:scale-110 transition-transform" />
                                                       <p className="text-[10px] font-black uppercase text-white relative z-10">Mídia Exclusiva</p>
@@ -517,21 +552,30 @@ export default function PlayerPersonalHub() {
                           <Gift size={32} className="text-amber-500"/>
                       </div>
                       <h2 className="text-xl font-black uppercase text-amber-500 italic">Mimar a Musa</h2>
-                      <p className="text-[10px] text-white/50 font-bold uppercase mt-2">Envie um presente para @{currentChatModel?.slug}</p>
+                      <p className="text-[10px] text-white/50 font-bold uppercase mt-2">Escolha um presente para @{currentChatModel?.slug}</p>
                   </div>
                   
                   <div className="space-y-5">
-                      <div>
-                          <label className="text-[10px] font-black uppercase text-white/40 block ml-2 mb-2">Valor do Presente (Mín. R$ 10,00)</label>
-                          <input 
-                              type="text" 
-                              value={formattedGiftAmount} 
-                              onChange={handleGiftPriceInput} 
-                              className="w-full bg-black border border-amber-500/50 rounded-full py-4 px-6 text-amber-400 font-black text-2xl text-center outline-none focus:border-amber-500 transition-colors" 
-                          />
+                      <div className="grid grid-cols-2 gap-3">
+                          {[
+                              { name: "Beijo Doce 💋", value: 10 },
+                              { name: "Drink Especial 🍸", value: 30 },
+                              { name: "Lingerie Nova 👙", value: 50 },
+                              { name: "Patrocínio VIP 👑", value: 150 }
+                          ].map((gift) => (
+                              <button 
+                                  key={gift.value}
+                                  onClick={() => setSelectedGift(gift.value)}
+                                  className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${selectedGift === gift.value ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-black border-white/10 text-white/50 hover:border-amber-500/50'}`}
+                              >
+                                  <span className="text-[10px] font-black uppercase mb-1">{gift.name}</span>
+                                  <span className="text-sm font-black">R$ {gift.value},00</span>
+                              </button>
+                          ))}
                       </div>
+
                       <div>
-                          <label className="text-[10px] font-black uppercase text-white/40 block ml-2 mb-2">Mensagem (Opcional)</label>
+                          <label className="text-[10px] font-black uppercase text-white/40 block ml-2 mb-2">Sua Mensagem (Opcional)</label>
                           <input 
                               type="text" 
                               value={giftMessage} 
@@ -541,9 +585,7 @@ export default function PlayerPersonalHub() {
                           />
                       </div>
                       <button onClick={() => {
-                          const val = Number(giftAmount) / 100;
-                          if(val < 10) return alert("Mínimo de R$ 10,00 para presentes.");
-                          generatePix(val, undefined, true, giftMessage);
+                          generatePix(selectedGift, undefined, true, giftMessage || "Mandei um mimo!");
                       }} disabled={generatingPix} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black py-5 rounded-2xl font-black uppercase text-xs shadow-lg flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
                           {generatingPix ? <Loader2 className="animate-spin" size={18}/> : <><Gift size={18}/> Gerar PIX Presente</>}
                       </button>
@@ -561,10 +603,14 @@ export default function PlayerPersonalHub() {
                   <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mb-8">Liberação Automática</p>
 
                   <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 shadow-[0_0_30px_rgba(217,70,239,0.3)] flex items-center justify-center">
-                      <img src={pixData.qrcodeUrl} alt="QR Code PIX" className="w-full h-full object-contain" />
+                      <img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} alt="QR Code PIX" className="w-full h-full object-contain" />
                   </div>
 
                   <p className="text-3xl font-black text-white mb-6">R$ {pixData.value.toFixed(2)}</p>
+
+                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
+                      ⏱ {formatTime(pixTimeLeft)}
+                  </div>
 
                   <div className="space-y-3">
                       <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-white/10 transition-all">
