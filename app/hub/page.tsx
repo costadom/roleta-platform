@@ -121,8 +121,8 @@ export default function PlayerPersonalHub() {
         const ids = pData.map((p:any) => p.id).filter((id:any) => id && id.length > 20);
 
         if (ids.length > 0) {
-            checkNotifications(ids); // Checa mensagens não lidas
-            setInterval(() => checkNotifications(ids), 10000); // Atualiza a cada 10s
+            checkNotifications(ids); 
+            setInterval(() => checkNotifications(ids), 10000); 
 
             const [vRes, uRes] = await Promise.all([
                 fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${ids.join(',')})&select=*`, { headers }),
@@ -170,7 +170,6 @@ export default function PlayerPersonalHub() {
                 const msgs = await msgRes.json();
                 setMessages(msgs);
                 
-                // Marca como lida
                 const unread = msgs.filter((m:any) => m.sender_type === 'model' && !m.is_read);
                 if (unread.length > 0) {
                     setUnreadCounts(prev => ({ ...prev, [modelId]: 0 }));
@@ -337,7 +336,6 @@ export default function PlayerPersonalHub() {
             </div>
         </section>
 
-        {/* ... (SEÇÕES DE VÍDEO E GALERIA MANTIDAS IGUAIS) ... */}
         <section className="mb-16 animate-in slide-in-from-bottom-4 duration-700">
             <h2 className="text-lg font-black uppercase text-white/40 mb-6 flex items-center gap-3 tracking-widest"><Video size={18}/> Meus Vídeos Encomendados</h2>
             <div className="grid gap-6">
