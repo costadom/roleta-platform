@@ -226,26 +226,43 @@ export default function PlayerPersonalHub() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
+  // 🔥 SISTEMA DE PAGAMENTO OTIMIZADO PARA A ROTA /api/checkout/hub 🔥
   const handleGiftPriceInput = (e: any) => { setGiftAmount(e.target.value.replace(/\D/g, "")); };
   const formattedGiftAmount = useMemo(() => { return (Number(giftAmount) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [giftAmount]);
 
   const generatePix = async (value: number, msgId?: string, isGift = false, giftMsg = "") => {
       setGeneratingPix(true);
       try {
-          const response = await fetch('/api/checkout/pix', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ value: value, description: isGift ? `Presente VIP LabzSexy` : `Desbloqueio de Mídia VIP` }),
+          const playerId = currentChatModel?.player_id;
+          if (!playerId) throw new Error("Erro de ID de jogador");
+
+          // ENVIA EXATAMENTE OS DADOS QUE A ROTA HUB ESPERA
+          const response = await fetch('/api/checkout/hub', {
+              method: 'POST', 
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  amount: value, 
+                  userId: playerId,
+                  type: isGift ? 'gift' : 'chat_media',
+                  modelId: currentChatModel.model_id,
+                  mediaId: msgId // Passamos o ID da mensagem como ID da mídia no chat
+              }),
           });
           
-          if (!response.ok) throw new Error("Erro API Pix");
+          if (!response.ok) {
+              const errData = await response.json();
+              console.error("Erro da API Hub:", errData);
+              throw new Error("Erro API Pix");
+          }
+
           const data = await response.json();
           
           setPixData({ qrcode: data.qrcode, qrcodeUrl: data.qrcodeUrl, value, msgId, isGift, giftMsg });
           if(isGift) setShowGiftModal(false);
           setShowPixModal(true);
       } catch (error) {
-          // 🔥 CORREÇÃO AQUI: APENAS AVISA O ERRO, SEM REDIRECIONAR PRO WHATSAPP 🔥
-          alert("Ocorreu um erro ao gerar a chave PIX no momento. Por favor, tente novamente em instantes.");
+          console.error(error);
+          alert("Ocorreu um erro ao gerar a chave PIX no momento. Verifique se o token de pagamento está configurado na Vercel.");
       } finally { setGeneratingPix(false); }
   };
 
@@ -255,7 +272,6 @@ export default function PlayerPersonalHub() {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
           
-          // 🔥 LÓGICA MASTER DE AFILIADO E REPASSE 70/30 🔥
           const processPaymentLogic = async () => {
               const modelRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}&select=balance,referred_by,created_at`, { headers });
               const mData = await modelRes.json();
@@ -313,7 +329,6 @@ export default function PlayerPersonalHub() {
           <button onClick={() => router.push('/vitrine')} className="p-3 bg-white/5 rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
           <div className="text-center"><h1 className="text-lg sm:text-xl font-black uppercase italic text-[#D946EF] tracking-tighter">MEU <span className="text-white">HUB VIP</span></h1><p className="text-[9px] text-white/30 uppercase font-black tracking-widest">{playerPhone}</p></div>
           <div className="flex items-center gap-4">
-              {/* 🔥 SINO COM ONCLICK 🔥 */}
               <div className="relative cursor-pointer" onClick={handleBellClick}>
                   <Bell size={20} className={totalUnread > 0 ? "text-[#D946EF] animate-pulse" : "text-white/30"} />
                   {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-black">{totalUnread}</span>}
@@ -567,7 +582,7 @@ export default function PlayerPersonalHub() {
           </div>
       )}
 
-      {/* MODAL DE FOTO NORMAL */}
+      {/* MODAL DE FOTO NORMAL (MANTIDO) */}
       {viewingMedia && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
              <button onClick={() => setViewingMedia(null)} className="absolute top-8 right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full transition-colors z-[310]"><X size={24}/></button>
