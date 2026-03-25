@@ -122,6 +122,7 @@ export default function ModelProfile() {
     } catch (e) { alert("Falha na conexão."); setCheckoutData(null); } finally { setProcessingPix(false); }
   };
 
+  // 🔥 POLLING SEGURO DO HUB DA MUSA 🔥
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (checkoutData && pixData && !paymentSuccess && playerId) {
@@ -131,10 +132,24 @@ export default function ModelProfile() {
           const phone = localStorage.getItem("labz_player_phone");
           if (checkoutData.type === 'photo') {
             const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&media_id=eq.${checkoutData.itemInfo.id}`, { headers }).then(r => r.json());
-            if (res && res.length > 0) { clearInterval(interval); handlePaymentApproved(); }
+            if (res && res.length > 0) { 
+                clearInterval(interval); 
+                setPaymentSuccess(true);
+                setTimeout(() => {
+                  const itemInfo = checkoutData?.itemInfo;
+                  setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
+                  setViewingMedia(itemInfo); setLiked(false);
+                }, 2500);
+            }
           } else if (checkoutData.type === 'video') {
             const res = await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${checkoutData.itemInfo.requestId}&select=status`, { headers }).then(r => r.json());
-            if (res && res[0]?.status === 'pago') { clearInterval(interval); handlePaymentApproved(); }
+            if (res && res[0]?.status === 'pago') { 
+                clearInterval(interval); 
+                setPaymentSuccess(true);
+                setTimeout(() => {
+                  setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
+                }, 2500);
+            }
           }
         } catch (e) {}
       }, 3000); 
@@ -142,18 +157,9 @@ export default function ModelProfile() {
     return () => clearInterval(interval);
   }, [checkoutData, pixData, paymentSuccess, playerId]);
 
-  const handlePaymentApproved = () => {
-    setPaymentSuccess(true);
-    setTimeout(() => {
-      const itemInfo = checkoutData?.itemInfo; const type = checkoutData?.type;
-      setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
-      if (type === 'photo') { setViewingMedia(itemInfo); setLiked(false); }
-    }, 2500); 
-  };
-
   const handleChatClick = () => {
     if (!isLoggedIn) return setShowAuth(true);
-    router.push('/hub'); // Redireciona o fã pro painel dele onde a sala de chat com a Musa já existe
+    router.push('/hub');
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /></div>;
@@ -166,7 +172,6 @@ export default function ModelProfile() {
       
       {/* 🔥 HEADER / HERO SECTION OTIMIZADO 🔥 */}
       <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end bg-black">
-        {/* A Capa agora respeita os limites e fica mais natural sem "borrar" embaixo de forma agressiva */}
         <div className="absolute inset-0 w-full h-full">
             <img src={modelConfig?.bg_url} className="w-full h-full object-cover opacity-60" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
@@ -178,7 +183,6 @@ export default function ModelProfile() {
         </div>
 
         <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto pb-8">
-          {/* FOTO PERFIL */}
           <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-black mx-auto md:mx-0">
             <img src={modelConfig?.profile_url} className="w-full h-full object-cover" />
           </div>
@@ -187,7 +191,6 @@ export default function ModelProfile() {
             <h1 className="text-3xl sm:text-5xl font-black uppercase italic tracking-tighter drop-shadow-2xl mb-2 sm:mb-3">{modelConfig?.model_name || model?.slug}</h1>
             <p className="text-white/80 text-xs sm:text-sm italic max-w-xl mb-6 leading-relaxed px-4 md:px-0 drop-shadow-md">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
             
-            {/* 🔥 BOTÕES DE AÇÃO: ROLETA, RASPADINHA E CHAT COMIGO 🔥 */}
             <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-auto">
                 <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px] order-1 md:order-last">
                     <MessageCircle size={16} className="text-[#D946EF]"/> Chat Comigo!
@@ -252,7 +255,7 @@ export default function ModelProfile() {
         </div>
       )}
 
-      {/* CHECKOUT MODERNIZADO COM URGÊNCIA E INSTRUÇÕES */}
+      {/* CHECKOUT MODERNIZADO E BLINDADO */}
       {checkoutData && (
           <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
              <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md text-center relative shadow-2xl">
@@ -279,31 +282,27 @@ export default function ModelProfile() {
                           ) : null}
                         </div>
 
-                        {/* CRONÔMETRO DE URGÊNCIA */}
                         {pixData && (
                           <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
                               ⏱ {formatTime(pixTimeLeft)}
                           </div>
                         )}
 
-                        <div className="text-left bg-white/5 border border-white/10 p-5 rounded-2xl mb-6">
-                            <p className="text-[9px] text-[#D946EF] font-black uppercase mb-2">Instruções:</p>
-                            <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Abra o app do seu banco.<br/>2. Escolha "Pagar com QR Code".<br/>3. Escaneie a imagem acima.<br/>4. O conteúdo libera automaticamente!</p>
-                        </div>
-
                         {pixData && (
                           <button onClick={() => { 
                             navigator.clipboard.writeText(pixData.qrCodeCopiaCola); 
                             setCopied(true);
                             setTimeout(() => setCopied(false), 2000);
-                          }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                             {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+                          }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all mb-4">
+                             {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copiar Código PIX"}
                           </button>
                         )}
                         
-                        <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse flex items-center justify-center gap-2">
-                           <Loader2 size={10} className="animate-spin" /> Aguardando confirmação do banco...
-                        </p>
+                        {/* 🔥 AVISO DE AUTOMAÇÃO (SUBSTITUI O BOTÃO FALSO) 🔥 */}
+                        <div className="bg-[#D946EF]/10 border border-[#D946EF]/30 p-4 rounded-xl flex items-center justify-center gap-3">
+                            <Loader2 size={16} className="animate-spin text-[#D946EF]" /> 
+                            <span className="text-[9px] text-[#D946EF] uppercase font-black tracking-widest">Aguardando Confirmação Automática...</span>
+                        </div>
                     </>
                 )}
              </div>
@@ -320,8 +319,6 @@ export default function ModelProfile() {
              </div>
           </div>
       )}
-
-      <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push('/hub'); }} className="fixed bottom-6 right-6 z-[99] bg-[#D946EF] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center group border border-white/20"><User size={24} /><span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 font-black uppercase text-xs tracking-widest">Meu Perfil VIP</span></button>
 
       {showAuth && <AuthModal isOpen={true} onClose={() => setShowAuth(false)} />}
       
