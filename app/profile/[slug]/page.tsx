@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles
+  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles, MessageCircle
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
@@ -78,7 +78,6 @@ export default function ModelProfile() {
     } catch (e) { console.error("Erro", e); } finally { setLoading(false); }
   }
 
-  // Cronômetro do Pix
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (pixData && !paymentSuccess && pixTimeLeft > 0) {
@@ -151,71 +150,86 @@ export default function ModelProfile() {
     }, 2500); 
   };
 
+  const handleChatClick = () => {
+    if (!isLoggedIn) return setShowAuth(true);
+    // Redireciona o cliente para o Hub dele, onde a lógica de chat já está montada
+    router.push('/hub');
+  };
+
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /></div>;
   if (!model) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase text-center p-8">Musa não encontrada no Labz.</div>;
 
   const modelConfig = Array.isArray(model?.Configs) ? model.Configs[0] : model?.Configs;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative">
-      <div className="relative w-full h-[55vh] overflow-hidden">
+    <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden">
+      
+      {/* 🔥 HEADER / HERO SECTION OTIMIZADO PARA MOBILE 🔥 */}
+      <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end">
         <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-105" style={{ backgroundImage: `url(${modelConfig?.bg_url})` }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent" />
+        
         <div className="absolute top-8 left-8 flex flex-wrap gap-3 sm:gap-4 z-50">
             <button onClick={() => router.push('/vitrine')} className="p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
             <button onClick={() => router.push('/vitrine')} className="px-5 sm:px-6 py-3 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[10px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all"><LayoutGrid size={16}/> <span className="hidden sm:inline">Vitrine</span></button>
         </div>
-        <div className="absolute bottom-0 left-0 w-full p-6 sm:p-10 flex flex-col md:flex-row items-end gap-6 sm:gap-8">
-          <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-48 md:h-48 rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.4)] shrink-0 bg-black">
+
+        <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto">
+          {/* FOTO PERFIL CENTRALIZADA NO MOBILE */}
+          <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-48 md:h-48 rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.4)] shrink-0 bg-black mx-auto md:mx-0">
             <img src={modelConfig?.profile_url} className="w-full h-full object-cover" />
           </div>
-          <div className="flex-1 text-left pb-2 sm:pb-4 w-full">
+          
+          <div className="flex-1 text-center md:text-left pb-2 sm:pb-4 w-full flex flex-col items-center md:items-start">
             <h1 className="text-4xl sm:text-5xl font-black uppercase italic tracking-tighter drop-shadow-2xl mb-3 sm:mb-4">{modelConfig?.model_name || model?.slug}</h1>
-            <p className="text-white/70 text-sm sm:text-base italic max-w-xl mb-6 leading-relaxed">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
+            <p className="text-white/70 text-sm sm:text-base italic max-w-xl mb-6 leading-relaxed px-4 md:px-0">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
             
-            {/* 🔥 OS DOIS BOTÕES: ROLETA E RASPADINHA LADO A LADO 🔥 */}
-            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-max">
-                <button onClick={() => router.push(`/game/${slug}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all">
-                    <Gamepad2 size={18}/> Jogar Roleta VIP
+            {/* 🔥 BOTÕES DE AÇÃO LADO A LADO 🔥 */}
+            <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-max">
+                <button onClick={() => router.push(`/game/${slug}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 sm:px-8 py-4 bg-[#D946EF] rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all min-w-[140px]">
+                    <Gamepad2 size={16}/> Roleta
                 </button>
-                <button onClick={() => router.push(`/game/${slug}/raspadinha`)} className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all">
-                    <Sparkles size={18} fill="currentColor"/> Raspadinha Sexy
+                <button onClick={() => router.push(`/game/${slug}/raspadinha`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 sm:px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all min-w-[140px]">
+                    <Sparkles size={16} fill="currentColor"/> Raspadinha
+                </button>
+                {/* BOTÃO DO CHAT */}
+                <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl text-[9px] sm:text-[10px] font-black uppercase hover:bg-white/20 transition-all shadow-lg min-w-[140px]">
+                    <MessageCircle size={16}/> Chat Comigo!
                 </button>
             </div>
-
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6 sm:p-8">
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-6 sm:p-8 mb-12 flex flex-col md:flex-row gap-6 sm:gap-8 items-center shadow-2xl relative overflow-hidden">
-            <div className="flex-1">
-                <div className="flex items-center gap-2 mb-4 text-[#D946EF]"><Video size={20} fill="currentColor"/><h2 className="text-xl font-black uppercase italic">Vídeos Exclusivos</h2></div>
+      <div className="max-w-7xl mx-auto p-4 sm:p-8 mt-4 sm:mt-0">
+        <div className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-6 sm:p-8 mb-8 sm:mb-12 flex flex-col md:flex-row gap-6 sm:gap-8 items-center shadow-2xl relative overflow-hidden">
+            <div className="flex-1 text-center md:text-left">
+                <div className="flex items-center justify-center md:justify-start gap-2 mb-4 text-[#D946EF]"><Video size={20} fill="currentColor"/><h2 className="text-xl font-black uppercase italic">Vídeos Exclusivos</h2></div>
                 <p className="text-white/60 text-sm italic mb-6 leading-relaxed">Peça um vídeo personalizado. Entrega garantida em 2 dias úteis.</p>
             </div>
             <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); setShowVideoModal(true); }} className="w-full md:w-auto bg-white text-black px-10 py-6 rounded-3xl font-black uppercase text-xs hover:bg-[#D946EF] transition-all">Encomendar Vídeo</button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-8">
           {media.map((item) => {
             const isUnlocked = item.price === 0 || unlockedIds.includes(item.id);
             return (
-              <div key={item.id} className="flex flex-col gap-4 group">
-                <div className="relative aspect-[3/4] rounded-[2.5rem] overflow-hidden border border-white/5 bg-[#0a0a0a] cursor-pointer shadow-2xl"
+              <div key={item.id} className="flex flex-col gap-3 sm:gap-4 group">
+                <div className="relative aspect-[3/4] rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden border border-white/5 bg-[#0a0a0a] cursor-pointer shadow-2xl"
                     onClick={() => { 
                         if(!isLoggedIn) return setShowAuth(true); 
                         if(!isUnlocked) { openCheckout('photo', item.price, item); }
                         else { setViewingMedia(item); setLiked(false); }
                     }}>
-                    <img src={item.url} className={`w-full h-full object-cover transition-all duration-1000 ${!isUnlocked ? 'blur-3xl brightness-50 scale-125' : 'group-hover:scale-110'}`} />
+                    <img src={item.url} className={`w-full h-full object-cover transition-all duration-1000 ${!isUnlocked ? 'blur-2xl sm:blur-3xl brightness-50 scale-125' : 'group-hover:scale-110'}`} />
                     {!isUnlocked && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                            <Lock size={24} className="text-[#D946EF] mb-2"/><div className="bg-[#D946EF] px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-all">Liberar R$ {item.price.toFixed(2).replace('.', ',')}</div>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+                            <Lock size={20} className="text-[#D946EF] mb-2 sm:mb-3"/><div className="bg-[#D946EF] px-4 sm:px-5 py-2 rounded-full text-[8px] sm:text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-all">Liberar R$ {item.price.toFixed(2).replace('.', ',')}</div>
                         </div>
                     )}
-                    {item.price === 0 && <div className="absolute top-5 left-5 bg-emerald-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Livre</div>}
+                    {item.price === 0 && <div className="absolute top-4 left-4 bg-emerald-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Livre</div>}
                 </div>
-                {item.caption && <p className="text-xs leading-relaxed italic px-4 text-white/70">{item.caption}</p>}
+                {item.caption && <p className="text-[10px] sm:text-xs leading-relaxed italic px-2 sm:px-4 text-white/70 text-center sm:text-left line-clamp-2">{item.caption}</p>}
               </div>
             );
           })}
@@ -224,14 +238,14 @@ export default function ModelProfile() {
 
       {showVideoModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/95 backdrop-blur-xl">
-            <div className="bg-[#0a0a0a] border border-white/10 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-lg shadow-2xl relative">
-                <button onClick={() => setShowVideoModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/20 hover:text-white"><X size={28}/></button>
-                <h2 className="text-2xl font-black uppercase italic mb-6">Seu Pedido <span className="text-[#D946EF]">VIP</span></h2>
-                <div className="grid grid-cols-3 gap-2 mb-8">
-                    {[3, 5, 10].map(d => (<button key={d} onClick={() => setSelectedDuration(d as any)} className={`py-4 rounded-2xl border text-[10px] font-black transition-all ${selectedDuration === d ? 'bg-[#D946EF] border-[#D946EF] text-white' : 'bg-black border-white/10 text-white/40'}`}>{d} MIN<br/>R$ {pricing[d as keyof typeof pricing].toFixed(2)}</button>))}
+            <div className="bg-[#0a0a0a] border border-white/10 p-6 sm:p-10 rounded-[3rem] sm:rounded-[3.5rem] w-full max-w-lg shadow-2xl relative">
+                <button onClick={() => setShowVideoModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/20 hover:text-white"><X size={24}/></button>
+                <h2 className="text-xl sm:text-2xl font-black uppercase italic mb-6">Seu Pedido <span className="text-[#D946EF]">VIP</span></h2>
+                <div className="grid grid-cols-3 gap-2 mb-6 sm:mb-8">
+                    {[3, 5, 10].map(d => (<button key={d} onClick={() => setSelectedDuration(d as any)} className={`py-3 sm:py-4 rounded-2xl border text-[9px] sm:text-[10px] font-black transition-all ${selectedDuration === d ? 'bg-[#D946EF] border-[#D946EF] text-white' : 'bg-black border-white/10 text-white/40'}`}>{d} MIN<br/>R$ {pricing[d as keyof typeof pricing].toFixed(2)}</button>))}
                 </div>
-                <textarea value={videoDesc} onChange={(e) => setVideoDesc(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none focus:border-[#D946EF] h-40 resize-none mb-8 custom-scrollbar" placeholder="Descreva os detalhes da sua encomenda..."/>
-                <button onClick={() => { if(videoDesc.length < 15) return alert("Descreva melhor seu pedido."); setShowVideoModal(false); openCheckout('video', pricing[selectedDuration], { duration: selectedDuration, description: videoDesc }); }} className="w-full bg-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center justify-center gap-3 hover:bg-[#f062ff] transition-all"><QrCode size={18}/> Ir para Pagamento</button>
+                <textarea value={videoDesc} onChange={(e) => setVideoDesc(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-5 sm:p-6 text-xs sm:text-sm text-white outline-none focus:border-[#D946EF] h-32 sm:h-40 resize-none mb-6 sm:mb-8 custom-scrollbar" placeholder="Descreva os detalhes da sua encomenda..."/>
+                <button onClick={() => { if(videoDesc.length < 15) return alert("Descreva melhor seu pedido."); setShowVideoModal(false); openCheckout('video', pricing[selectedDuration], { duration: selectedDuration, description: videoDesc }); }} className="w-full bg-[#D946EF] text-white py-5 sm:py-6 rounded-2xl font-black uppercase text-[10px] sm:text-xs shadow-2xl flex items-center justify-center gap-3 hover:bg-[#f062ff] transition-all"><QrCode size={16}/> Ir para Pagamento</button>
             </div>
         </div>
       )}
@@ -266,7 +280,7 @@ export default function ModelProfile() {
                         {/* CRONÔMETRO DE URGÊNCIA */}
                         {pixData && (
                           <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
-                             ⏱ {formatTime(pixTimeLeft)}
+                              ⏱ {formatTime(pixTimeLeft)}
                           </div>
                         )}
 
@@ -305,7 +319,7 @@ export default function ModelProfile() {
           </div>
       )}
 
-      <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push('/hub'); }} className="fixed bottom-6 right-6 z-[999] bg-[#D946EF] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center group border border-white/20"><User size={24} /><span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 font-black uppercase text-xs tracking-widest">Meu Perfil VIP</span></button>
+      <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push('/hub'); }} className="fixed bottom-6 right-6 z-[99] bg-[#D946EF] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center group border border-white/20"><User size={24} /><span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 font-black uppercase text-xs tracking-widest">Meu Perfil VIP</span></button>
 
       {showAuth && <AuthModal isOpen={true} onClose={() => setShowAuth(false)} />}
       
