@@ -7,15 +7,15 @@ import {
   RoomAudioRenderer, 
   useTracks, 
   VideoTrack,
-  useChat
+  useChat,
+  useRoomContext // Importante para enviar sinais
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, PublishDataOptions } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, MessageCircle, Send, Gift, Lock, Wallet } from "lucide-react";
+import { Loader2, ArrowLeft, MessageCircle, Send, Gift, Lock, Wallet, X } from "lucide-react";
 
 // 🔥 COMPONENTE QUE PUXA O VÍDEO DA MODELO 🔥
 function ModelVideoFeed() {
-  // Pega as câmeras da sala. Como o cliente não transmite, ele pega a da modelo.
   const tracks = useTracks([Track.Source.Camera]);
   const remoteTrack = tracks.find(t => !t.participant.isLocal);
 
@@ -27,11 +27,75 @@ function ModelVideoFeed() {
           className="w-full h-full object-cover" 
         />
       ) : (
-        <div className="flex flex-col items-center gap-4 text-[#D946EF]/50">
+        <div className="flex flex-col items-center gap-4 text-[#D946EF]/50 z-20">
           <Loader2 size={48} className="animate-spin" />
-          <span className="font-black uppercase tracking-widest text-xs animate-pulse">Aguardando a modelo iniciar...</span>
+          <span className="font-black uppercase tracking-widest text-xs animate-pulse text-center px-6">Aguardando a modelo iniciar...<br/>(Verifique se ela está transmitindo no Studio)</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// 🔥 BOTÕES FLUTUANTES REDESENHADOS E LÓGICA DE SINAL 🔥
+function FloatingActions({ clientName }: { clientName: string }) {
+  // Pegamos o contexto da sala para enviar dados
+  const room = useRoomContext();
+  const [requestingPrivate, setRequestingPrivate] = useState(false);
+
+  const handleRequestPrivate = async () => {
+    if (requestingPrivate) return;
+    setRequestingPrivate(true);
+    
+    // Payload da mensagem
+    const payload = JSON.stringify({
+      type: "PRIVATE_REQUEST",
+      senderName: clientName,
+      timestamp: Date.now()
+    });
+
+    const encoder = new TextEncoder();
+    const data = encoder.encode(payload);
+
+    try {
+      // Envia o sinal para todos na sala (a modelo vai ouvir)
+      await room.localParticipant.publishData(data, { reliable: true });
+      alert("Pedido de Show Privado enviado! Aguardando aceite da modelo...");
+    } catch (error) {
+      console.error("Erro ao enviar pedido:", error);
+      alert("Falha ao enviar pedido. Tente novamente.");
+    } finally {
+      // Simulando um timeout para o botão voltar ao normal se ela não aceitar
+      setTimeout(() => setRequestingPrivate(false), 30000); 
+    }
+  };
+
+  return (
+    <div className="absolute bottom-6 right-6 z-30 flex items-center gap-3 bg-black/60 backdrop-blur-lg p-2 rounded-full border border-white/10 shadow-2xl">
+      <button 
+        onClick={() => alert("Janela de Presentes em breve!")} 
+        className="w-14 h-14 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white transition-all group border border-white/5"
+        title="Enviar Presente"
+      >
+        <Gift size={24} className="text-[#D946EF] group-hover:scale-110 transition-transform" />
+      </button>
+
+      <button 
+        onClick={handleRequestPrivate} 
+        disabled={requestingPrivate}
+        className="flex items-center gap-3 bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-white px-7 py-4 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all disabled:opacity-50"
+      >
+        {requestingPrivate ? (
+          <Loader2 size={20} className="animate-spin" />
+        ) : (
+          <Lock size={20} className="animate-pulse" />
+        )}
+        <div className="flex flex-col items-start leading-none">
+          <span className="text-xs font-black uppercase tracking-widest text-shadow-sm">
+            {requestingPrivate ? 'Aguardando...' : 'Chamar Privado'}
+          </span>
+          <span className="text-[9px] text-white/90 uppercase font-bold mt-0.5">R$ 3,10 / min</span>
+        </div>
+      </button>
     </div>
   );
 }
@@ -75,15 +139,14 @@ function ClientChat({ clientName }: { clientName: string }) {
             if (isSystemAlert) {
               return (
                 <div key={i} className="bg-gradient-to-r from-amber-500/20 to-transparent border-l-2 border-amber-500 p-3 rounded-r-xl">
-                  <p className="text-amber-400 text-xs font-black uppercase flex items-center gap-2">
+                  <p className="text-amber-400 text-[11px] font-black uppercase flex items-center gap-2">
                     <Gift size={14} className="animate-bounce" /> {msg.message.replace("[SISTEMA] ", "")}
                   </p>
                 </div>
               );
             }
 
-            // Destaca a mensagem se for da Modelo
-            const isModelMessage = msg.from?.identity.includes("modelo") || msg.from?.identity.includes("admin"); // Ajustaremos a regra real depois
+            const isModelMessage = msg.from?.identity.includes("modelo"); 
 
             return (
               <div key={i} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
@@ -130,133 +193,142 @@ function LiveClientContent() {
   const modelSlug = params.slug as string;
 
   const [token, setToken] = useState("");
+  const [roomName, setRoomName] = useState(""); // Nome da sala real buscado na API
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   
-  // No futuro, pegaremos isso do banco de dados/hub
+  // Dados mockados do cliente (pegar do banco no futuro)
   const [clientBalance, setClientBalance] = useState(150.00); 
-  const clientName = "Cliente_" + Math.floor(Math.random() * 1000); // Nome aleatório para teste
+  const [clientName, setClientName] = useState("");
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
   
-  // Usamos o slug da modelo para saber qual sala entrar (ex: live_123xyz)
-  // Como não temos o ID dela aqui ainda, vamos usar uma lógica simplificada para o teste bater com a sala dela
-  const roomName = `live_clp6v2abc000008l41234abcd`; // IMPORTANTE: No futuro, buscaremos o ID real dela baseado no slug
-
   useEffect(() => {
-    // Busca o crachá de ESPECTADOR (isModel=false)
-    const fetchToken = async () => {
-      try {
-        const res = await fetch(`/api/livekit/token?room=${roomName}&username=${encodeURIComponent(clientName)}&isModel=false`);
-        const data = await res.json();
+    // 1. Gera um nome temporário para o cliente e busca o ID real da modelo
+    const initPage = async () => {
+      setLoading(true);
+      const tempName = localStorage.getItem('labz_client_name') || "Fã_" + Math.floor(Math.random() * 10000);
+      localStorage.setItem('labz_client_name', tempName);
+      setClientName(tempName);
 
-        if (data.token) {
-          setToken(data.token);
+      try {
+        // Bate na nossa nova API para pegar o ID da modelo pelo Slug
+        const resModel = await fetch(`/api/models/id-by-slug?slug=${modelSlug}`);
+        const dataModel = await resModel.json();
+
+        if (dataModel.id) {
+          const realRoom = `live_${dataModel.id}`;
+          setRoomName(realRoom);
+
+          // 2. Busca o Token do LiveKit usando a sala CORRETA
+          const resToken = await fetch(`/api/livekit/token?room=${realRoom}&username=${encodeURIComponent(tempName)}&isModel=false`);
+          const dataToken = await resToken.json();
+
+          if (dataToken.token) {
+            setToken(dataToken.token);
+          } else {
+            setError(dataToken.error || "Erro ao gerar acesso ao vídeo.");
+          }
         } else {
-          setError(data.error || "Erro ao gerar token.");
+          setError("Modelo não encontrada ou offline.");
         }
       } catch (err) {
-        setError("Falha na conexão.");
+        console.error(err);
+        setError("Falha na conexão com o servidor.");
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchToken();
-  }, [roomName, clientName]);
+    if (modelSlug) {
+      initPage();
+    }
+  }, [modelSlug]);
 
-  if (error) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
-        <p className="text-red-500 font-bold">{error}</p>
-        <button onClick={() => router.back()} className="mt-4 bg-white/10 px-4 py-2 rounded-full">Voltar</button>
+      <div className="min-h-screen bg-[#050505] text-[#D946EF] flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="animate-spin mb-4" size={50} />
+        <h2 className="text-sm font-black uppercase italic tracking-widest animate-pulse">Conectando à sala VIP de {modelSlug}...</h2>
       </div>
     );
   }
 
-  if (!token) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-[#050505] text-[#D946EF] flex flex-col items-center justify-center">
-        <Loader2 className="animate-spin mb-4" size={50} />
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-10 text-center">
+        <X size={50} className="text-red-500 mb-4" />
+        <p className="text-white/80 font-bold max-w-md">{error}</p>
+        <button onClick={() => router.push('/hub')} className="mt-8 bg-[#D946EF] text-white px-8 py-3 rounded-full font-bold uppercase text-xs tracking-widest shadow-lg">Voltar para o Hub</button>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-full bg-[#050505] flex flex-col overflow-hidden">
-      
-      {/* CABEÇALHO DO CLIENTE */}
-      <header className="h-16 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between px-4 sm:px-6 shrink-0 z-50">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/hub')} className="text-white/50 hover:text-white transition-colors flex items-center gap-2 text-[10px] font-black uppercase">
-            <ArrowLeft size={14} /> Hub
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
-            <h1 className="text-white font-black uppercase tracking-widest text-sm">{modelSlug} <span className="text-[#D946EF]">AO VIVO</span></h1>
-          </div>
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      {token && roomName && (
+        <div className="h-screen w-full bg-[#050505] flex flex-col overflow-hidden">
+          
+          {/* CABEÇALHO DO CLIENTE */}
+          <header className="h-16 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between px-4 sm:px-6 shrink-0 z-50">
+            <div className="flex items-center gap-4">
+              <button onClick={() => router.push('/hub')} className="text-white/50 hover:text-white transition-colors flex items-center gap-2 text-[10px] font-black uppercase">
+                <ArrowLeft size={14} /> Hub
+              </button>
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span></span>
+                <h1 className="text-white font-black uppercase tracking-widest text-sm">{modelSlug} <span className="text-[#D946EF] italic">AO VIVO</span></h1>
+              </div>
+            </div>
+
+            {/* CARTEIRA DO CLIENTE */}
+            <div className="flex items-center gap-2.5 bg-white/5 border border-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/10 transition-colors">
+              <Wallet size={16} className="text-emerald-400" />
+              <span className="text-emerald-400 font-black text-xs">R$ {clientBalance.toFixed(2).replace('.', ',')}</span>
+              <span className="text-[8px] text-white/50 uppercase font-bold ml-1 hidden sm:inline">Comprar +</span>
+            </div>
+          </header>
+
+          <main className="flex-1 relative flex overflow-hidden">
+            <LiveKitRoom
+              video={false} 
+              audio={false} 
+              token={token}
+              serverUrl={livekitUrl}
+              data-lk-theme="default"
+              className="flex flex-col lg:flex-row h-full w-full"
+            >
+              {/* LADO ESQUERDO: VÍDEO DA MODELO */}
+              <div className="flex-1 p-2 sm:p-4 flex flex-col bg-[#050505] relative overflow-hidden">
+                 <div className="w-full h-full relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden bg-black shadow-2xl border border-white/5">
+                    
+                    <ModelVideoFeed />
+                    
+                    {/* Gradiente sutil inferior para garantir leitura dos botões */}
+                    <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/80 to-transparent z-20 pointer-events-none"></div>
+
+                    {/* 🔥 NOVOS BOTÕES FLUTUANTES REDESENHADOS 🔥 */}
+                    <FloatingActions clientName={clientName} />
+                 </div>
+              </div>
+
+              {/* LADO DIREITO: CHAT DO CLIENTE */}
+              <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-[45vh] lg:h-full z-20 bg-[#0a0a0a]">
+                 <ClientChat clientName={clientName} />
+              </div>
+
+              <RoomAudioRenderer />
+            </LiveKitRoom>
+          </main>
+
+          <style jsx global>{`
+            .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+          `}</style>
         </div>
-
-        {/* CARTEIRA DO CLIENTE */}
-        <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/10 transition-colors">
-          <Wallet size={16} className="text-emerald-400" />
-          <span className="text-emerald-400 font-black text-xs">R$ {clientBalance.toFixed(2).replace('.', ',')}</span>
-          <span className="text-[8px] text-white/50 uppercase font-bold ml-1">Comprar +</span>
-        </div>
-      </header>
-
-      <main className="flex-1 relative flex">
-        <LiveKitRoom
-          video={false} // Cliente não liga a câmera
-          audio={false} // Cliente não liga o microfone
-          token={token}
-          serverUrl={livekitUrl}
-          data-lk-theme="default"
-          className="flex flex-col lg:flex-row h-full w-full"
-        >
-          {/* LADO ESQUERDO: VÍDEO DA MODELO E BOTÕES DE AÇÃO */}
-          <div className="flex-1 p-2 sm:p-6 flex flex-col bg-[#050505] relative overflow-hidden">
-             
-             <div className="w-full h-full relative rounded-3xl sm:rounded-[3rem] overflow-hidden bg-black shadow-2xl">
-                {/* Overlay Escuro sutil em cima e embaixo para os botões aparecerem bem */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 z-10 pointer-events-none"></div>
-                
-                {/* Vídeo */}
-                <ModelVideoFeed />
-
-                {/* PAINEL DE BOTÕES DE AÇÃO (Flutuando sobre o vídeo) */}
-                <div className="absolute bottom-6 left-0 right-0 z-20 flex flex-wrap items-center justify-center gap-4 px-4">
-                   <button onClick={() => alert("Lógica de Presente em breve!")} className="flex-1 max-w-[200px] flex items-center justify-center gap-2 bg-[#D946EF]/20 hover:bg-[#D946EF]/40 border border-[#D946EF] text-white px-6 py-4 rounded-2xl backdrop-blur-md transition-all group">
-                     <Gift size={20} className="text-[#D946EF] group-hover:scale-110 transition-transform" />
-                     <div className="flex flex-col items-start">
-                       <span className="text-xs font-black uppercase tracking-widest">Mimar</span>
-                       <span className="text-[9px] text-white/70 uppercase">Enviar Presente</span>
-                     </div>
-                   </button>
-
-                   <button onClick={() => alert("Lógica de Cobrança em breve!")} className="flex-1 max-w-[250px] flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-white px-6 py-4 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all">
-                     <Lock size={20} className="animate-pulse" />
-                     <div className="flex flex-col items-start">
-                       <span className="text-xs font-black uppercase tracking-widest text-shadow-sm">Ir para o Privado</span>
-                       <span className="text-[9px] text-white/90 uppercase font-bold">R$ 3,10 / min</span>
-                     </div>
-                   </button>
-                </div>
-             </div>
-          </div>
-
-          {/* LADO DIREITO: CHAT DO CLIENTE */}
-          <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-[40vh] lg:h-full z-20 bg-[#0a0a0a]">
-             <ClientChat clientName={clientName} />
-          </div>
-
-          <RoomAudioRenderer />
-        </LiveKitRoom>
-      </main>
-
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
-      `}</style>
-    </div>
+      )}
+    </Suspense>
   );
 }
 
