@@ -1,21 +1,34 @@
 "use client";
 
-import React, { useEffect, useState, Suspense, useMemo, Component } from "react";
+import React, { useEffect, useState, Suspense, useMemo, Component, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus
 } from "lucide-react";
 import PlayersManager from "./players";
 
+// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
+const censorText = (text: string) => {
+  if (!text) return text;
+  const forbiddenPatterns = [
+    /whatsapp/gi, /wpp/gi, /zap/gi, /whats/gi, /w a t s/gi,
+    /pix/gi, /p1x/gi, /p i x/gi, /p-i-x/gi,
+    /instagram/gi, /insta/gi, /ig/gi, /@/gi,
+    /email/gi, /e-mail/gi, /gmail/gi, /hotmail/gi,
+    /telegram/gi, /tlg/gi,
+    /(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}[-\s]?\d{4}/g
+  ];
+  let filteredText = text;
+  forbiddenPatterns.forEach(pattern => { filteredText = filteredText.replace(pattern, " [⚠️ DADOS PROTEGIDOS] "); });
+  return filteredText;
+};
+
 // 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
-  }
+  constructor(props: any) { super(props); this.state = { hasError: false, error: null, errorInfo: null }; }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
   componentDidCatch(error: any, errorInfo: any) { console.error("ESPIÃO LABZ PEGOU UM ERRO:", error, errorInfo); }
   render() {
@@ -43,15 +56,15 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha">("finance");
+  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha" | "chat">("finance");
+  
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [videoRequests, setVideoRequests] = useState<any[]>([]);
   const [salesHistory, setSalesHistory] = useState<any[]>([]); 
   const [scratchPhotos, setScratchPhotos] = useState<any[]>([]); 
-
-  const [globalAnnouncement, setGlobalAnnouncement] = useState(""); // 🔥 Variável para o comunicado 🔥
+  const [globalAnnouncement, setGlobalAnnouncement] = useState(""); 
   
   const [modelBalance, setModelBalance] = useState<number>(0);
   const [accumulatedEarnings, setAccumulatedEarnings] = useState<number>(0);
@@ -67,6 +80,7 @@ function DashboardContent() {
   const [bio, setBio] = useState("");
   const [savingHub, setSavingHub] = useState(false);
   const [uploading, setUploading] = useState(false);
+  
   const [galleryPreviewUrl, setGalleryPreviewUrl] = useState<string | null>(null);
   const [selectedGalleryFile, setSelectedGalleryFile] = useState<File | null>(null);
   const [profilePreviewUrl, setProfilePreviewUrl] = useState<string | null>(null);
@@ -80,6 +94,26 @@ function DashboardContent() {
   const [isPaidMedia, setIsPaidMedia] = useState(false);
   const [rawPrice, setRawPrice] = useState(""); 
   const [showRoletaTutorial, setShowRoletaTutorial] = useState(false); 
+
+  // 🔥 ESTADOS DO CHAT DA MODELO 🔥
+  const [chatList, setChatList] = useState<any[]>([]);
+  const [activeChat, setActiveChat] = useState<any | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // 🔥 ESTADOS DE ÁUDIO E MÍDIA DO CHAT 🔥
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const [showMediaModal, setShowMediaModal] = useState(false);
+  const [chatMediaFile, setChatMediaFile] = useState<File | null>(null);
+  const [chatMediaPreview, setChatMediaPreview] = useState<string | null>(null);
+  const [isChatMediaPaid, setIsChatMediaPaid] = useState(false);
+  const [chatMediaPrice, setChatMediaPrice] = useState("");
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -96,7 +130,7 @@ function DashboardContent() {
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()), // 🔥 Carrega o GlobalSettings 🔥
+        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
@@ -107,7 +141,7 @@ function DashboardContent() {
         fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
-      if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); // 🔥 Define a mensagem 🔥
+      if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
       
       if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
@@ -125,7 +159,165 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 ENTREGA DE VÍDEO + REPASSE DA MADRINHA 🔥
+  // 🔥 CARREGAR LISTA DE CHATS DA MODELO 🔥
+  useEffect(() => {
+    if (activeTab === 'chat' && modelId) {
+      loadChatList();
+      const interval = setInterval(loadChatList, 10000); // Polling suave para atualizar lista
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, modelId]);
+
+  // Recarregar mensagens ativas
+  useEffect(() => {
+      if (activeTab === 'chat' && activeChat) {
+          const interval = setInterval(() => openAdminChat(activeChat, false), 5000);
+          return () => clearInterval(interval);
+      }
+  }, [activeChat, activeTab]);
+
+  const loadChatList = async () => {
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+          const res = await fetch(`${supabaseUrl}/rest/v1/Chats?model_id=eq.${modelId}&select=*,Players(whatsapp, id)&order=updated_at.desc`, { headers });
+          if (res.ok) setChatList(await res.json());
+      } catch (e) { console.error("Erro ChatList", e); }
+  };
+
+  const openAdminChat = async (chat: any, scroll = true) => {
+      setActiveChat(chat);
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+          const res = await fetch(`${supabaseUrl}/rest/v1/Messages?chat_id=eq.${chat.id}&order=created_at.asc`, { headers });
+          if (res.ok) setChatMessages(await res.json());
+          if (scroll) setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      } catch (e) { console.error("Erro Mensagens", e); }
+  };
+
+  const handleAdminSendMessage = async (contentStr = "", mediaUrl = null, isLocked = false, price = 0, mType = 'text') => {
+      const textToSend = contentStr || chatInput;
+      if (!textToSend.trim() && !mediaUrl) return;
+      
+      const censored = censorText(textToSend);
+      const msgObj = { 
+          chat_id: activeChat.id, 
+          sender_type: 'model', 
+          content: censored, 
+          media_url: mediaUrl,
+          media_type: mType,
+          is_locked: isLocked,
+          price: price,
+          created_at: new Date().toISOString() 
+      };
+
+      setChatMessages(prev => [...prev, msgObj]);
+      if(!mediaUrl) setChatInput("");
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+          await fetch(`${supabaseUrl}/rest/v1/Messages`, { method: 'POST', headers, body: JSON.stringify(msgObj) });
+          await fetch(`${supabaseUrl}/rest/v1/Chats?id=eq.${activeChat.id}`, { method: 'PATCH', headers, body: JSON.stringify({ updated_at: new Date().toISOString() }) });
+          loadChatList();
+      } catch(e) { console.error("Erro envio", e) }
+  };
+
+  // 🔥 GRAVAÇÃO DE ÁUDIO 🔥
+  const startRecording = async () => {
+      try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = mediaRecorder;
+          audioChunksRef.current = [];
+
+          mediaRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) audioChunksRef.current.push(event.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+              stream.getTracks().forEach(track => track.stop());
+              await uploadAudio(audioBlob);
+          };
+
+          mediaRecorder.start();
+          setIsRecording(true);
+          setRecordingTime(0);
+          timerRef.current = setInterval(() => setRecordingTime(prev => prev + 1), 1000);
+      } catch (err) {
+          alert("Permita o acesso ao microfone para gravar áudios.");
+      }
+  };
+
+  const stopRecording = () => {
+      if (mediaRecorderRef.current && isRecording) {
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
+          if (timerRef.current) clearInterval(timerRef.current);
+      }
+  };
+
+  const uploadAudio = async (blob: Blob) => {
+      try {
+          const fileName = `${modelId}/audio_${Date.now()}.webm`;
+          const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
+              method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": 'audio/webm' }, body: blob 
+          });
+          if (res.ok) {
+              const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
+              handleAdminSendMessage("🎙️ Mensagem de Voz", url, false, 0, 'audio');
+          }
+      } catch (e) { alert("Erro ao enviar áudio."); }
+  };
+
+  // 🔥 ENVIO DE FOTO/VÍDEO NO CHAT 🔥
+  const onChooseChatMedia = (e: any) => {
+      const file = e.target.files?.[0];
+      if (file) { 
+          if (file.size > 50 * 1024 * 1024) return alert("Máximo 50MB!"); 
+          setChatMediaFile(file); 
+          setChatMediaPreview(URL.createObjectURL(file)); 
+          setShowMediaModal(true);
+      }
+  };
+
+  const handleSendChatMedia = async () => {
+      if (!chatMediaFile) return;
+      const numericPrice = Number(chatMediaPrice.replace(/\D/g, "")) / 100;
+      if (isChatMediaPaid && numericPrice < 10) return alert("Mínimo R$ 10,00 para mídias pagas.");
+      
+      setUploading(true);
+      try {
+          const ext = chatMediaFile.name.split('.').pop();
+          const typeFolder = chatMediaFile.type.startsWith('video/') ? 'video' : 'image';
+          const fileName = `${modelId}/chat_${typeFolder}_${Date.now()}.${ext}`;
+          
+          const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
+              method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": chatMediaFile.type }, body: chatMediaFile 
+          });
+          
+          if (res.ok) {
+              const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
+              await handleAdminSendMessage(
+                  isChatMediaPaid ? `🔒 Conteúdo Exclusivo Bloqueado` : `📸 Mídia Gratuita`, 
+                  url, 
+                  isChatMediaPaid, 
+                  isChatMediaPaid ? numericPrice : 0, 
+                  typeFolder
+              );
+              setShowMediaModal(false);
+              setChatMediaFile(null);
+              setChatMediaPreview(null);
+              setIsChatMediaPaid(false);
+              setChatMediaPrice("");
+          }
+      } catch (e) { alert("Erro ao enviar mídia."); } finally { setUploading(false); }
+  };
+
+  const handleChatPriceInput = (e: any) => { setChatMediaPrice(e.target.value); };
+  const formattedChatPrice = useMemo(() => { return (Number(chatMediaPrice.replace(/\D/g, "")) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [chatMediaPrice]);
+
+  // 🔥 FUNÇÕES ORIGINAIS MANTIDAS INTACTAS 🔥
   const handleDeliverVideo = async (reqId: string, price: number, driveLink: string, playerPhone: string) => {
     if (!driveLink || driveLink.length < 5) return;
     try {
@@ -228,6 +420,12 @@ function DashboardContent() {
       else { alert("O link é: " + text); }
   };
 
+  const formatAudioTime = (seconds: number) => {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = (seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+  };
+
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
 
   return (
@@ -266,7 +464,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 COMUNICADO GLOBAL VISUAL (BANCO DE DADOS) 🔥 */}
         {globalAnnouncement && (
           <div className="mb-8 bg-[#FF1493]/10 border border-[#FF1493]/30 p-6 rounded-[2rem] shadow-2xl relative overflow-hidden animate-in slide-in-from-top-4 duration-500">
             <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -286,10 +483,14 @@ function DashboardContent() {
           </div>
         )}
 
+        {/* 🔥 MENU ADICIONADO CHAT 🔥 */}
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
           <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Hub</button>
           <button onClick={() => setActiveTab("gallery")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "gallery" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Galeria</button>
+          
+          <button onClick={() => setActiveTab("chat")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "chat" ? "bg-[#D946EF] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}><MessageCircle size={14}/> Chat VIP</button>
+          
           <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vídeos</button>
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
           <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
@@ -297,6 +498,210 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Fãs</button>
         </div>
 
+        {/* 🔥 ABA DE CHAT DA MODELO 🔥 */}
+        {activeTab === "chat" && (
+            <div className="bg-black border border-white/10 rounded-[3rem] shadow-2xl overflow-hidden h-[700px] flex animate-in slide-in-from-bottom-4">
+                
+                {/* Lista Lateral (Fãs) */}
+                <div className="w-1/3 min-w-[200px] border-r border-white/5 bg-[#0a0a0a] flex flex-col">
+                    <div className="p-5 border-b border-white/5">
+                        <h2 className="text-xs font-black uppercase text-[#D946EF] tracking-widest flex items-center gap-2"><MessageCircle size={14}/> Conversas VIP</h2>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        {chatList.length > 0 ? chatList.map(chat => (
+                            <div 
+                                key={chat.id} 
+                                onClick={() => openAdminChat(chat)}
+                                className={`p-4 border-b border-white/5 cursor-pointer transition-all hover:bg-white/5 flex items-center gap-3 ${activeChat?.id === chat.id ? 'bg-white/10 border-l-4 border-l-[#D946EF]' : ''}`}
+                            >
+                                <div className="w-10 h-10 rounded-full bg-black border border-[#D946EF]/30 flex items-center justify-center shrink-0">
+                                    <User size={20} className="text-[#D946EF]"/>
+                                </div>
+                                <div className="overflow-hidden">
+                                    <p className="text-[10px] font-black uppercase text-white truncate">{chat.Players?.whatsapp || "Cliente Oculto"}</p>
+                                    <p className="text-[8px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir</p>
+                                </div>
+                            </div>
+                        )) : (
+                            <div className="p-8 text-center text-white/20 italic font-black uppercase text-[10px]">Nenhum cliente iniciou chat.</div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Área Principal de Mensagens */}
+                <div className="flex-1 flex flex-col bg-[#050505]">
+                    {activeChat ? (
+                        <>
+                            {/* Header */}
+                            <div className="p-5 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between z-10 shadow-md">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
+                                        <User size={16} className="text-[#D946EF]"/>
+                                    </div>
+                                    <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.whatsapp || "Cliente"}</h3>
+                                </div>
+                            </div>
+
+                            {/* Mensagens */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                                {chatMessages.map((msg, i) => (
+                                    <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
+                                        
+                                        {/* 🔥 RENDERIZAÇÃO DE PRESENTES 🔥 */}
+                                        {msg.is_gift ? (
+                                            <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
+                                                <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
+                                                <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest">Você recebeu um presente!</p>
+                                                <p className="text-2xl font-black text-white mt-1">R$ {msg.price?.toFixed(2)}</p>
+                                                {msg.content && <p className="text-xs italic text-white/70 mt-2">"{msg.content}"</p>}
+                                            </div>
+                                        ) : (
+                                            <div className={`max-w-[70%] p-3 text-sm rounded-2xl ${msg.sender_type === 'model' ? 'bg-[#D946EF] text-white rounded-tr-sm shadow-md' : 'bg-white/10 text-white rounded-tl-sm border border-white/5'}`}>
+                                                
+                                                {/* TEXTO */}
+                                                {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
+                                                
+                                                {/* ÁUDIO */}
+                                                {msg.media_type === 'audio' && msg.media_url && (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Mensagem de Voz</span>
+                                                        <audio controls src={msg.media_url} className="h-10 w-48 mt-1" />
+                                                    </div>
+                                                )}
+
+                                                {/* IMAGEM/VÍDEO (PPV OU GRÁTIS) */}
+                                                {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
+                                                    <div className="flex flex-col mt-1">
+                                                        <div className="relative rounded-xl overflow-hidden border border-white/20">
+                                                            {msg.media_type === 'video' ? (
+                                                                <video src={msg.media_url} controls className="max-h-60 w-full object-cover" />
+                                                            ) : (
+                                                                <img src={msg.media_url} className="max-h-60 w-full object-cover" />
+                                                            )}
+                                                            
+                                                            {/* SE FOR BLOQUEADA, MOSTRA STATUS DE COMPRA PRA MODELO */}
+                                                            {msg.is_locked && (
+                                                                <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1">
+                                                                    <Lock size={10} className="text-[#FFD700]"/> R$ {msg.price?.toFixed(2)} 
+                                                                    <span className={msg.is_unlocked ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
+                                                                        ({msg.is_unlocked ? 'PAGO' : 'AGUARDANDO'})
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {msg.content && <p className="mt-2 text-xs">{msg.content}</p>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <span className="text-[8px] text-white/20 mt-1 px-1">
+                                            {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                        </span>
+                                    </div>
+                                ))}
+                                <div ref={chatEndRef} />
+                            </div>
+
+                            {/* Input Area */}
+                            <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative">
+                                <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
+                                    
+                                    {/* Botão Mídia */}
+                                    <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
+                                        <ImagePlus size={20} />
+                                        <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
+                                    </button>
+
+                                    {/* Input de Texto ou Timer de Áudio */}
+                                    {isRecording ? (
+                                        <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
+                                            <Mic size={16}/> Gravando... {formatAudioTime(recordingTime)}
+                                        </div>
+                                    ) : (
+                                        <input 
+                                            type="text" 
+                                            placeholder="Digite sua mensagem VIP..."
+                                            className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 px-2"
+                                            value={chatInput}
+                                            onChange={(e) => setChatInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleAdminSendMessage()}
+                                        />
+                                    )}
+
+                                    {/* Botão de Áudio (Mic ou Stop) */}
+                                    <button 
+                                        onMouseDown={isRecording ? stopRecording : startRecording}
+                                        className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                                    >
+                                        {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
+                                    </button>
+
+                                    {/* Botão de Enviar Texto */}
+                                    {!isRecording && (
+                                        <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
+                                            <Send size={16} className="-ml-0.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
+                            <MessageCircle size={60} className="mb-4 text-white"/>
+                            <p className="text-xs font-black uppercase tracking-widest">Selecione uma conversa</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
+        {showMediaModal && chatMediaPreview && (
+            <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
+                    <button onClick={() => { setShowMediaModal(false); setChatMediaFile(null); setChatMediaPreview(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={20}/></button>
+                    <h2 className="text-lg font-black uppercase text-[#D946EF] mb-6 italic text-center">Enviar Mídia Privada</h2>
+                    
+                    <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10 mb-6 bg-black flex items-center justify-center">
+                        {chatMediaFile?.type.startsWith('video/') ? (
+                            <video src={chatMediaPreview} className="w-full h-full object-cover" controls />
+                        ) : (
+                            <img src={chatMediaPreview} className="w-full h-full object-cover" />
+                        )}
+                    </div>
+
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 cursor-pointer" onClick={() => setIsChatMediaPaid(!isChatMediaPaid)}>
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-white">Cobrar por essa mídia?</p>
+                                <p className="text-[8px] text-white/50 uppercase font-bold mt-1">Se ativado, envia com cadeado (PPV).</p>
+                            </div>
+                            <input type="checkbox" checked={isChatMediaPaid} readOnly className="w-5 h-5 accent-[#D946EF]" />
+                        </div>
+
+                        {isChatMediaPaid && (
+                            <div className="animate-in zoom-in">
+                                <label className="text-[10px] font-black uppercase text-white/40 block ml-2 mb-2">Definir Valor (Mínimo R$ 10,00)</label>
+                                <input 
+                                    type="text" 
+                                    value={formattedChatPrice} 
+                                    onChange={handleChatPriceInput} 
+                                    className="w-full bg-black border border-[#D946EF] rounded-full py-4 px-6 text-white font-black text-xl text-center outline-none" 
+                                />
+                            </div>
+                        )}
+
+                        <button onClick={handleSendChatMedia} disabled={uploading} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
+                            {uploading ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>}
+                            {uploading ? "Enviando..." : "Enviar para o Cliente"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- DEMAIS ABAS CONTINUAM EXATAMENTE IGUAIS --- */}
         {activeTab === "sales" && (
             <div className="animate-in fade-in">
                 <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
@@ -570,6 +975,7 @@ function DashboardContent() {
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
       </div>
 
+      {/* MODAL EDITAR PRÊMIO */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
@@ -595,6 +1001,7 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* MODAL TUTORIAL ROLETA */}
       {showRoletaTutorial && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-2xl relative">
