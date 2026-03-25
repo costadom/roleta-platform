@@ -36,18 +36,15 @@ export default function PlayerPersonalHub() {
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
-  // 🔥 ESTADOS DE NOTIFICAÇÃO 🔥
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
-  // 🔥 ESTADOS DO CHAT 🔥
   const [chatOpen, setChatOpen] = useState(false);
   const [currentChatModel, setCurrentChatModel] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔥 ESTADOS DE PAGAMENTO DO CHAT (Mídia e Presente) 🔥
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<{ qrcode: string; qrcodeUrl: string; value: number; msgId?: string; isGift?: boolean; giftMsg?: string } | null>(null);
   const [generatingPix, setGeneratingPix] = useState(false);
@@ -59,10 +56,17 @@ export default function PlayerPersonalHub() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const centralWa = "5515996587248";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleBellClick = () => {
+      if (totalUnread > 0) {
+          alert(`Você tem ${totalUnread} mensagem(ns) nova(s) no chat! Clique no botão de Chat das suas musas para ler.`);
+      } else {
+          alert("Nenhuma mensagem nova no momento.");
+      }
   };
 
   const checkNotifications = async (playerIds: string[]) => {
@@ -149,7 +153,6 @@ export default function PlayerPersonalHub() {
     loadData();
   }, [router]);
 
-  // 🔥 FUNÇÕES DO CHAT 🔥
   const openChat = async (modelInfo: any, playerId: string) => {
       setCurrentChatModel({ ...modelInfo, player_id: playerId });
       setChatOpen(true);
@@ -223,7 +226,6 @@ export default function PlayerPersonalHub() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
-  // 🔥 SISTEMA DE PAGAMENTO (PPV e PRESENTES) 🔥
   const handleGiftPriceInput = (e: any) => { setGiftAmount(e.target.value.replace(/\D/g, "")); };
   const formattedGiftAmount = useMemo(() => { return (Number(giftAmount) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [giftAmount]);
 
@@ -242,11 +244,8 @@ export default function PlayerPersonalHub() {
           if(isGift) setShowGiftModal(false);
           setShowPixModal(true);
       } catch (error) {
-          alert("A geração automática falhou. O botão vai te levar para a Central VIP para liberação manual segura.");
-          const texto = isGift 
-            ? `Oi! Quero enviar um PIX PRESENTE de R$ ${value} para a Musa @${currentChatModel?.slug}.` 
-            : `Oi! Quero desbloquear uma mídia PPV de R$ ${value} da Musa @${currentChatModel?.slug} no chat!`;
-          window.open(`https://wa.me/${centralWa}?text=${encodeURIComponent(texto)}`, '_blank');
+          // 🔥 CORREÇÃO AQUI: APENAS AVISA O ERRO, SEM REDIRECIONAR PRO WHATSAPP 🔥
+          alert("Ocorreu um erro ao gerar a chave PIX no momento. Por favor, tente novamente em instantes.");
       } finally { setGeneratingPix(false); }
   };
 
@@ -256,26 +255,44 @@ export default function PlayerPersonalHub() {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
           
+          // 🔥 LÓGICA MASTER DE AFILIADO E REPASSE 70/30 🔥
+          const processPaymentLogic = async () => {
+              const modelRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}&select=balance,referred_by,created_at`, { headers });
+              const mData = await modelRes.json();
+              if (mData && mData[0]) {
+                  const modelData = mData[0];
+                  let modelCut = pixData.value * 0.70;
+                  let platformCut = pixData.value * 0.30;
+                  let affiliateCut = 0;
+
+                  if (modelData.referred_by) {
+                      const dataCadastro = new Date(modelData.created_at).getTime();
+                      const dias = (new Date().getTime() - dataCadastro) / (1000 * 3600 * 24);
+                      if (dias <= 90) {
+                          affiliateCut = pixData.value * 0.05; 
+                          platformCut = pixData.value * 0.25;
+                          const mRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelData.referred_by}&select=balance`, { headers }).then(r=>r.json());
+                          if(mRes && mRes[0]) {
+                              await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelData.referred_by}`, { method: "PATCH", headers, body: JSON.stringify({ balance: (mRes[0].balance || 0) + affiliateCut }) });
+                          }
+                      }
+                  }
+
+                  await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}`, { method: 'PATCH', headers, body: JSON.stringify({ balance: (modelData.balance || 0) + modelCut }) });
+                  await fetch(`${supabaseUrl}/rest/v1/Transactions`, { method: 'POST', headers, body: JSON.stringify({ model_id: currentChatModel.model_id, player_phone: playerPhone, real_amount: pixData.value, model_cut: modelCut, platform_cut: platformCut, status: 'aprovado' }) });
+              }
+          };
+
           if (pixData.isGift) {
               await fetch(`${supabaseUrl}/rest/v1/Messages`, {
                   method: 'POST', headers,
                   body: JSON.stringify({ chat_id: currentChatModel.chat_id, sender_type: 'player', content: pixData.giftMsg, is_gift: true, price: pixData.value })
               });
-              const modelRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}&select=balance`, { headers });
-              const mData = await modelRes.json();
-              if (mData && mData[0]) {
-                  await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}`, { method: 'PATCH', headers, body: JSON.stringify({ balance: (mData[0].balance || 0) + (pixData.value * 0.70) }) });
-                  await fetch(`${supabaseUrl}/rest/v1/Transactions`, { method: 'POST', headers, body: JSON.stringify({ model_id: currentChatModel.model_id, player_phone: playerPhone, real_amount: pixData.value, model_cut: pixData.value * 0.70, platform_cut: pixData.value * 0.30, status: 'aprovado' }) });
-              }
+              await processPaymentLogic();
               alert("Presente enviado com sucesso!");
           } else if (pixData.msgId) {
               await fetch(`${supabaseUrl}/rest/v1/Messages?id=eq.${pixData.msgId}`, { method: 'PATCH', headers, body: JSON.stringify({ is_unlocked: true }) });
-              const modelRes = await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}&select=balance`, { headers });
-              const mData = await modelRes.json();
-              if (mData && mData[0]) {
-                  await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentChatModel.model_id}`, { method: 'PATCH', headers, body: JSON.stringify({ balance: (mData[0].balance || 0) + (pixData.value * 0.70) }) });
-                  await fetch(`${supabaseUrl}/rest/v1/Transactions`, { method: 'POST', headers, body: JSON.stringify({ model_id: currentChatModel.model_id, player_phone: playerPhone, real_amount: pixData.value, model_cut: pixData.value * 0.70, platform_cut: pixData.value * 0.30, status: 'aprovado' }) });
-              }
+              await processPaymentLogic();
               alert("Mídia desbloqueada com sucesso!");
           }
 
@@ -296,7 +313,8 @@ export default function PlayerPersonalHub() {
           <button onClick={() => router.push('/vitrine')} className="p-3 bg-white/5 rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={20}/></button>
           <div className="text-center"><h1 className="text-lg sm:text-xl font-black uppercase italic text-[#D946EF] tracking-tighter">MEU <span className="text-white">HUB VIP</span></h1><p className="text-[9px] text-white/30 uppercase font-black tracking-widest">{playerPhone}</p></div>
           <div className="flex items-center gap-4">
-              <div className="relative">
+              {/* 🔥 SINO COM ONCLICK 🔥 */}
+              <div className="relative cursor-pointer" onClick={handleBellClick}>
                   <Bell size={20} className={totalUnread > 0 ? "text-[#D946EF] animate-pulse" : "text-white/30"} />
                   {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-black">{totalUnread}</span>}
               </div>
@@ -384,7 +402,6 @@ export default function PlayerPersonalHub() {
               <div className="absolute inset-0 bg-black/60" onClick={() => setChatOpen(false)}></div>
               
               <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
-                  {/* Header */}
                   <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-20">
                       <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full overflow-hidden border border-[#D946EF]/50">
@@ -401,14 +418,12 @@ export default function PlayerPersonalHub() {
                       </div>
                   </div>
 
-                  {/* Corpo do Chat */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-gradient-to-b from-[#0a0a0a] to-black custom-scrollbar">
                       <div className="text-center py-4"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa Segura</span></div>
                       
                       {messages.map((msg, i) => (
                           <div key={i} className={`flex flex-col ${msg.sender_type === 'player' ? 'items-end' : 'items-start'}`}>
                               
-                              {/* RENDER DE PRESENTES */}
                               {msg.is_gift ? (
                                   <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
                                       <Gift size={32} className="text-amber-400 mb-2"/>
@@ -419,10 +434,8 @@ export default function PlayerPersonalHub() {
                               ) : (
                                   <div className={`max-w-[80%] p-3 text-sm rounded-2xl ${msg.sender_type === 'player' ? 'bg-[#D946EF] text-white rounded-tr-sm' : 'bg-white/10 text-white rounded-tl-sm border border-white/5 shadow-lg'}`}>
                                       
-                                      {/* TEXTO */}
                                       {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
 
-                                      {/* ÁUDIO DA MODELO */}
                                       {msg.media_type === 'audio' && msg.media_url && (
                                           <div className="flex flex-col gap-1">
                                               <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Áudio VIP</span>
@@ -430,10 +443,8 @@ export default function PlayerPersonalHub() {
                                           </div>
                                       )}
 
-                                      {/* FOTOS / VÍDEOS ENVIADOS PELA MODELO */}
                                       {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
                                           <div className="mt-2">
-                                              {/* SE FOR BLOQUEADA (PPV) E NÃO PAGA */}
                                               {msg.is_locked && !msg.is_unlocked ? (
                                                   <div onClick={() => generatePix(msg.price, msg.id)} className="relative aspect-square rounded-xl overflow-hidden border border-[#D946EF]/50 bg-black flex flex-col items-center justify-center text-center cursor-pointer group shadow-lg">
                                                       <div className="absolute inset-0 bg-black/80 backdrop-blur-xl group-hover:backdrop-blur-lg transition-all"></div>
@@ -444,7 +455,6 @@ export default function PlayerPersonalHub() {
                                                       </button>
                                                   </div>
                                               ) : (
-                                                  /* SE FOR GRÁTIS OU JÁ PAGA */
                                                   <div className="rounded-xl overflow-hidden border border-white/10">
                                                       {msg.media_type === 'video' ? (
                                                           <video src={msg.media_url} controls className="max-h-60 w-full object-cover" />
@@ -464,7 +474,6 @@ export default function PlayerPersonalHub() {
                       <div ref={messagesEndRef} />
                   </div>
 
-                  {/* Input do Chat */}
                   <div className="p-4 bg-[#0a0a0a] border-t border-white/5 z-20 shadow-md">
                       <div className="flex items-center gap-2 bg-[#141414] border border-white/10 rounded-full p-1 pl-4 focus-within:border-[#D946EF]/50 transition-all">
                           <input 
@@ -558,7 +567,7 @@ export default function PlayerPersonalHub() {
           </div>
       )}
 
-      {/* MODAL DE FOTO NORMAL (MANTIDO) */}
+      {/* MODAL DE FOTO NORMAL */}
       {viewingMedia && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
              <button onClick={() => setViewingMedia(null)} className="absolute top-8 right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full transition-colors z-[310]"><X size={24}/></button>
