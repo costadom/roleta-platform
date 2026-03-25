@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Loader2, Play, ArrowLeft, Camera, Gamepad2, X, Video, Clock, 
