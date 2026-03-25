@@ -49,7 +49,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
   const [isPrivateShow, setIsPrivateShow] = useState(false);
   const isPrivateRef = useRef(false);
 
-  // Relógios Separados para não misturar a cobrança
+  // Cronômetros isolados
   const publicSecRef = useRef(0);
   const privateSecRef = useRef(0);
 
@@ -63,12 +63,11 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // 🔥 SINCRONIA EXATA COM A MODELO 🔥
   const syncBalanceWithModel = useCallback((currentBal: number, deducted: number) => {
     if (!roomRef.current || !roomRef.current.localParticipant) return;
     const payload = JSON.stringify({
       type: "BALANCE_UPDATE",
-      senderIdentity: roomRef.current.localParticipant.identity, // Usa a identidade única real
+      senderIdentity: roomRef.current.localParticipant.identity,
       senderName: clientName,
       currentBalance: currentBal,
       deductedAmount: deducted
@@ -90,32 +89,40 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
         const data = JSON.parse(new TextDecoder().decode(payload));
         if (data.type === "PRIVATE_ACCEPTED" && data.targetClient === clientName) {
           setIsPrivateShow(true);
-          isPrivateRef.current = true; // Atualiza a ref para o cronômetro
+          isPrivateRef.current = true;
           setRequestingPrivate(false);
           showToast("Privado Iniciado! Azul Neon Ativado!");
+
+          // 🔥 COBRANÇA UPFRONT (Cobra R$ 3,10 na hora que a modelo aceita) 🔥
+          balanceRef.current -= 3.10;
+          setBalance(balanceRef.current);
+          syncBalanceWithModel(balanceRef.current, 3.10);
+          privateSecRef.current = 0; // Zera o relógio para cobrar de novo só daqui 60s
         }
       } catch (e) {}
     };
     room.on(RoomEvent.DataReceived, handleDataReceived);
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
-  }, [room, clientName]);
+  }, [room, clientName, syncBalanceWithModel]);
 
-  // 🔥 O MOTOR DE COBRANÇA CORRIGIDO E ISOLADO 🔥
+  // 🔥 O MOTOR DE COBRANÇA CONTÍNUA 🔥
   useEffect(() => {
     const timer = setInterval(() => {
       let deducted = 0;
       
       if (isPrivateRef.current) {
-        // Relógio do Privado (Conta exatos 60s)
+        // Já cobrou o primeiro minuto, agora conta 60s para o próximo
         privateSecRef.current += 1;
-        if (privateSecRef.current % 60 === 0) {
+        if (privateSecRef.current >= 60) {
           deducted = 3.10;
+          privateSecRef.current = 0;
         }
       } else {
         // Relógio Público (Conta exatos 20s)
         publicSecRef.current += 1;
-        if (publicSecRef.current % 20 === 0) {
+        if (publicSecRef.current >= 20) {
           deducted = 0.50;
+          publicSecRef.current = 0;
         }
       }
 
@@ -129,7 +136,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
       if ((isPrivateRef.current && balanceRef.current < 3.10) || (!isPrivateRef.current && balanceRef.current < 0.50)) {
          if (!showPixModal) router.push('/hub');
       }
-
     }, 1000);
 
     return () => clearInterval(timer);
@@ -142,7 +148,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
       pixTimer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
     } else if (pixTimeLeft === 0) {
       setShowPixModal(false);
-      router.push('/hub'); // Se não pagar a tempo, é kick.
+      router.push('/hub');
     }
     return () => clearInterval(pixTimer);
   }, [showPixModal, pixTimeLeft, router]);
@@ -175,23 +181,26 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     showToast("PIX Confirmado! R$ 50 adicionados.");
   };
 
-  // 🔥 AZUL NEON BEM CHAMATIVO 🔥
   const neonClass = isPrivateShow 
     ? "border-[#00f0ff] shadow-[0_0_50px_rgba(0,240,255,0.7)]" 
     : "border-[#D946EF] shadow-[0_0_50px_rgba(217,70,239,0.4)]";
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   return (
     <>
       <ToastNotification message={toastMsg} onClose={() => setToastMsg(null)} />
       
-      {/* 🔥 PIX COMPACTO (Não tampa a modelo) 🔥 */}
       {showPixModal && (
         <div className="absolute bottom-6 left-4 right-4 z-[80] bg-black/80 backdrop-blur-xl border border-[#00f0ff]/50 rounded-3xl p-5 flex flex-col items-center shadow-[0_0_50px_rgba(0,240,255,0.3)] animate-slideUp">
             <div className="flex items-center justify-between w-full mb-3">
               <h3 className="text-[#00f0ff] font-black uppercase tracking-widest text-xs">Recarga VIP (3 min restantes)</h3>
               <button onClick={() => setShowPixModal(false)} className="text-white/50 hover:text-white"><X size={16} /></button>
             </div>
-            
             <div className="flex w-full gap-4 items-center">
                <div className="bg-white p-2 rounded-xl shrink-0"><QrCode size={60} className="text-black" /></div>
                <div className="flex flex-col flex-1 gap-2">
@@ -203,10 +212,10 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
                  </button>
                </div>
             </div>
+            <div className="mt-4 text-[#00f0ff] font-mono text-xl font-black">{formatTime(pixTimeLeft)}</div>
         </div>
       )}
 
-      {/* Aviso de 3 minutos */}
       {!showPixModal && isLowBalance && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-md border border-red-400 px-6 py-3 rounded-full flex items-center gap-4 shadow-[0_0_30px_rgba(220,38,38,0.5)] animate-pulse">
            <AlertTriangle size={16} className="text-white" />
@@ -300,8 +309,9 @@ function LiveClientContent() {
   
   useEffect(() => {
     const initPage = async () => {
-      // DEFININDO O NOME REAL DO CLIENTE PARA TESTE
-      const tempName = localStorage.getItem('labz_client_name') || "Rafael_VIP";
+      // 🔥 FORÇANDO O NOME CORRETO E LIMPANDO CACHE VELHO 🔥
+      localStorage.removeItem('labz_client_name');
+      const tempName = "Rafael_VIP";
       localStorage.setItem('labz_client_name', tempName);
       setClientName(tempName);
 
@@ -330,7 +340,7 @@ function LiveClientContent() {
       <main className="flex-1 relative flex overflow-hidden">
         <LiveKitRoom video={false} audio={false} token={token} serverUrl={livekitUrl} className="flex flex-col lg:flex-row h-full w-full">
           <div className="flex-1 p-2 sm:p-4 flex flex-col bg-[#050505] relative overflow-hidden">
-             {/* 🔥 TESTE DE FOGO: Cliente entra com R$ 10,00 🔥 */}
+             {/* Começando com R$ 10,00 corretos */}
              <InteractiveRoom clientName={clientName} initialBalance={10.00} />
           </div>
           <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-[45vh] lg:h-full z-20 bg-[#0a0a0a]">

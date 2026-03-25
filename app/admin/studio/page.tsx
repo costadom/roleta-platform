@@ -37,7 +37,7 @@ function MyVideoStage() {
   );
 }
 
-// 🔥 LISTA DE FÃS QUE LÊ O DINHEIRO REAL DA CONEXÃO 🔥
+// LÊ O SALDO REAL ENVIADO PELO CLIENTE (SEM MATH.RANDOM)
 function ViewerList({ viewerBalances }: { viewerBalances: Record<string, number> }) {
   const participants = useParticipants();
   const viewers = participants.filter(p => !p.isLocal);
@@ -50,14 +50,12 @@ function ViewerList({ viewerBalances }: { viewerBalances: Record<string, number>
             <span className="text-white/30 text-[10px] uppercase font-bold">Nenhum fã na sala.</span>
          ) : (
             viewers.map(p => {
-               // Lê o saldo enviado pelo cliente. Se não tiver chegado ainda, exibe "Sincronizando..."
                const hasBalance = viewerBalances[p.identity] !== undefined;
-               
                return (
                  <div key={p.identity} className="flex items-center justify-between bg-white/5 p-2 rounded-lg border border-white/5">
                     <span className="text-white text-[10px] font-bold uppercase truncate max-w-[120px]">{p.name || p.identity}</span>
                     <span className="text-[#00f0ff] text-[10px] font-black tracking-widest bg-[#00f0ff]/10 px-2 py-0.5 rounded-sm">
-                      {hasBalance ? `R$ ${viewerBalances[p.identity].toFixed(2).replace('.', ',')}` : '---'}
+                      {hasBalance ? `R$ ${viewerBalances[p.identity].toFixed(2).replace('.', ',')}` : 'Aguardando...'}
                     </span>
                  </div>
                );
@@ -123,7 +121,6 @@ function StudioContent() {
   const [isPrivateMode, setIsPrivateMode] = useState(false);
   const [currentPrivateRequest, setCurrentPrivateRequest] = useState<any>(null);
   
-  // CAIXA REGISTRADORA REAL
   const [sessionEarnings, setSessionEarnings] = useState<number>(0);
   const [viewerBalances, setViewerBalances] = useState<Record<string, number>>({});
 
@@ -151,9 +148,7 @@ function StudioContent() {
   };
 
   const handleBalanceUpdate = useCallback((identity: string, currentBalance: number, deductedAmount: number) => {
-    // Atualiza o saldo do cliente na lateral usando a ID real da conexão
     setViewerBalances(prev => ({ ...prev, [identity]: currentBalance }));
-    // Pega o dinheiro debitado e coloca no painel de ganhos dela
     if (deductedAmount > 0) {
       setSessionEarnings(prev => prev + deductedAmount);
     }
@@ -167,14 +162,12 @@ function StudioContent() {
     </div>
   );
 
-  // 🔥 AZUL NEON PARA A MODELO TAMBÉM 🔥
   const neonClass = isPrivateMode 
     ? "border-[#00f0ff] shadow-[0_0_50px_rgba(0,240,255,0.7)]" 
     : "border-[#D946EF] shadow-[0_0_50px_rgba(217,70,239,0.4)]"; 
 
   return (
     <div className="h-screen w-full bg-[#050505] flex flex-col overflow-hidden">
-      
       <header className="h-20 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-50">
         <button onClick={() => {if(confirm("Encerrar Transmissão?")) router.push(`/admin/dashboard?model=${modelId}&slug=${modelSlug}`)}} className="bg-red-500/10 text-red-500 px-4 py-3 rounded-full text-[9px] font-black uppercase hover:bg-red-500 hover:text-white transition"><ArrowLeft size={14} className="inline mr-2" /> Encerrar</button>
         <div className="bg-emerald-500/20 px-6 py-2 rounded-2xl flex items-center gap-4"><DollarSign size={24} className="text-emerald-400" /><div className="flex flex-col"><span className="text-[9px] text-emerald-400 uppercase">Ganhos da Sessão</span><span className="text-xl font-black text-white">R$ {sessionEarnings.toFixed(2).replace('.', ',')}</span></div></div>
