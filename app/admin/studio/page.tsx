@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LiveKitRoom, VideoConference, RoomAudioRenderer } from "@livekit/components-react";
-import "@livekit/components-styles"; // Estilos originais e bonitos do LiveKit
-import { Loader2, ArrowLeft, Video } from "lucide-react";
+import "@livekit/components-styles";
+import { Loader2, ArrowLeft } from "lucide-react";
 
-export default function ModelStudio() {
+function StudioContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Pegando a identificação da modelo direto da URL
+  const modelId = searchParams.get("model");
+  const modelSlug = searchParams.get("slug");
+
   const [token, setToken] = useState("");
   const [roomName, setRoomName] = useState("");
   const [modelName, setModelName] = useState("");
@@ -16,24 +22,21 @@ export default function ModelStudio() {
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
 
   useEffect(() => {
-    // Pegar os dados da modelo do LocalStorage (onde já salvamos no login)
-    const storedModelId = localStorage.getItem("labz_model_id");
-    const storedModelName = localStorage.getItem("labz_model_name") || "Modelo";
-
-    if (!storedModelId) {
-      alert("Você precisa estar logada para acessar o Studio!");
+    if (!modelId) {
+      alert("Acesso negado! Use o botão de Entrar ao Vivo pelo seu Painel.");
       router.push("/admin");
       return;
     }
 
-    const room = `live_${storedModelId}`; // Cada modelo tem sua própria sala única
+    const room = `live_${modelId}`;
+    const displayName = modelSlug || "Musa VIP";
+    
     setRoomName(room);
-    setModelName(storedModelName);
+    setModelName(displayName);
 
-    // Bater no nosso "Porteiro" para pegar o crachá VIP da modelo
     const fetchToken = async () => {
       try {
-        const res = await fetch(`/api/livekit/token?room=${room}&username=${encodeURIComponent(storedModelName)}&isModel=true`);
+        const res = await fetch(`/api/livekit/token?room=${room}&username=${encodeURIComponent(displayName)}&isModel=true`);
         const data = await res.json();
 
         if (data.token) {
@@ -47,7 +50,7 @@ export default function ModelStudio() {
     };
 
     fetchToken();
-  }, [router]);
+  }, [router, modelId, modelSlug]);
 
   if (error) {
     return (
@@ -72,11 +75,10 @@ export default function ModelStudio() {
 
   return (
     <div className="h-screen w-full bg-[#050505] flex flex-col">
-      {/* HEADER DO STUDIO */}
       <header className="h-16 bg-black border-b border-white/10 flex items-center justify-between px-6 shrink-0 z-50">
         <button onClick={() => {
           if (confirm("Deseja realmente encerrar a transmissão?")) {
-            router.push('/admin/dashboard');
+            router.push(`/admin/dashboard?model=${modelId}&slug=${modelSlug}`);
           }
         }} className="flex items-center gap-2 text-white/50 hover:text-red-500 transition-colors text-[10px] font-black uppercase">
           <ArrowLeft size={16} /> Encerrar Live
@@ -91,21 +93,27 @@ export default function ModelStudio() {
         <div className="text-[10px] text-white/50 font-bold uppercase">Sala: {roomName}</div>
       </header>
 
-      {/* ÁREA DA CÂMERA (LiveKitRoom) */}
       <main className="flex-1 relative">
         <LiveKitRoom
-          video={true} // Liga a câmera automaticamente
-          audio={true} // Liga o microfone automaticamente
+          video={true} 
+          audio={true} 
           token={token}
           serverUrl={livekitUrl}
-          data-lk-theme="default" // Usa o tema escuro bonito padrão do LiveKit
+          data-lk-theme="default"
           className="h-full w-full"
         >
-          {/* Este componente mágico monta a tela de vídeo, controles da câmera e o chat de texto! */}
           <VideoConference />
           <RoomAudioRenderer />
         </LiveKitRoom>
       </main>
     </div>
+  );
+}
+
+export default function ModelStudio() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <StudioContent />
+    </Suspense>
   );
 }
