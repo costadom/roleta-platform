@@ -163,12 +163,11 @@ function DashboardContent() {
   useEffect(() => {
     if (activeTab === 'chat' && modelId) {
       loadChatList();
-      const interval = setInterval(loadChatList, 10000); // Polling suave para atualizar lista
+      const interval = setInterval(loadChatList, 10000);
       return () => clearInterval(interval);
     }
   }, [activeTab, modelId]);
 
-  // Recarregar mensagens ativas
   useEffect(() => {
       if (activeTab === 'chat' && activeChat) {
           const interval = setInterval(() => openAdminChat(activeChat, false), 5000);
@@ -179,7 +178,8 @@ function DashboardContent() {
   const loadChatList = async () => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          const res = await fetch(`${supabaseUrl}/rest/v1/Chats?model_id=eq.${modelId}&select=*,Players(whatsapp, id)&order=updated_at.desc`, { headers });
+          // 🔥 CORREÇÃO AQUI: BUSCA O NOME (name) E O WHATSAPP DO JOGADOR 🔥
+          const res = await fetch(`${supabaseUrl}/rest/v1/Chats?model_id=eq.${modelId}&select=*,Players(name, whatsapp, id)&order=updated_at.desc`, { headers });
           if (res.ok) setChatList(await res.json());
       } catch (e) { console.error("Erro ChatList", e); }
   };
@@ -222,7 +222,6 @@ function DashboardContent() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
-  // 🔥 GRAVAÇÃO DE ÁUDIO 🔥
   const startRecording = async () => {
       try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -270,7 +269,6 @@ function DashboardContent() {
       } catch (e) { alert("Erro ao enviar áudio."); }
   };
 
-  // 🔥 ENVIO DE FOTO/VÍDEO NO CHAT 🔥
   const onChooseChatMedia = (e: any) => {
       const file = e.target.files?.[0];
       if (file) { 
@@ -317,7 +315,6 @@ function DashboardContent() {
   const handleChatPriceInput = (e: any) => { setChatMediaPrice(e.target.value); };
   const formattedChatPrice = useMemo(() => { return (Number(chatMediaPrice.replace(/\D/g, "")) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [chatMediaPrice]);
 
-  // 🔥 FUNÇÕES ORIGINAIS MANTIDAS INTACTAS 🔥
   const handleDeliverVideo = async (reqId: string, price: number, driveLink: string, playerPhone: string) => {
     if (!driveLink || driveLink.length < 5) return;
     try {
@@ -483,14 +480,11 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* 🔥 MENU ADICIONADO CHAT 🔥 */}
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
           <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Hub</button>
           <button onClick={() => setActiveTab("gallery")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "gallery" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Galeria</button>
-          
           <button onClick={() => setActiveTab("chat")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "chat" ? "bg-[#D946EF] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}><MessageCircle size={14}/> Chat VIP</button>
-          
           <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vídeos</button>
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
           <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
@@ -498,11 +492,9 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Fãs</button>
         </div>
 
-        {/* 🔥 ABA DE CHAT DA MODELO 🔥 */}
         {activeTab === "chat" && (
             <div className="bg-black border border-white/10 rounded-[3rem] shadow-2xl overflow-hidden h-[700px] flex animate-in slide-in-from-bottom-4">
                 
-                {/* Lista Lateral (Fãs) */}
                 <div className="w-1/3 min-w-[200px] border-r border-white/5 bg-[#0a0a0a] flex flex-col">
                     <div className="p-5 border-b border-white/5">
                         <h2 className="text-xs font-black uppercase text-[#D946EF] tracking-widest flex items-center gap-2"><MessageCircle size={14}/> Conversas VIP</h2>
@@ -518,7 +510,8 @@ function DashboardContent() {
                                     <User size={20} className="text-[#D946EF]"/>
                                 </div>
                                 <div className="overflow-hidden">
-                                    <p className="text-[10px] font-black uppercase text-white truncate">{chat.Players?.whatsapp || "Cliente Oculto"}</p>
+                                    {/* 🔥 CORREÇÃO AQUI 🔥 */}
+                                    <p className="text-[10px] font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.whatsapp || "Cliente"}</p>
                                     <p className="text-[8px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir</p>
                                 </div>
                             </div>
@@ -528,26 +521,23 @@ function DashboardContent() {
                     </div>
                 </div>
 
-                {/* Área Principal de Mensagens */}
                 <div className="flex-1 flex flex-col bg-[#050505]">
                     {activeChat ? (
                         <>
-                            {/* Header */}
                             <div className="p-5 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between z-10 shadow-md">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
                                         <User size={16} className="text-[#D946EF]"/>
                                     </div>
-                                    <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.whatsapp || "Cliente"}</h3>
+                                    {/* 🔥 CORREÇÃO AQUI 🔥 */}
+                                    <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.whatsapp || "Cliente"}</h3>
                                 </div>
                             </div>
 
-                            {/* Mensagens */}
                             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                                 {chatMessages.map((msg, i) => (
                                     <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
                                         
-                                        {/* 🔥 RENDERIZAÇÃO DE PRESENTES 🔥 */}
                                         {msg.is_gift ? (
                                             <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
                                                 <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
@@ -558,10 +548,8 @@ function DashboardContent() {
                                         ) : (
                                             <div className={`max-w-[70%] p-3 text-sm rounded-2xl ${msg.sender_type === 'model' ? 'bg-[#D946EF] text-white rounded-tr-sm shadow-md' : 'bg-white/10 text-white rounded-tl-sm border border-white/5'}`}>
                                                 
-                                                {/* TEXTO */}
                                                 {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
                                                 
-                                                {/* ÁUDIO */}
                                                 {msg.media_type === 'audio' && msg.media_url && (
                                                     <div className="flex flex-col gap-1">
                                                         <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Mensagem de Voz</span>
@@ -569,7 +557,6 @@ function DashboardContent() {
                                                     </div>
                                                 )}
 
-                                                {/* IMAGEM/VÍDEO (PPV OU GRÁTIS) */}
                                                 {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
                                                     <div className="flex flex-col mt-1">
                                                         <div className="relative rounded-xl overflow-hidden border border-white/20">
@@ -579,7 +566,6 @@ function DashboardContent() {
                                                                 <img src={msg.media_url} className="max-h-60 w-full object-cover" />
                                                             )}
                                                             
-                                                            {/* SE FOR BLOQUEADA, MOSTRA STATUS DE COMPRA PRA MODELO */}
                                                             {msg.is_locked && (
                                                                 <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1">
                                                                     <Lock size={10} className="text-[#FFD700]"/> R$ {msg.price?.toFixed(2)} 
@@ -603,17 +589,14 @@ function DashboardContent() {
                                 <div ref={chatEndRef} />
                             </div>
 
-                            {/* Input Area */}
                             <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative">
                                 <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
                                     
-                                    {/* Botão Mídia */}
                                     <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
                                         <ImagePlus size={20} />
                                         <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
                                     </button>
 
-                                    {/* Input de Texto ou Timer de Áudio */}
                                     {isRecording ? (
                                         <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
                                             <Mic size={16}/> Gravando... {formatAudioTime(recordingTime)}
@@ -629,7 +612,6 @@ function DashboardContent() {
                                         />
                                     )}
 
-                                    {/* Botão de Áudio (Mic ou Stop) */}
                                     <button 
                                         onMouseDown={isRecording ? stopRecording : startRecording}
                                         className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}
@@ -637,7 +619,6 @@ function DashboardContent() {
                                         {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
                                     </button>
 
-                                    {/* Botão de Enviar Texto */}
                                     {!isRecording && (
                                         <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
                                             <Send size={16} className="-ml-0.5" />
@@ -656,7 +637,7 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
+        {/* --- DEMAIS ABAS --- */}
         {showMediaModal && chatMediaPreview && (
             <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
@@ -701,7 +682,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* --- DEMAIS ABAS CONTINUAM EXATAMENTE IGUAIS --- */}
         {activeTab === "sales" && (
             <div className="animate-in fade-in">
                 <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
