@@ -7,6 +7,7 @@ import {
   Wallet, HelpCircle, Heart, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, CheckCircle2
 } from "lucide-react";
 
+// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -35,15 +36,18 @@ export default function PlayerPersonalHub() {
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
+  // 🔥 ESTADOS DE NOTIFICAÇÃO 🔥
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
+  // 🔥 ESTADOS DO CHAT 🔥
   const [chatOpen, setChatOpen] = useState(false);
   const [currentChatModel, setCurrentChatModel] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // 🔥 ESTADOS DE PAGAMENTO DO CHAT (Mídia e Presente) 🔥
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeCopiaCola: string; txId: string; value: number; msgId?: string; isGift?: boolean; giftMsg?: string } | null>(null);
   const [generatingPix, setGeneratingPix] = useState(false);
@@ -240,12 +244,25 @@ export default function PlayerPersonalHub() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
+  // 🔥 GERAÇÃO DE PIX INTEGRADA COM A ROTA HUB E CARRINHO ABANDONADO 🔥
   const generatePix = async (value: number, msgId?: string, isGift = false, giftMsg = "") => {
       setGeneratingPix(true);
       setPixTimeLeft(600); 
       try {
           const playerId = currentChatModel?.player_id;
           if (!playerId) throw new Error("Erro de ID de jogador");
+
+          // 🔥 REGISTRO DE CARRINHO ABANDONADO 🔥
+          const headersAuth = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+          await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+            method: 'POST', headers: headersAuth,
+            body: JSON.stringify({ 
+                player_phone: playerPhone, 
+                model_name: `${currentChatModel.model_name} (${isGift ? 'Presente VIP' : 'Mídia Chat'})`, 
+                amount: value, 
+                status: 'pendente' 
+            })
+          }).catch(err => console.error("Erro no carrinho abandonado:", err));
 
           const payload = { 
               amount: value, 
@@ -459,6 +476,7 @@ export default function PlayerPersonalHub() {
                       {messages.map((msg, i) => (
                           <div key={i} className={`flex flex-col ${msg.sender_type === 'player' ? 'items-end' : 'items-start'}`}>
                               
+                              {/* RENDER DE PRESENTES */}
                               {msg.is_gift ? (
                                   <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
                                       <Gift size={32} className="text-amber-400 mb-2"/>
