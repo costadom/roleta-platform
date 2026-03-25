@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.20",
+    "@livekit/components-styles": "^1.2.0",
     "@prisma/client": "5.15.0",
     "@supabase/supabase-js": "^2.39.0",
     "canvas-confetti": "^1.9.4",
