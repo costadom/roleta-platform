@@ -51,13 +51,14 @@ function ModelVideoFeed() {
   );
 }
 
-function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName: string, initialBalance: number, modelSlug: string }) {
+function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }: { clientName: string, playerPhone: string, initialBalance: number, modelSlug: string }) {
   const room = useRoomContext();
   const router = useRouter();
   const roomRef = useRef(room);
   
   const balanceRef = useRef(initialBalance);
   const [balance, setBalance] = useState(initialBalance);
+  const [initialBalanceCheck, setInitialBalanceCheck] = useState(initialBalance);
   
   const [requestingPrivate, setRequestingPrivate] = useState(false);
   const [showHotInvite, setShowHotInvite] = useState(false); 
@@ -69,30 +70,29 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
   const publicSecRef = useRef(0);
   const privateSecRef = useRef(0);
 
+  // Estados Financeiros
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState<number>(0);
-  const [pixTimeLeft, setPixTimeLeft] = useState(180);
+  const [pixData, setPixData] = useState<any>(null);
+  const [generatingPix, setGeneratingPix] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600);
 
   const [showGiftMenu, setShowGiftMenu] = useState(false);
   const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
   const [isBlurred, setIsBlurred] = useState(false);
-
-  // 🔥 ESTADO DO ÁUDIO (Começa mutado por padrão para elegância) 🔥
   const [isMuted, setIsMuted] = useState(true);
 
-  useEffect(() => { roomRef.current = room; }, [room]);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  useEffect(() => { roomRef.current = room; }, [room]);
   const showToast = (msg: string) => { setToastMsg(msg); setTimeout(() => setToastMsg(null), 4000); };
 
-  // 🔥 TOGGLE DISCRETO DE ÁUDIO 🔥
   const toggleAudio = async () => {
-    if (isMuted) {
-      await room.startAudio();
-      setIsMuted(false);
-    } else {
-      setIsMuted(true);
-    }
+    if (isMuted) { await room.startAudio(); setIsMuted(false); } 
+    else { setIsMuted(true); }
   };
 
   const triggerGiftAnimation = (icon: string, sender: string) => {
@@ -107,6 +107,13 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
     try { roomRef.current.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch(e) {}
   }, [clientName]);
 
+  // Atualiza o saldo real se ele mudou por fora
+  useEffect(() => {
+    balanceRef.current = balance;
+    syncBalanceWithModel(balance, 0);
+  }, [balance, syncBalanceWithModel]);
+
+  // Sincronia inicial
   useEffect(() => { setTimeout(() => syncBalanceWithModel(balanceRef.current, 0), 2000); }, [syncBalanceWithModel]);
 
   useEffect(() => {
@@ -125,13 +132,25 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
         if (data.type === "GIFT") triggerGiftAnimation(data.giftIcon, data.senderName === clientName ? "Você" : "Alguém");
         
         if (data.type === "BLOCK_USER" && data.targetClientIdentity === roomRef.current.localParticipant.identity) {
-           alert("Você foi banido da sala."); router.push('/hub');
+           alert("Você foi banido da sala."); router.push('/explore');
         }
       } catch (e) {}
     };
     room.on(RoomEvent.DataReceived, handleDataReceived);
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
   }, [room, clientName, router]);
+
+  // Motor de Desconto no Banco
+  const deductFromDatabase = async (amount: number) => {
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+          await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}`, {
+              method: 'PATCH',
+              headers: headers,
+              body: JSON.stringify({ live_tokens: balanceRef.current }) // Atualiza com o valor descontado
+          });
+      } catch(e) {}
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -145,7 +164,10 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
       }
 
       if (deducted > 0) {
-        balanceRef.current -= deducted; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, deducted);
+        balanceRef.current -= deducted; 
+        setBalance(balanceRef.current); 
+        syncBalanceWithModel(balanceRef.current, deducted);
+        deductFromDatabase(deducted); // Desconta real do banco!
       }
 
       if ((isPrivateRef.current && balanceRef.current < 3.10) || (!isPrivateRef.current && balanceRef.current < 0.35)) {
@@ -153,14 +175,7 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [syncBalanceWithModel, showShopModal, showPixModal]);
-
-  useEffect(() => {
-    let pixTimer: NodeJS.Timeout;
-    if (showPixModal && pixTimeLeft > 0) pixTimer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
-    else if (pixTimeLeft === 0) { setShowPixModal(false); router.push('/hub'); }
-    return () => clearInterval(pixTimer);
-  }, [showPixModal, pixTimeLeft, router]);
+  }, [syncBalanceWithModel, showShopModal, showPixModal, playerPhone]);
 
   useEffect(() => {
     const handleVisibility = () => setIsBlurred(document.hidden);
@@ -168,12 +183,91 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  const handleBuyPackage = (amount: number) => { setSelectedPackage(amount); setShowShopModal(false); setShowPixModal(true); setPixTimeLeft(180); };
-  const simulatePaymentWebhook = () => { balanceRef.current += selectedPackage; setBalance(balanceRef.current); setShowPixModal(false); syncBalanceWithModel(balanceRef.current, 0); showToast(`PIX Confirmado!`); };
+  // 🔥 GERAÇÃO DE PIX REAL DENTRO DA LIVE 🔥
+  const generatePix = async (amount: number) => {
+    setGeneratingPix(true);
+    setPixTimeLeft(600);
+    try {
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}&select=id`, { headers });
+        const pData = await pRes.json();
+        const playerId = pData[0]?.id;
+
+        if (!playerId) throw new Error("Jogador não encontrado.");
+
+        const response = await fetch('/api/checkout/hub', {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: amount, userId: playerId, type: 'live_tokens' }),
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Erro API Pix");
+
+        if (data.qr_code_base64 || data.qrCodeBase64) {
+            setPixData({ 
+                qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, 
+                qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, 
+                value: amount
+            });
+            setInitialBalanceCheck(balanceRef.current);
+            setShowShopModal(false);
+            setShowPixModal(true);
+        }
+    } catch (error: any) {
+        alert(`Falha ao gerar PIX: ${error.message}`);
+    } finally { 
+        setGeneratingPix(false); 
+    }
+  };
+
+  // 🔥 POLLING DE PAGAMENTO (Checa o banco de dados) 🔥
+  useEffect(() => {
+      let interval: NodeJS.Timeout;
+      if (showPixModal && pixData && !paymentSuccess) {
+          interval = setInterval(async () => {
+              try {
+                  const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+                  const res = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}&select=live_tokens`, { headers });
+                  const data = await res.json();
+                  
+                  const currentTokens = data[0]?.live_tokens || 0;
+                  
+                  if (currentTokens > initialBalanceCheck) {
+                      setBalance(currentTokens);
+                      balanceRef.current = currentTokens; // Sincroniza o ref
+                      clearInterval(interval); 
+                      setPaymentSuccess(true);
+                      setTimeout(() => { 
+                          setShowPixModal(false); 
+                          setPixData(null); 
+                          setPaymentSuccess(false); 
+                      }, 3000);
+                  }
+              } catch(e) {}
+          }, 4000); 
+      }
+      return () => clearInterval(interval);
+  }, [showPixModal, pixData, paymentSuccess, initialBalanceCheck, playerPhone, supabaseKey, supabaseUrl]);
+
+  useEffect(() => {
+    let pixTimer: NodeJS.Timeout;
+    if (showPixModal && pixTimeLeft > 0 && !paymentSuccess) pixTimer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
+    else if (pixTimeLeft === 0) setShowPixModal(false);
+    return () => clearInterval(pixTimer);
+  }, [showPixModal, pixTimeLeft, paymentSuccess]);
+
+  const handleCopyPix = () => {
+      if (pixData?.qrCodeCopiaCola) { navigator.clipboard.writeText(pixData.qrCodeCopiaCola); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  };
 
   const handleSendGift = (gift: typeof GIFTS[0]) => {
     if (balanceRef.current < gift.price) { showToast("LiveTokens insuficientes."); setShowGiftMenu(false); return setShowShopModal(true); }
-    balanceRef.current -= gift.price; setBalance(balanceRef.current); setShowGiftMenu(false);
+    balanceRef.current -= gift.price; 
+    setBalance(balanceRef.current); 
+    deductFromDatabase(gift.price); // Atualiza no banco na hora!
+    setShowGiftMenu(false);
+
     const payload = JSON.stringify({ type: "GIFT", senderIdentity: roomRef.current.localParticipant.identity, senderName: clientName, giftIcon: gift.icon, giftPrice: gift.price });
     room.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
     triggerGiftAnimation(gift.icon, "Você");
@@ -200,7 +294,10 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
     
     if (penalty > 0) {
       if (!confirm(`Aviso: Sair antes de 2 minutos cobrará o tempo mínimo restante (R$ ${penalty.toFixed(2)}). Deseja sair mesmo assim?`)) return;
-      balanceRef.current -= penalty; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, penalty);
+      balanceRef.current -= penalty; 
+      setBalance(balanceRef.current); 
+      syncBalanceWithModel(balanceRef.current, penalty);
+      deductFromDatabase(penalty);
     } else {
       if (!confirm("O tempo mínimo já passou. Deseja sair do VIP sem taxas extras?")) return;
     }
@@ -242,30 +339,36 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>
           <Coins size={40} className="text-[#00f0ff] mb-4" />
           <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Comprar LiveTokens</h2>
-          <p className="text-white/60 text-xs font-bold mb-8">1 LiveToken = R$ 1,00. Adicione saldo.</p>
+          <p className="text-white/60 text-xs font-bold mb-8">1 LiveToken = R$ 1,00. Adicione saldo exclusivo para Lives.</p>
           <div className="flex flex-col gap-4 w-full max-w-sm">
             {[ {name: "Básico", p: 30}, {name: "VIP", p: 50}, {name: "Premium", p: 100} ].map(pkg => (
-              <button key={pkg.p} onClick={() => handleBuyPackage(pkg.p)} className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-2xl">
+              <button key={pkg.p} onClick={() => generatePix(pkg.p)} disabled={generatingPix} className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-2xl hover:border-[#00f0ff]/50 transition-all disabled:opacity-50">
                 <span className="text-white font-black uppercase text-sm">{pkg.name}</span>
-                <span className="bg-[#00f0ff] text-black px-4 py-1.5 rounded-full font-black text-xs">{pkg.p} LT (R$ {pkg.p})</span>
+                <span className="bg-[#00f0ff] text-black px-4 py-1.5 rounded-full font-black text-xs">{generatingPix ? <Loader2 size={12} className="animate-spin inline" /> : `${pkg.p} LT (R$ ${pkg.p})`}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {showPixModal && (
-        <div className="absolute bottom-6 left-4 right-4 z-[80] bg-black/90 backdrop-blur-2xl border border-[#00f0ff] rounded-3xl p-5 flex flex-col items-center shadow-[0_0_50px_rgba(0,240,255,0.3)] animate-slideUp">
-            <div className="flex items-center justify-between w-full mb-3"><h3 className="text-[#00f0ff] font-black uppercase tracking-widest text-xs">PIX: R$ {selectedPackage},00</h3><button onClick={() => setShowPixModal(false)} className="text-white/50"><X size={16} /></button></div>
-            <div className="flex w-full gap-4 items-center">
-               <div className="bg-white p-2 rounded-xl shrink-0"><QrCode size={60} className="text-black" /></div>
-               <div className="flex flex-col flex-1 gap-2">
-                 <button className="w-full flex items-center justify-center gap-2 bg-white/10 text-white py-2 rounded-full border border-white/10 text-[10px] font-black uppercase"><Copy size={12} /> Copiar Chave</button>
-                 <button onClick={simulatePaymentWebhook} className="w-full bg-[#00f0ff] text-black py-2 rounded-full font-black uppercase text-[10px] shadow-lg shadow-[#00f0ff]/30">Pago (Simular)</button>
-               </div>
-            </div>
-            <div className="mt-3 text-[#00f0ff] font-mono text-xl font-black">{Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
-        </div>
+      {showPixModal && pixData && (
+          <div className="absolute inset-0 z-[210] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative text-center">
+                  {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24}/></button>}
+                  {paymentSuccess ? (
+                      <div className="py-10 animate-in zoom-in duration-500"><div className="w-24 h-24 bg-[#00f0ff] rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(0,240,255,0.6)]"><CheckCircle size={50} className="text-black"/></div><h2 className="text-3xl font-black uppercase italic text-[#00f0ff] mb-2">Pago!</h2><p className="text-xs text-white/60 uppercase font-black tracking-widest">{pixData.value} LiveTokens na Carteira.</p></div>
+                  ) : (
+                      <>
+                          <h2 className="text-2xl font-black uppercase italic mb-2 text-[#00f0ff]">Comprar Tokens</h2>
+                          <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 flex items-center justify-center"><img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full object-contain rounded-xl" /></div>
+                          <p className="text-3xl font-black text-white mb-6">R$ {pixData.value.toFixed(2)}</p>
+                          <div className="mb-6 flex items-center justify-center gap-2 text-[#00f0ff] font-black font-mono text-xl animate-pulse">⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
+                          <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-5 rounded-2xl font-black uppercase text-xs mb-4">{copied ? <CheckCircle size={18} className="text-[#00f0ff]" /> : <Copy size={18} />} {copied ? "Copiado!" : "Copiar Chave PIX"}</button>
+                          <div className="bg-[#00f0ff]/10 border border-[#00f0ff]/30 p-4 rounded-xl flex items-center justify-center gap-3"><Loader2 size={16} className="animate-spin text-[#00f0ff]" /><span className="text-[9px] text-[#00f0ff] uppercase font-black tracking-widest">Aguardando Pagamento...</span></div>
+                      </>
+                  )}
+              </div>
+          </div>
       )}
 
       {!showShopModal && !showPixModal && isLowBalance && (
@@ -280,10 +383,9 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
          <ModelVideoFeed />
          
          <div className="absolute top-6 left-4 right-4 z-30 flex justify-between items-start pointer-events-none">
-            <button onClick={() => router.push('/hub')} className="bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl pointer-events-auto transition-all shadow-lg"><ArrowLeft size={16} /></button>
+            <button onClick={() => router.push('/explore')} className="bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl pointer-events-auto transition-all shadow-lg"><ArrowLeft size={16} /></button>
             
             <div className="flex flex-col items-end gap-2 pointer-events-auto">
-              {/* Botão de Áudio Discreto no Topo Direito */}
               <button onClick={toggleAudio} className="bg-black/50 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl shadow-lg transition-all hover:bg-white/10 mb-1">
                  {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} className="text-[#00f0ff]" />}
               </button>
@@ -331,7 +433,6 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
          <ClientChat clientName={clientName} modelSlug={modelSlug} />
       </div>
 
-      {/* Renderiza o áudio apenas quando não estiver mutado */}
       {!isMuted && <RoomAudioRenderer />}
     </>
   );
@@ -397,27 +498,54 @@ function LiveClientContent() {
   const modelSlug = params.slug as string;
   const [token, setToken] = useState("");
   const [clientName, setClientName] = useState("");
+  
+  // Estados para dados reais do banco
+  const [playerPhone, setPlayerPhone] = useState<string>("");
+  const [realBalance, setRealBalance] = useState<number | null>(null);
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
   
   useEffect(() => {
     const initPage = async () => {
-      const tempName = "Rafael_VIP"; setClientName(tempName);
       try {
+        const phone = localStorage.getItem("labz_player_phone");
+        if (!phone) {
+            alert("Você precisa fazer login para assistir a Live!");
+            router.push('/explore');
+            return;
+        }
+        
+        setPlayerPhone(phone);
+        const tempName = `VIP_${Math.floor(Math.random() * 1000)}`; 
+        setClientName(tempName);
+
+        // Puxa o saldo real do banco para iniciar a live
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=live_tokens`, { headers });
+        const pData = await pRes.json();
+        const startBalance = pData[0]?.live_tokens || 0;
+        setRealBalance(startBalance);
+
+        // Gera token do LiveKit
         const safeRoom = `live_${modelSlug.toLowerCase()}`;
         const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(tempName)}&isModel=false`);
-        const data = await res.json(); if (data.token) setToken(data.token);
+        const data = await res.json(); 
+        if (data.token) setToken(data.token);
+
       } catch (err) {}
     };
     if (modelSlug) initPage();
-  }, [modelSlug]);
+  }, [modelSlug, router, supabaseKey, supabaseUrl]);
 
-  if (!token) return <div className="h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#00f0ff]" size={50} /></div>;
+  if (!token || realBalance === null) return <div className="h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#00f0ff]" size={50} /></div>;
 
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       <LiveKitRoom video={false} audio={false} token={token} serverUrl={LIVEKIT_URL} className="w-full h-full">
-        <InteractiveRoom clientName={clientName} initialBalance={15.00} modelSlug={modelSlug} />
+        {/* Agora o componente recebe o saldo Real e o telefone do usuário Real! */}
+        <InteractiveRoom clientName={clientName} playerPhone={playerPhone} initialBalance={realBalance} modelSlug={modelSlug} />
       </LiveKitRoom>
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 3px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
