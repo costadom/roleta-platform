@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles, MessageCircle
+  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles, MessageCircle, Radio
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
@@ -21,7 +21,6 @@ export default function ModelProfile() {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [videoDesc, setVideoDesc] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<3 | 5 | 10>(3);
-  // 🔥 VALOR DE 10 MINUTOS AJUSTADO PARA R$ 150 🔥
   const pricing = { 3: 70, 5: 110, 10: 150 };
 
   const [viewingMedia, setViewingMedia] = useState<any>(null);
@@ -32,7 +31,7 @@ export default function ModelProfile() {
   const [processingPix, setProcessingPix] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 Minutos
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); 
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -94,7 +93,7 @@ export default function ModelProfile() {
   };
 
   const openCheckout = async (type: 'photo' | 'video', price: number, itemInfo: any) => {
-    if (!playerId) return alert("Você precisa estar logado.");
+    if (!playerId) return setShowAuth(true);
     setCheckoutData({ type, price, itemInfo });
     setPixData(null); setProcessingPix(true); setPaymentSuccess(false); setPixTimeLeft(600);
     try {
@@ -122,7 +121,6 @@ export default function ModelProfile() {
     } catch (e) { alert("Falha na conexão."); setCheckoutData(null); } finally { setProcessingPix(false); }
   };
 
-  // 🔥 POLLING SEGURO DO HUB DA MUSA 🔥
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (checkoutData && pixData && !paymentSuccess && playerId) {
@@ -155,17 +153,23 @@ export default function ModelProfile() {
       }, 3000); 
     }
     return () => clearInterval(interval);
-  }, [checkoutData, pixData, paymentSuccess, playerId]);
+  }, [checkoutData, pixData, paymentSuccess, playerId, supabaseUrl, supabaseKey]);
 
   const handleChatClick = () => {
     if (!isLoggedIn) return setShowAuth(true);
-    router.push('/hub');
+    router.push('/hub'); // Assumindo que o Chat real fica no hub pessoal do cliente
+  };
+
+  const handleJoinLive = () => {
+    if (!isLoggedIn) return setShowAuth(true);
+    router.push(`/live/${slug}`);
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /></div>;
   if (!model) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase text-center p-8">Musa não encontrada no Labz.</div>;
 
   const modelConfig = Array.isArray(model?.Configs) ? model.Configs[0] : model?.Configs;
+  const isOnline = model.live_status === 'online' || model.live_status === 'vip';
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden">
@@ -173,7 +177,7 @@ export default function ModelProfile() {
       {/* 🔥 HEADER / HERO SECTION OTIMIZADO 🔥 */}
       <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end bg-black">
         <div className="absolute inset-0 w-full h-full">
-            <img src={modelConfig?.bg_url} className="w-full h-full object-cover opacity-60" />
+            <img src={modelConfig?.bg_url || modelConfig?.profile_url} className="w-full h-full object-cover opacity-60" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
         </div>
         
@@ -183,8 +187,13 @@ export default function ModelProfile() {
         </div>
 
         <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto pb-8">
-          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-black mx-auto md:mx-0">
+          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-black mx-auto md:mx-0 relative">
             <img src={modelConfig?.profile_url} className="w-full h-full object-cover" />
+            {isOnline && (
+              <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 bg-black/60 backdrop-blur-md border border-[#00f0ff]/50 px-2 py-1 rounded-full flex items-center shadow-[0_0_10px_rgba(0,240,255,0.5)]">
+                 <span className="w-2 h-2 bg-[#00f0ff] rounded-full animate-pulse"></span>
+              </div>
+            )}
           </div>
           
           <div className="flex-1 text-center md:text-left w-full flex flex-col items-center md:items-start">
@@ -192,14 +201,27 @@ export default function ModelProfile() {
             <p className="text-white/80 text-xs sm:text-sm italic max-w-xl mb-6 leading-relaxed px-4 md:px-0 drop-shadow-md">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
             
             <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-auto">
-                <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px] order-1 md:order-last">
-                    <MessageCircle size={16} className="text-[#D946EF]"/> Chat Comigo!
+                
+                {/* 🔥 BOTÃO DE LIVE DINÂMICO 🔥 */}
+                <button 
+                    onClick={() => isOnline && handleJoinLive()} 
+                    disabled={!isOnline}
+                    className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg min-w-[140px] border ${
+                        isOnline 
+                        ? (model.live_status === 'vip' ? 'bg-[#ff0055]/20 text-[#ff0055] border-[#ff0055] shadow-[0_0_20px_rgba(255,0,85,0.3)] animate-pulse hover:bg-[#ff0055] hover:text-white' : 'bg-[#00f0ff]/20 text-[#00f0ff] border-[#00f0ff] shadow-[0_0_20px_rgba(0,240,255,0.3)] animate-pulse hover:bg-[#00f0ff] hover:text-black')
+                        : 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
+                    }`}
+                >
+                    <Radio size={16} className={isOnline ? "" : "opacity-50"}/> 
+                    {model.live_status === 'online' ? 'Assistir Ao Vivo' : model.live_status === 'vip' ? 'Show VIP Ativo' : 'Offline'}
                 </button>
-                <button onClick={() => router.push(`/game/${slug}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-[#D946EF] rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all min-w-[120px]">
+
+                <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px]">
+                    <MessageCircle size={16} className="text-[#D946EF]"/> Chat Comigo
+                </button>
+
+                <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push(`/game/${slug}`); }} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-[#D946EF] rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all min-w-[120px]">
                     <Gamepad2 size={16}/> Roleta
-                </button>
-                <button onClick={() => router.push(`/game/${slug}/raspadinha`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all min-w-[120px]">
-                    <Sparkles size={16} fill="currentColor"/> Raspadinha
                 </button>
             </div>
           </div>
@@ -298,7 +320,6 @@ export default function ModelProfile() {
                           </button>
                         )}
                         
-                        {/* 🔥 AVISO DE AUTOMAÇÃO (SUBSTITUI O BOTÃO FALSO) 🔥 */}
                         <div className="bg-[#D946EF]/10 border border-[#D946EF]/30 p-4 rounded-xl flex items-center justify-center gap-3">
                             <Loader2 size={16} className="animate-spin text-[#D946EF]" /> 
                             <span className="text-[9px] text-[#D946EF] uppercase font-black tracking-widest">Aguardando Confirmação Automática...</span>
@@ -314,7 +335,7 @@ export default function ModelProfile() {
              <button onClick={() => setViewingMedia(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full transition-colors z-[210]"><X size={24}/></button>
              <div className="relative max-w-2xl w-full h-[60vh] sm:h-[70vh] flex items-center justify-center mb-6 sm:mb-8"><img src={viewingMedia.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl" /></div>
              <div className="flex flex-col items-center gap-4 text-center max-w-md w-full">
-                <button onClick={() => setLiked(!liked)} className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${liked ? 'bg-red-500 text-white scale-110' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}><Heart size={24} fill={liked ? "currentColor" : "none"} /></button>
+                <button onClick={() => setLiked(!liked)} className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${liked ? 'bg-red-500 text-white scale-110 shadow-[0_0_30px_rgba(239,68,68,0.5)]' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}><Heart size={24} fill={liked ? "currentColor" : "none"} /></button>
                 <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{viewingMedia.caption}"</p>
              </div>
           </div>
