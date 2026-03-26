@@ -157,7 +157,7 @@ export default function ModelProfile() {
 
   const handleChatClick = () => {
     if (!isLoggedIn) return setShowAuth(true);
-    router.push('/hub'); // Assumindo que o Chat real fica no hub pessoal do cliente
+    router.push('/hub');
   };
 
   const handleJoinLive = () => {
@@ -206,7 +206,7 @@ export default function ModelProfile() {
                 <button 
                     onClick={() => isOnline && handleJoinLive()} 
                     disabled={!isOnline}
-                    className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg min-w-[140px] border ${
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase transition-all shadow-lg min-w-[140px] border ${
                         isOnline 
                         ? (model.live_status === 'vip' ? 'bg-[#ff0055]/20 text-[#ff0055] border-[#ff0055] shadow-[0_0_20px_rgba(255,0,85,0.3)] animate-pulse hover:bg-[#ff0055] hover:text-white' : 'bg-[#00f0ff]/20 text-[#00f0ff] border-[#00f0ff] shadow-[0_0_20px_rgba(0,240,255,0.3)] animate-pulse hover:bg-[#00f0ff] hover:text-black')
                         : 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
@@ -216,12 +216,17 @@ export default function ModelProfile() {
                     {model.live_status === 'online' ? 'Assistir Ao Vivo' : model.live_status === 'vip' ? 'Show VIP Ativo' : 'Offline'}
                 </button>
 
-                <button onClick={handleChatClick} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px]">
+                <button onClick={handleChatClick} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px]">
                     <MessageCircle size={16} className="text-[#D946EF]"/> Chat Comigo
                 </button>
 
                 <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push(`/game/${slug}`); }} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-[#D946EF] rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(217,70,239,0.3)] hover:scale-105 transition-all min-w-[120px]">
                     <Gamepad2 size={16}/> Roleta
+                </button>
+                
+                {/* 🔥 BOTÃO DE RASPADINHA RESTAURADO 🔥 */}
+                <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push(`/game/${slug}/raspadinha`); }} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all min-w-[120px]">
+                    <Sparkles size={16} fill="currentColor"/> Raspadinha
                 </button>
             </div>
           </div>
