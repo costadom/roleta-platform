@@ -22,7 +22,26 @@ export async function POST(req: Request) {
     if (body.status === 'paid' || body.status === 'PAID') {
         const amountPaid = Number(body.value) / 100;
 
-        if (type === 'photo' && mediaId && userId) {
+        // 🔥 NOVA REGRA: COMPRA DE LIVETOKENS (CARTEIRA GLOBAL) 🔥
+        if (type === 'live_tokens' && userId) {
+            
+            // 1. Busca o saldo atual do cliente
+            const { data: player } = await supabase
+                .from('Players')
+                .select('live_tokens')
+                .eq('id', userId)
+                .single();
+                
+            const currentTokens = player?.live_tokens || 0;
+            
+            // 2. Soma o que ele pagou e atualiza no banco
+            await supabase
+                .from('Players')
+                .update({ live_tokens: currentTokens + amountPaid })
+                .eq('id', userId);
+
+        // REGRA ANTIGA: COMPRA DE FOTO PRIVADA
+        } else if (type === 'photo' && mediaId && userId) {
             await supabase.from('UnlockedMedia').insert({ player_id: userId, media_id: mediaId, unlocked_at: new Date().toISOString() });
             const { data: model } = await supabase.from('Models').select('balance, referred_by, created_at').eq('id', modelId).single();
             let modelCut = amountPaid * 0.70;
@@ -41,11 +60,12 @@ export async function POST(req: Request) {
             if (model) await supabase.from('Models').update({ balance: (model.balance || 0) + modelCut }).eq('id', modelId);
             await supabase.from('Transactions').insert({ model_id: modelId, real_amount: amountPaid, model_cut: modelCut, platform_cut: platformCut, created_at: new Date().toISOString() });
 
+        // REGRA ANTIGA: ENCOMENDA DE VÍDEO CUSTOMIZADO
         } else if (type === 'video' && requestId) {
-            // Apenas marca como pago. O Super Admin vai ler isso em tempo real.
             await supabase.from('VideoRequests').update({ status: 'pago' }).eq('id', requestId);
         }
     }
+    
     return NextResponse.json({ status: 'ok' });
   } catch (error: any) {
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
