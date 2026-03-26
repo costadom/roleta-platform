@@ -2,10 +2,10 @@
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext, StartAudio } from "@livekit/components-react";
+import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2 } from "lucide-react";
 
 const GIFTS = [
   { id: 1, name: "Rosa", icon: "🌹", price: 5.00 },
@@ -34,7 +34,7 @@ function ToastNotification({ message, onClose }: { message: string | null, onClo
 }
 
 function ModelVideoFeed() {
-  const tracks = useTracks([Track.Source.Camera]);
+  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], { onlySubscribed: false });
   const remoteTrack = tracks.find(t => !t.participant.isLocal);
   
   return (
@@ -78,9 +78,22 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
   const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
   const [isBlurred, setIsBlurred] = useState(false);
 
+  // 🔥 ESTADO DO ÁUDIO (Começa mutado por padrão para elegância) 🔥
+  const [isMuted, setIsMuted] = useState(true);
+
   useEffect(() => { roomRef.current = room; }, [room]);
 
   const showToast = (msg: string) => { setToastMsg(msg); setTimeout(() => setToastMsg(null), 4000); };
+
+  // 🔥 TOGGLE DISCRETO DE ÁUDIO 🔥
+  const toggleAudio = async () => {
+    if (isMuted) {
+      await room.startAudio();
+      setIsMuted(false);
+    } else {
+      setIsMuted(true);
+    }
+  };
 
   const triggerGiftAnimation = (icon: string, sender: string) => {
     const newGift = { id: Date.now(), icon, sender };
@@ -120,7 +133,6 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
   }, [room, clientName, router]);
 
-  // 🔥 O MOTOR DE COBRANÇA CORRIGIDO 🔥
   useEffect(() => {
     const timer = setInterval(() => {
       let deducted = 0;
@@ -129,7 +141,6 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
         if (privateSecRef.current > 0 && privateSecRef.current % 60 === 0) deducted = 3.10;
       } else {
         publicSecRef.current += 1;
-        // Nova Tarifa Pública: 35 centavos a cada 60 segundos
         if (publicSecRef.current > 0 && publicSecRef.current % 60 === 0) deducted = 0.35;
       }
 
@@ -182,7 +193,6 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
     } catch (e) { setRequestingPrivate(false); setShowHotInvite(false); }
   };
 
-  // 🔥 MULTA JUSTA (SÓ SE FOR ANTES DE 2 MIN) 🔥
   const handleEndPrivateClient = () => {
     let penalty = 0;
     if (privateSecRef.current < 60) penalty = 6.20; 
@@ -271,7 +281,13 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
          
          <div className="absolute top-6 left-4 right-4 z-30 flex justify-between items-start pointer-events-none">
             <button onClick={() => router.push('/hub')} className="bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl pointer-events-auto transition-all shadow-lg"><ArrowLeft size={16} /></button>
+            
             <div className="flex flex-col items-end gap-2 pointer-events-auto">
+              {/* Botão de Áudio Discreto no Topo Direito */}
+              <button onClick={toggleAudio} className="bg-black/50 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl shadow-lg transition-all hover:bg-white/10 mb-1">
+                 {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} className="text-[#00f0ff]" />}
+              </button>
+
               <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl shadow-lg">
                 <Wallet size={12} className={isPrivateShow ? "text-[#ff0055]" : "text-[#00f0ff]"} />
                 <span className={`font-black text-[10px] ${isPrivateShow ? "text-[#ff0055]" : "text-[#00f0ff]"}`}>{balance.toFixed(2).replace('.', ',')} LT</span>
@@ -314,11 +330,13 @@ function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName
 
          <ClientChat clientName={clientName} modelSlug={modelSlug} />
       </div>
+
+      {/* Renderiza o áudio apenas quando não estiver mutado */}
+      {!isMuted && <RoomAudioRenderer />}
     </>
   );
 }
 
-// 🔥 CHAT CORRIGIDO PARA MOSTRAR A COROA E O NOME DA MODELO 🔥
 function ClientChat({ clientName, modelSlug }: { clientName: string, modelSlug: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
@@ -337,10 +355,7 @@ function ClientChat({ clientName, modelSlug }: { clientName: string, modelSlug: 
       <div className="flex-1 overflow-y-auto space-y-2 pb-2 custom-scrollbar pointer-events-auto mask-image-top flex flex-col justify-end" ref={chatContainerRef}>
         {chatMessages.map((msg, i) => {
           const isMe = msg.from?.identity === clientName;
-          
-          // Confere se é a modelo olhando se o nome de usuário dela bate com o SLUG da sala
           const isModel = msg.from?.name?.toLowerCase() === modelSlug.toLowerCase() || msg.from?.identity?.toLowerCase() === modelSlug.toLowerCase();
-          
           const displayName = isMe ? "Você" : (isModel ? modelSlug : "Fã VIP");
           
           return (
@@ -402,12 +417,7 @@ function LiveClientContent() {
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       <LiveKitRoom video={false} audio={false} token={token} serverUrl={LIVEKIT_URL} className="w-full h-full">
-        
-        {/* 🔥 O BOTÃO MÁGICO PARA HABILITAR O ÁUDIO NO IPHONE 🔥 */}
-        <StartAudio label="🔊 Clique para Ouvir" className="absolute top-36 left-1/2 -translate-x-1/2 z-[200] bg-[#ff0055] text-white px-6 py-3 rounded-full font-black uppercase tracking-widest shadow-[0_0_20px_rgba(255,0,85,0.6)] animate-pulse" />
-
         <InteractiveRoom clientName={clientName} initialBalance={15.00} modelSlug={modelSlug} />
-        <RoomAudioRenderer />
       </LiveKitRoom>
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 3px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
