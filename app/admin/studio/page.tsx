@@ -169,7 +169,6 @@ function StudioContent() {
     if (!modelId || !modelSlug) return router.push("/admin");
     const fetchToken = async () => {
       try {
-        // FORÇA O SLUG PARA MINÚSCULO IGUAL NO CLIENTE!
         const safeRoom = `live_${modelSlug.toLowerCase()}`;
         const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(modelSlug)}&isModel=true`);
         const data = await res.json();
@@ -238,7 +237,6 @@ function StudioContent() {
     </div>
   );
 
-  // VIP FICA VERMELHO PRA ELA TAMBÉM
   const neonBorder = isPrivateMode ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)]" : "border-black"; 
 
   return (
@@ -250,7 +248,7 @@ function StudioContent() {
       )}
 
       {preJoinChoices && (
-        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || ""} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-2`}>
+        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud"} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-2`}>
           <MyVideoStage />
           <RoomAudioRenderer />
           <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} onBalanceUpdate={handleBalanceUpdate} onPrivateEnd={() => setIsPrivateMode(false)} onGiftReceived={handleGiftReceived} />

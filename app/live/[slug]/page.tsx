@@ -34,16 +34,21 @@ function ToastNotification({ message, onClose }: { message: string | null, onClo
 }
 
 function ModelVideoFeed() {
-  // Configurado para garantir que a câmera seja puxada mesmo se demorar 1 segundo
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], { onlySubscribed: false });
+  // Simplificado para evitar o erro de TS do TrackReferenceOrPlaceholder
+  const tracks = useTracks([Track.Source.Camera]);
   const remoteTrack = tracks.find(t => !t.participant.isLocal);
+  
   return (
     <div className="absolute inset-0 w-full h-full bg-[#050505] z-0">
-      {remoteTrack ? <VideoTrack trackRef={remoteTrack} className="w-full h-full object-cover" /> : 
+      {remoteTrack ? (
+        // O "as any" cala a boca do TypeScript neste caso específico
+        <VideoTrack trackRef={remoteTrack as any} className="w-full h-full object-cover" /> 
+      ) : (
         <div className="flex flex-col items-center justify-center h-full gap-4 text-[#D946EF]/50 z-20">
           <Loader2 size={48} className="animate-spin" />
           <span className="font-black uppercase tracking-widest text-xs animate-pulse text-center px-6">Conectando à Câmera...</span>
-        </div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -57,7 +62,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
   const [balance, setBalance] = useState(initialBalance);
   
   const [requestingPrivate, setRequestingPrivate] = useState(false);
-  const [showHotInvite, setShowHotInvite] = useState(false); // Animação do VIP
+  const [showHotInvite, setShowHotInvite] = useState(false); 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   
   const [isPrivateShow, setIsPrivateShow] = useState(false);
@@ -93,14 +98,13 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
 
   useEffect(() => { setTimeout(() => syncBalanceWithModel(balanceRef.current, 0), 2000); }, [syncBalanceWithModel]);
 
-  // Escuta Sinais da Modelo
   useEffect(() => {
     const handleDataReceived = (payload: Uint8Array) => {
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
         if (data.type === "PRIVATE_ACCEPTED" && data.targetClient === clientName) {
           setIsPrivateShow(true); isPrivateRef.current = true; privateSecRef.current = 0; 
-          setRequestingPrivate(false); setShowHotInvite(false); // Esconde a animação
+          setRequestingPrivate(false); setShowHotInvite(false); 
           showToast("O Clima Esquentou! Privado Ativado 🔥");
         }
         if (data.type === "PRIVATE_ENDED" && (data.targetClient === clientName || data.targetClient === "all")) {
@@ -118,7 +122,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
   }, [room, clientName, router]);
 
-  // Motor Financeiro
   useEffect(() => {
     const timer = setInterval(() => {
       let deducted = 0;
@@ -168,7 +171,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
   const handleRequestPrivate = async () => {
     if (balanceRef.current < 6.20) { showToast("Mínimo R$ 6,20 (2 min)."); return setShowShopModal(true); }
     setRequestingPrivate(true);
-    setShowHotInvite(true); // 🔥 ATIVA A ANIMAÇÃO 🔥
+    setShowHotInvite(true); 
     
     const payload = JSON.stringify({ type: "PRIVATE_REQUEST", senderName: clientName });
     try { 
@@ -192,7 +195,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     setIsPrivateShow(false); isPrivateRef.current = false; privateSecRef.current = 0;
   };
 
-  // VERMELHO QUENTE PARA O VIP
   const neonClass = isPrivateShow ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)] border-2" : "border-none";
   const isLowBalance = (balance / (isPrivateShow ? 3.10 : 1.50)) <= 3 && balance > 0;
 
@@ -200,7 +202,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     <>
       <ToastNotification message={toastMsg} onClose={() => setToastMsg(null)} />
       
-      {/* 🔥 TELA DE CONVITE HOT 🔥 */}
       {showHotInvite && (
         <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
            <div className="w-24 h-24 bg-[#ff0055]/20 rounded-full flex items-center justify-center mb-6 animate-pulse border border-[#ff0055]">
@@ -221,7 +222,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
         ))}
       </div>
 
-      {/* LOJA E PIX MODALS */}
       {showShopModal && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-xl z-[90] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>
@@ -253,7 +253,14 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
         </div>
       )}
 
-      {/* TELA PRINCIPAL (FULLSCREEN, ANTI-PRINT) */}
+      {!showShopModal && !showPixModal && isLowBalance && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-xl border border-red-400 px-6 py-3 rounded-full flex items-center gap-4 animate-pulse w-max shadow-[0_0_30px_rgba(220,38,38,0.5)]">
+           <AlertTriangle size={16} className="text-white" />
+           <div className="flex flex-col"><span className="text-white font-black uppercase text-[10px] tracking-widest">Tokens Acabando</span></div>
+           <button onClick={() => setShowShopModal(true)} className="bg-white text-red-600 px-4 py-1.5 rounded-full text-[9px] font-black uppercase">+ Tokens</button>
+        </div>
+      )}
+
       <div className={`absolute inset-0 transition-all duration-1000 select-none ${neonClass} ${isBlurred ? 'opacity-0' : 'opacity-100'}`} style={{ WebkitTouchCallout: 'none' }}>
          <ModelVideoFeed />
          
@@ -269,7 +276,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
             </div>
          </div>
 
-         {/* BOTÕES LATERAIS */}
          {!showShopModal && !showPixModal && (
            <div className="absolute bottom-[90px] right-4 z-30 flex flex-col gap-4 items-center pointer-events-auto">
               <div className="relative">
@@ -301,7 +307,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
            </div>
          )}
 
-         {/* CHAT DO CLIENTE */}
          <ClientChat clientName={clientName} />
       </div>
     </>
@@ -317,7 +322,6 @@ function ClientChat({ clientName }: { clientName: string }) {
   
   const handleSend = () => {
      if (!message.trim()) return;
-     // Aplica o filtro de palavrões antes de enviar
      const safeMessage = filterText(message);
      send(safeMessage).then(() => setMessage(''));
   }
@@ -369,12 +373,14 @@ function LiveClientContent() {
   const modelSlug = params.slug as string;
   const [token, setToken] = useState("");
   const [clientName, setClientName] = useState("");
+
+  // CONSTANTE DE URL DEFINITIVA
+  const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
   
   useEffect(() => {
     const initPage = async () => {
       const tempName = "Rafael_VIP"; setClientName(tempName);
       try {
-        // FORÇA O SLUG PARA MINÚSCULO PARA NÃO DAR ERRO DE SALA DIFERENTE
         const safeRoom = `live_${modelSlug.toLowerCase()}`;
         const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(tempName)}&isModel=false`);
         const data = await res.json(); if (data.token) setToken(data.token);
@@ -387,7 +393,7 @@ function LiveClientContent() {
 
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
-      <LiveKitRoom video={false} audio={false} autoSubscribe={true} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || ""} className="w-full h-full">
+      <LiveKitRoom video={false} audio={false} token={token} serverUrl={LIVEKIT_URL} className="w-full h-full">
         <InteractiveRoom clientName={clientName} initialBalance={15.00} />
         <RoomAudioRenderer />
       </LiveKitRoom>
