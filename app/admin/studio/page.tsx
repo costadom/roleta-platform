@@ -15,7 +15,7 @@ function PrivateRequestModal({ request, onAccept, onDecline }: { request: any, o
         <div className="relative z-10 flex flex-col items-center">
           <div className="w-20 h-20 rounded-full bg-[#00f0ff]/10 border-2 border-[#00f0ff] flex items-center justify-center mb-6"><Lock size={36} className="text-[#00f0ff] animate-pulse" /></div>
           <h2 className="text-2xl font-black text-white uppercase tracking-tighter mb-1">Pedido de Show Privado!</h2>
-          <p className="text-[#00f0ff] text-xs font-bold uppercase tracking-widest mb-6 bg-[#00f0ff]/10 px-4 py-1 rounded-full">R$ 3,10 / minuto</p>
+          <p className="text-[#00f0ff] text-xs font-bold uppercase tracking-widest mb-6 bg-[#00f0ff]/10 px-4 py-1 rounded-full">Sua Parte: 70% (R$ 2,17/min)</p>
           <p className="text-white/80 text-lg mb-10">O cliente <span className="text-[#00f0ff] font-black uppercase bg-[#00f0ff]/10 px-2.5 py-1 rounded-md text-base">{request.senderName}</span> deseja o privado.</p>
           <div className="grid grid-cols-2 gap-5 w-full">
             <button onClick={onDecline} className="flex items-center justify-center gap-2 bg-white/5 text-white/70 hover:text-white py-4 rounded-full text-sm font-black uppercase"><X size={18} /> Recusar</button>
@@ -37,30 +37,26 @@ function MyVideoStage() {
   );
 }
 
-// LÊ O SALDO REAL ENVIADO PELO CLIENTE (SEM MATH.RANDOM)
 function ViewerList({ viewerBalances }: { viewerBalances: Record<string, number> }) {
   const participants = useParticipants();
   const viewers = participants.filter(p => !p.isLocal);
-
   return (
     <div className="p-4 border-b border-white/5 bg-[#050505] shrink-0">
       <h3 className="text-emerald-400 font-black uppercase text-[10px] tracking-widest mb-3 flex items-center gap-2"><Users size={14} /> Espectadores ({viewers.length})</h3>
       <div className="flex flex-col gap-2 max-h-32 overflow-y-auto custom-scrollbar pr-2">
-         {viewers.length === 0 ? (
-            <span className="text-white/30 text-[10px] uppercase font-bold">Nenhum fã na sala.</span>
-         ) : (
+         {viewers.length === 0 ? <span className="text-white/30 text-[10px] uppercase font-bold">Nenhum fã na sala.</span> : 
             viewers.map(p => {
                const hasBalance = viewerBalances[p.identity] !== undefined;
                return (
                  <div key={p.identity} className="flex items-center justify-between bg-white/5 p-2 rounded-lg border border-white/5">
                     <span className="text-white text-[10px] font-bold uppercase truncate max-w-[120px]">{p.name || p.identity}</span>
                     <span className="text-[#00f0ff] text-[10px] font-black tracking-widest bg-[#00f0ff]/10 px-2 py-0.5 rounded-sm">
-                      {hasBalance ? `R$ ${viewerBalances[p.identity].toFixed(2).replace('.', ',')}` : 'Aguardando...'}
+                      {hasBalance ? `${viewerBalances[p.identity].toFixed(2).replace('.', ',')} LT` : 'Sincronizando...'}
                     </span>
                  </div>
                );
             })
-         )}
+         }
       </div>
     </div>
   );
@@ -92,7 +88,7 @@ function CustomChat({ modelName }: { modelName: string }) {
   );
 }
 
-function InteractiveModelRoom({ onPrivateRequest, onBalanceUpdate }: { onPrivateRequest: (req: any) => void, onBalanceUpdate: (identity: string, balance: number, deducted: number) => void }) {
+function InteractiveModelRoom({ onPrivateRequest, onBalanceUpdate, onPrivateEnd, onGiftReceived }: { onPrivateRequest: (req: any) => void, onBalanceUpdate: (identity: string, balance: number, deducted: number) => void, onPrivateEnd: () => void, onGiftReceived: (data: any) => void }) {
   const room = useRoomContext();
   useEffect(() => {
     const handleData = (payload: Uint8Array) => {
@@ -100,11 +96,16 @@ function InteractiveModelRoom({ onPrivateRequest, onBalanceUpdate }: { onPrivate
         const data = JSON.parse(new TextDecoder().decode(payload));
         if (data.type === "PRIVATE_REQUEST") onPrivateRequest(data);
         if (data.type === "BALANCE_UPDATE") onBalanceUpdate(data.senderIdentity, data.currentBalance, data.deductedAmount);
+        if (data.type === "PRIVATE_ENDED") onPrivateEnd();
+        if (data.type === "GIFT") {
+           onBalanceUpdate(data.senderIdentity, data.currentBalance, data.giftPrice); // Cobra o presente e dá 70% pra ela
+           onGiftReceived(data); // Dispara a animação
+        }
       } catch (e) {}
     };
     room.on(RoomEvent.DataReceived, handleData);
     return () => { room.off(RoomEvent.DataReceived, handleData); };
-  }, [room, onPrivateRequest, onBalanceUpdate]);
+  }, [room, onPrivateRequest, onBalanceUpdate, onPrivateEnd, onGiftReceived]);
   return null;
 }
 
@@ -123,6 +124,8 @@ function StudioContent() {
   
   const [sessionEarnings, setSessionEarnings] = useState<number>(0);
   const [viewerBalances, setViewerBalances] = useState<Record<string, number>>({});
+
+  const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
 
   const roomName = `live_${modelSlug}`;
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
@@ -147,47 +150,90 @@ function StudioContent() {
     setCurrentPrivateRequest(null);
   };
 
+  const handleEndPrivateModel = async (roomContext: any) => {
+    setIsPrivateMode(false);
+    const payload = JSON.stringify({ type: "PRIVATE_ENDED", targetClient: "all" });
+    try { await roomContext.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch (e) {}
+  };
+
   const handleBalanceUpdate = useCallback((identity: string, currentBalance: number, deductedAmount: number) => {
     setViewerBalances(prev => ({ ...prev, [identity]: currentBalance }));
     if (deductedAmount > 0) {
-      setSessionEarnings(prev => prev + deductedAmount);
+      const modelShare = deductedAmount * 0.70; 
+      setSessionEarnings(prev => prev + modelShare);
     }
+  }, []);
+
+  const handleGiftReceived = useCallback((data: any) => {
+    const newGift = { id: Date.now(), icon: data.giftIcon, sender: data.senderName };
+    setActiveGifts(prev => [...prev, newGift]);
+    setTimeout(() => { setActiveGifts(prev => prev.filter(g => g.id !== newGift.id)); }, 3000);
   }, []);
 
   if (error) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
   if (!token) return <div className="min-h-screen bg-[#050505] flex items-center justify-center"><Loader2 className="animate-spin text-[#D946EF]" size={50} /></div>;
+  
   if (!preJoinChoices) return (
     <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-2xl bg-[#0a0a0a] border border-[#D946EF]/30 rounded-[3rem] p-12"><PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={setPreJoinChoices} className="!bg-transparent !p-0" joinLabel="Iniciar Transmissão" /></div>
     </div>
   );
 
-  const neonClass = isPrivateMode 
-    ? "border-[#00f0ff] shadow-[0_0_50px_rgba(0,240,255,0.7)]" 
-    : "border-[#D946EF] shadow-[0_0_50px_rgba(217,70,239,0.4)]"; 
+  const neonClass = isPrivateMode ? "border-[#00f0ff] shadow-[0_0_50px_rgba(0,240,255,0.7)]" : "border-[#D946EF] shadow-[0_0_50px_rgba(217,70,239,0.4)]"; 
 
   return (
     <div className="h-screen w-full bg-[#050505] flex flex-col overflow-hidden">
+      
+      {/* Camada de Animação dos Presentes da Modelo */}
+      <div className="absolute inset-0 pointer-events-none z-[70] overflow-hidden">
+        {activeGifts.map(gift => (
+          <div key={gift.id} className="absolute left-1/2 bottom-1/4 -translate-x-1/2 flex flex-col items-center gift-anim">
+            <span className="text-6xl drop-shadow-2xl mb-2">{gift.icon}</span>
+            <span className="text-[#00f0ff] font-black uppercase text-[10px] bg-black/60 px-3 py-1 rounded-full">{gift.sender} enviou!</span>
+          </div>
+        ))}
+      </div>
+
       <header className="h-20 bg-[#0a0a0a] border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-50">
-        <button onClick={() => {if(confirm("Encerrar Transmissão?")) router.push(`/admin/dashboard?model=${modelId}&slug=${modelSlug}`)}} className="bg-red-500/10 text-red-500 px-4 py-3 rounded-full text-[9px] font-black uppercase hover:bg-red-500 hover:text-white transition"><ArrowLeft size={14} className="inline mr-2" /> Encerrar</button>
-        <div className="bg-emerald-500/20 px-6 py-2 rounded-2xl flex items-center gap-4"><DollarSign size={24} className="text-emerald-400" /><div className="flex flex-col"><span className="text-[9px] text-emerald-400 uppercase">Ganhos da Sessão</span><span className="text-xl font-black text-white">R$ {sessionEarnings.toFixed(2).replace('.', ',')}</span></div></div>
+        <button onClick={() => { if(confirm("Encerrar e voltar para a preparação?")) setPreJoinChoices(undefined); }} className="bg-red-500/10 text-red-500 px-4 py-3 rounded-full text-[9px] font-black uppercase hover:bg-red-500 hover:text-white transition">
+           <ArrowLeft size={14} className="inline mr-2" /> Encerrar
+        </button>
+        <div className="bg-emerald-500/20 px-6 py-2 rounded-2xl flex items-center gap-4">
+           <DollarSign size={24} className="text-emerald-400" />
+           <div className="flex flex-col">
+             <span className="text-[9px] text-emerald-400 uppercase">Seus Ganhos (70%)</span>
+             <span className="text-xl font-black text-white">R$ {sessionEarnings.toFixed(2).replace('.', ',')}</span>
+           </div>
+        </div>
       </header>
       
       <main className="flex-1 relative flex overflow-hidden">
         <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={livekitUrl} className="flex flex-col lg:flex-row h-full w-full">
           
-          <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} onBalanceUpdate={handleBalanceUpdate} />
+          <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} onBalanceUpdate={handleBalanceUpdate} onPrivateEnd={() => setIsPrivateMode(false)} onGiftReceived={handleGiftReceived} />
           
           <RoomContextConsumer>
             {(room) => (
+              <>
                <PrivateRequestModal request={currentPrivateRequest} onAccept={() => handleAcceptPrivate(room)} onDecline={() => setCurrentPrivateRequest(null)} />
+               
+               <div className="flex-1 p-4 flex flex-col bg-[#050505] relative overflow-hidden">
+                  <div className="absolute top-10 left-10 z-30 flex items-center gap-3">
+                     <div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full ${isPrivateMode ? 'bg-[#00f0ff] text-black shadow-lg shadow-[#00f0ff]/50 animate-pulse' : 'bg-red-500'}`}>
+                        {isPrivateMode ? 'PRIVADO VIP ATIVO' : 'AO VIVO'}
+                     </div>
+                     {isPrivateMode && (
+                        <button onClick={() => handleEndPrivateModel(room)} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase shadow-lg">
+                           Derrubar Privado
+                        </button>
+                     )}
+                  </div>
+                  <div className={`w-full h-full relative rounded-[2.5rem] overflow-hidden border-4 transition-all duration-1000 ${neonClass}`}><MyVideoStage /></div>
+               </div>
+              </>
             )}
           </RoomContextConsumer>
 
-          <div className="flex-1 p-4 flex flex-col bg-[#050505] relative overflow-hidden">
-             <div className="absolute top-10 left-10 z-30 flex gap-3"><div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full ${isPrivateMode ? 'bg-[#00f0ff] text-black shadow-lg shadow-[#00f0ff]/50 animate-pulse' : 'bg-red-500'}`}>{isPrivateMode ? 'PRIVADO VIP ATIVO' : 'AO VIVO'}</div></div>
-             <div className={`w-full h-full relative rounded-[2.5rem] overflow-hidden border-4 transition-all duration-1000 ${neonClass}`}><MyVideoStage /></div>
-          </div>
           <div className="w-full lg:w-96 border-l border-white/5 flex flex-col shrink-0 h-full z-20">
              <ViewerList viewerBalances={viewerBalances} />
              <CustomChat modelName={modelSlug || ""} />
@@ -195,6 +241,15 @@ function StudioContent() {
           <RoomAudioRenderer />
         </LiveKitRoom>
       </main>
+      <style jsx global>{`
+        @keyframes flyUpFade { 
+           0% { transform: translateY(50px) scale(0.5); opacity: 0; } 
+           20% { transform: translateY(0px) scale(1.2); opacity: 1; } 
+           80% { transform: translateY(-100px) scale(1); opacity: 1; } 
+           100% { transform: translateY(-150px) scale(0.8); opacity: 0; } 
+        }
+        .gift-anim { animation: flyUpFade 3s ease-out forwards; }
+      `}</style>
     </div>
   );
 }
