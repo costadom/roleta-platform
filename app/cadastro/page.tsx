@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Phone, Mail, User, Wallet, Loader2, ShieldCheck, Eye, EyeOff, AlertTriangle, ArrowLeft, Camera, ImagePlus } from "lucide-react";
 
-export default function ModelAuthPage() {
+// 🔥 TODO O CONTEÚDO DA PÁGINA FOI MOVIDO PARA ESTE COMPONENTE INTERNO 🔥
+function CadastroContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const refId = searchParams.get("ref"); // 🔥 PEGA A INDICAÇÃO DA MADRINHA 🔥
@@ -21,7 +22,7 @@ export default function ModelAuthPage() {
   const [email, setEmail] = useState("");
   const [pixKey, setPixKey] = useState(""); 
 
-  // 🔥 FOTOS DA MODELO (PARA A VITRINE) 🔥
+  // Fotos da Modelo
   const [profileFile, setProfileFile] = useState<File | null>(null);
   const [profilePreview, setProfilePreview] = useState<string | null>(null);
   const [bgFile, setBgFile] = useState<File | null>(null);
@@ -54,7 +55,6 @@ export default function ModelAuthPage() {
 
     try {
       if (view === "login") {
-        // 🔥 LÓGICA DE LOGIN DA MODELO 🔥
         const resCheck = await fetch(`${supabaseUrl}/rest/v1/Models?whatsapp=eq.${cleanWhatsapp}&password=eq.${password}&select=id,slug`, { headers });
         const dataCheck = await resCheck.json();
 
@@ -67,9 +67,6 @@ export default function ModelAuthPage() {
           setError("WhatsApp ou senha incorretos.");
         }
       } else {
-        // 🔥 LÓGICA DE CADASTRO DA MODELO (Mantendo a Madrinha) 🔥
-        
-        // Exige fotos para cadastro
         if (!profileFile || !bgFile) {
             setError("Por favor, adicione uma foto de perfil e uma de capa.");
             setLoading(false); return;
@@ -99,7 +96,6 @@ export default function ModelAuthPage() {
         const newModel = await res.json();
         const newModelId = newModel[0].id;
 
-        // 🔥 UPLOAD DE FOTOS PARA O SUPABASE STORAGE 🔥
         let uploadedProfileUrl = "";
         let uploadedBgUrl = "";
         const headersUpload = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
@@ -120,7 +116,6 @@ export default function ModelAuthPage() {
             if (resUp.ok) uploadedBgUrl = `${supabaseUrl}/storage/v1/object/public/media/${fileName}`;
         }
 
-        // Cria as Configurações Básicas com as fotos
         const configPayload = {
             model_id: newModelId,
             model_name: name,
@@ -174,7 +169,6 @@ export default function ModelAuthPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* 🔥 UPLOAD DE FOTOS (OBRIGATÓRIO NO CADASTRO) 🔥 */}
           {view === "register" && (
             <div className="flex gap-3 mb-4">
                 <div className="flex-1 relative">
@@ -260,5 +254,18 @@ export default function ModelAuthPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// 🔥 AQUI ESTÁ A CÁPSULA DE SEGURANÇA PARA A VERCEL NÃO QUEBRAR NO BUILD 🔥
+export default function ModelAuthPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#D946EF]" size={50} />
+      </div>
+    }>
+      <CadastroContent />
+    </Suspense>
   );
 }
