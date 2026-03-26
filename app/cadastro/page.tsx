@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Phone, Mail, User, Wallet, Loader2, ShieldCheck, Eye, EyeOff, AlertTriangle, ArrowLeft, Camera, ImagePlus } from "lucide-react";
 
@@ -21,7 +21,7 @@ export default function ModelAuthPage() {
   const [email, setEmail] = useState("");
   const [pixKey, setPixKey] = useState(""); 
 
-  // 🔥 FOTOS DA MODELO 🔥
+  // 🔥 FOTOS DA MODELO (PARA A VITRINE) 🔥
   const [profileFile, setProfileFile] = useState<File | null>(null);
   const [profilePreview, setProfilePreview] = useState<string | null>(null);
   const [bgFile, setBgFile] = useState<File | null>(null);
@@ -30,7 +30,6 @@ export default function ModelAuthPage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Lida com a seleção da Foto de Perfil
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setProfileFile(e.target.files[0]);
@@ -38,7 +37,6 @@ export default function ModelAuthPage() {
     }
   };
 
-  // Lida com a seleção da Foto de Fundo/Capa
   const handleBgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setBgFile(e.target.files[0]);
@@ -69,7 +67,14 @@ export default function ModelAuthPage() {
           setError("WhatsApp ou senha incorretos.");
         }
       } else {
-        // 🔥 LÓGICA DE CADASTRO DA MODELO 🔥
+        // 🔥 LÓGICA DE CADASTRO DA MODELO (Mantendo a Madrinha) 🔥
+        
+        // Exige fotos para cadastro
+        if (!profileFile || !bgFile) {
+            setError("Por favor, adicione uma foto de perfil e uma de capa.");
+            setLoading(false); return;
+        }
+
         const checkExist = await fetch(`${supabaseUrl}/rest/v1/Models?whatsapp=eq.${cleanWhatsapp}&select=id`, { headers }).then(r=>r.json());
         
         if (checkExist && checkExist.length > 0) {
@@ -79,7 +84,6 @@ export default function ModelAuthPage() {
 
         const generatedSlug = name.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '');
 
-        // 1. Cria a Modelo no Banco
         const payload = {
             whatsapp: cleanWhatsapp,
             password: password,
@@ -95,10 +99,9 @@ export default function ModelAuthPage() {
         const newModel = await res.json();
         const newModelId = newModel[0].id;
 
-        // 2. Faz o Upload das Fotos para o Supabase Storage (Bucket 'media')
+        // 🔥 UPLOAD DE FOTOS PARA O SUPABASE STORAGE 🔥
         let uploadedProfileUrl = "";
         let uploadedBgUrl = "";
-
         const headersUpload = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
 
         if (profileFile) {
@@ -117,7 +120,7 @@ export default function ModelAuthPage() {
             if (resUp.ok) uploadedBgUrl = `${supabaseUrl}/storage/v1/object/public/media/${fileName}`;
         }
 
-        // 3. Salva as Configurações com as Fotos
+        // Cria as Configurações Básicas com as fotos
         const configPayload = {
             model_id: newModelId,
             model_name: name,
@@ -125,8 +128,8 @@ export default function ModelAuthPage() {
             bio: "Sou uma nova musa na LabzSexy!",
             live_price: 3.10,
             showcase_visible: true,
-            profile_url: uploadedProfileUrl, // Salva a foto de perfil
-            bg_url: uploadedBgUrl            // Salva a foto de capa
+            profile_url: uploadedProfileUrl,
+            bg_url: uploadedBgUrl
         };
         await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers, body: JSON.stringify(configPayload) });
 
@@ -145,7 +148,6 @@ export default function ModelAuthPage() {
   return (
     <div className="min-h-[100dvh] bg-[#050505] text-white flex items-center justify-center p-4 relative overflow-x-hidden overflow-y-auto py-12">
       
-      {/* 🔥 FUNDO LIQUID GLASS ANIMADO 🔥 */}
       <div className="fixed inset-0 bg-[url('https://images.unsplash.com/photo-1516481157630-05bc0aeb8b19?w=1000&q=80')] bg-cover bg-center opacity-20 scale-105 animate-pulse" style={{ animationDuration: '10s' }}></div>
       <div className="fixed inset-0 bg-gradient-to-b from-black/80 via-black/95 to-[#050505] backdrop-blur-sm"></div>
 
@@ -161,7 +163,7 @@ export default function ModelAuthPage() {
              <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter drop-shadow-[0_0_10px_rgba(217,70,239,0.3)]">Labz<span className="text-[#D946EF]">Sexy</span></h2>
           </div>
           <p className="text-[10px] text-white/50 uppercase font-bold tracking-[0.2em] flex items-center justify-center gap-2">
-              <ShieldCheck size={14} className="text-[#D946EF]" /> Acesso Exclusivo para Criadoras
+              <ShieldCheck size={14} className="text-[#D946EF]" /> Acesso para Criadoras
           </p>
         </div>
 
@@ -172,7 +174,7 @@ export default function ModelAuthPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* 🔥 NOVOS CAMPOS DE FOTO (SOMENTE NO CADASTRO) 🔥 */}
+          {/* 🔥 UPLOAD DE FOTOS (OBRIGATÓRIO NO CADASTRO) 🔥 */}
           {view === "register" && (
             <div className="flex gap-3 mb-4">
                 <div className="flex-1 relative">
@@ -224,7 +226,7 @@ export default function ModelAuthPage() {
               </div>
               <div className="relative">
                   <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D946EF]/50" size={18} />
-                  <input type="text" placeholder="Chave PIX (E-mail ou Telefone)" value={pixKey} onChange={e => setPixKey(e.target.value)} required className="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" />
+                  <input type="text" placeholder="Chave PIX (E-mail/Telefone)" value={pixKey} onChange={e => setPixKey(e.target.value)} required className="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 text-white text-sm outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" />
               </div>
             </>
           )}
