@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext } from "@livekit/components-react";
+import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext, StartAudio } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins } from "lucide-react";
@@ -26,7 +26,7 @@ const filterText = (text: string) => {
 function ToastNotification({ message, onClose }: { message: string | null, onClose: () => void }) {
   if (!message) return null;
   return (
-    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] bg-[#ff0055] text-white px-6 py-3 rounded-full font-black uppercase tracking-widest text-[10px] shadow-[0_0_30px_rgba(255,0,85,0.6)] flex items-center gap-3 animate-bounce">
+    <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-[#ff0055] text-white px-6 py-3 rounded-full font-black uppercase tracking-widest text-[10px] shadow-[0_0_30px_rgba(255,0,85,0.6)] flex items-center gap-3 animate-bounce">
       {message}
       <button onClick={onClose} className="bg-black/20 p-1 rounded-full hover:bg-black/40"><X size={12} /></button>
     </div>
@@ -34,14 +34,12 @@ function ToastNotification({ message, onClose }: { message: string | null, onClo
 }
 
 function ModelVideoFeed() {
-  // Simplificado para evitar o erro de TS do TrackReferenceOrPlaceholder
   const tracks = useTracks([Track.Source.Camera]);
   const remoteTrack = tracks.find(t => !t.participant.isLocal);
   
   return (
     <div className="absolute inset-0 w-full h-full bg-[#050505] z-0">
       {remoteTrack ? (
-        // O "as any" cala a boca do TypeScript neste caso específico
         <VideoTrack trackRef={remoteTrack as any} className="w-full h-full object-cover" /> 
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-4 text-[#D946EF]/50 z-20">
@@ -53,7 +51,7 @@ function ModelVideoFeed() {
   );
 }
 
-function InteractiveRoom({ clientName, initialBalance }: { clientName: string, initialBalance: number }) {
+function InteractiveRoom({ clientName, initialBalance, modelSlug }: { clientName: string, initialBalance: number, modelSlug: string }) {
   const room = useRoomContext();
   const router = useRouter();
   const roomRef = useRef(room);
@@ -122,6 +120,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
   }, [room, clientName, router]);
 
+  // 🔥 O MOTOR DE COBRANÇA CORRIGIDO 🔥
   useEffect(() => {
     const timer = setInterval(() => {
       let deducted = 0;
@@ -130,14 +129,15 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
         if (privateSecRef.current > 0 && privateSecRef.current % 60 === 0) deducted = 3.10;
       } else {
         publicSecRef.current += 1;
-        if (publicSecRef.current > 0 && publicSecRef.current % 20 === 0) deducted = 0.50;
+        // Nova Tarifa Pública: 35 centavos a cada 60 segundos
+        if (publicSecRef.current > 0 && publicSecRef.current % 60 === 0) deducted = 0.35;
       }
 
       if (deducted > 0) {
         balanceRef.current -= deducted; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, deducted);
       }
 
-      if ((isPrivateRef.current && balanceRef.current < 3.10) || (!isPrivateRef.current && balanceRef.current < 0.50)) {
+      if ((isPrivateRef.current && balanceRef.current < 3.10) || (!isPrivateRef.current && balanceRef.current < 0.35)) {
          if (!showShopModal && !showPixModal) setShowShopModal(true); 
       }
     }, 1000);
@@ -182,21 +182,26 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     } catch (e) { setRequestingPrivate(false); setShowHotInvite(false); }
   };
 
+  // 🔥 MULTA JUSTA (SÓ SE FOR ANTES DE 2 MIN) 🔥
   const handleEndPrivateClient = () => {
     let penalty = 0;
     if (privateSecRef.current < 60) penalty = 6.20; 
     else if (privateSecRef.current < 120) penalty = 3.10; 
+    
     if (penalty > 0) {
-      if (!confirm(`Sair antes de 2min cobrará o restante (R$ ${penalty.toFixed(2)}). Sair?`)) return;
+      if (!confirm(`Aviso: Sair antes de 2 minutos cobrará o tempo mínimo restante (R$ ${penalty.toFixed(2)}). Deseja sair mesmo assim?`)) return;
       balanceRef.current -= penalty; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, penalty);
+    } else {
+      if (!confirm("O tempo mínimo já passou. Deseja sair do VIP sem taxas extras?")) return;
     }
+
     const payload = JSON.stringify({ type: "PRIVATE_ENDED", senderName: clientName });
     room.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
     setIsPrivateShow(false); isPrivateRef.current = false; privateSecRef.current = 0;
   };
 
   const neonClass = isPrivateShow ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)] border-2" : "border-none";
-  const isLowBalance = (balance / (isPrivateShow ? 3.10 : 1.50)) <= 3 && balance > 0;
+  const isLowBalance = (balance / (isPrivateShow ? 3.10 : 0.35)) <= 3 && balance > 0;
 
   return (
     <>
@@ -254,7 +259,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
       )}
 
       {!showShopModal && !showPixModal && isLowBalance && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-xl border border-red-400 px-6 py-3 rounded-full flex items-center gap-4 animate-pulse w-max shadow-[0_0_30px_rgba(220,38,38,0.5)]">
+        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-xl border border-red-400 px-6 py-3 rounded-full flex items-center gap-4 animate-pulse w-max shadow-[0_0_30px_rgba(220,38,38,0.5)]">
            <AlertTriangle size={16} className="text-white" />
            <div className="flex flex-col"><span className="text-white font-black uppercase text-[10px] tracking-widest">Tokens Acabando</span></div>
            <button onClick={() => setShowShopModal(true)} className="bg-white text-red-600 px-4 py-1.5 rounded-full text-[9px] font-black uppercase">+ Tokens</button>
@@ -307,13 +312,14 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
            </div>
          )}
 
-         <ClientChat clientName={clientName} />
+         <ClientChat clientName={clientName} modelSlug={modelSlug} />
       </div>
     </>
   );
 }
 
-function ClientChat({ clientName }: { clientName: string }) {
+// 🔥 CHAT CORRIGIDO PARA MOSTRAR A COROA E O NOME DA MODELO 🔥
+function ClientChat({ clientName, modelSlug }: { clientName: string, modelSlug: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -331,13 +337,16 @@ function ClientChat({ clientName }: { clientName: string }) {
       <div className="flex-1 overflow-y-auto space-y-2 pb-2 custom-scrollbar pointer-events-auto mask-image-top flex flex-col justify-end" ref={chatContainerRef}>
         {chatMessages.map((msg, i) => {
           const isMe = msg.from?.identity === clientName;
-          const isModel = msg.from?.identity.includes("modelo");
-          const displayName = isMe ? "Você" : (isModel ? msg.from?.name : "Fã VIP");
+          
+          // Confere se é a modelo olhando se o nome de usuário dela bate com o SLUG da sala
+          const isModel = msg.from?.name?.toLowerCase() === modelSlug.toLowerCase() || msg.from?.identity?.toLowerCase() === modelSlug.toLowerCase();
+          
+          const displayName = isMe ? "Você" : (isModel ? modelSlug : "Fã VIP");
           
           return (
             <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-              <span className={`text-[9px] font-black uppercase mb-0.5 ${isMe ? 'text-white' : isModel ? 'text-[#ff0055]' : 'text-[#00f0ff]'}`}>
-                {isModel && "👑"} {displayName}
+              <span className={`text-[10px] font-black uppercase mb-0.5 ${isMe ? 'text-white' : isModel ? 'text-[#ff0055] drop-shadow-md' : 'text-[#00f0ff]'}`}>
+                {isModel && "👑 "} {displayName}
               </span>
               <span className="text-[13px] text-white font-medium leading-tight">
                 {msg.message}
@@ -374,7 +383,6 @@ function LiveClientContent() {
   const [token, setToken] = useState("");
   const [clientName, setClientName] = useState("");
 
-  // CONSTANTE DE URL DEFINITIVA
   const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
   
   useEffect(() => {
@@ -394,7 +402,11 @@ function LiveClientContent() {
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       <LiveKitRoom video={false} audio={false} token={token} serverUrl={LIVEKIT_URL} className="w-full h-full">
-        <InteractiveRoom clientName={clientName} initialBalance={15.00} />
+        
+        {/* 🔥 O BOTÃO MÁGICO PARA HABILITAR O ÁUDIO NO IPHONE 🔥 */}
+        <StartAudio label="🔊 Clique para Ouvir" className="absolute top-36 left-1/2 -translate-x-1/2 z-[200] bg-[#ff0055] text-white px-6 py-3 rounded-full font-black uppercase tracking-widest shadow-[0_0_20px_rgba(255,0,85,0.6)] animate-pulse" />
+
+        <InteractiveRoom clientName={clientName} initialBalance={15.00} modelSlug={modelSlug} />
         <RoomAudioRenderer />
       </LiveKitRoom>
       <style jsx global>{`

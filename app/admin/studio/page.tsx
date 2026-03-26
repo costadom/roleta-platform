@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, useTracks, ParticipantTile, useChat, useRoomContext, useParticipants, useLocalParticipant } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, MessageCircle, Video, DollarSign, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video } from "lucide-react";
 
 const BAD_WORDS = ["puta", "vadia", "buceta", "caralho", "porra", "merda", "fuder", "foder", "cuzinho", "cu", "pau", "piroca", "rola", "putinha", "safada"];
 const filterText = (text: string) => {
@@ -80,6 +80,7 @@ function ViewerList({ viewerBalances, onBlock }: { viewerBalances: Record<string
   );
 }
 
+// 🔥 CHAT CORRIGIDO PARA IDENTIFICAR A MODELO 🔥
 function CustomChat({ modelName }: { modelName: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
@@ -96,22 +97,27 @@ function CustomChat({ modelName }: { modelName: string }) {
   return (
     <div className="absolute bottom-4 left-4 right-4 sm:w-80 h-[50vh] flex flex-col justify-end z-20 pointer-events-none">
       <div className="overflow-y-auto p-2 space-y-3 custom-scrollbar pointer-events-auto mask-image-top mb-4 flex flex-col justify-end" ref={chatContainerRef}>
-        {chatMessages.map((msg, i) => (
-          <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-            <span className={`text-[10px] font-black uppercase mb-0.5 ${msg.from?.identity === modelName ? 'text-[#ff0055] drop-shadow-md' : 'text-emerald-400 drop-shadow-md'}`}>
-              {msg.from?.identity === modelName ? '👑 Você' : msg.from?.name}
-            </span>
-            <span className="text-[13px] text-white font-medium drop-shadow-lg leading-tight">
-              {msg.message}
-            </span>
-          </div>
-        ))}
+        {chatMessages.map((msg, i) => {
+          // Confere se quem enviou foi a modelo pelo slug
+          const isMe = msg.from?.name?.toLowerCase() === modelName.toLowerCase() || msg.from?.identity?.toLowerCase() === modelName.toLowerCase();
+          
+          return (
+            <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+              <span className={`text-[10px] font-black uppercase mb-0.5 ${isMe ? 'text-[#ff0055] drop-shadow-md' : 'text-emerald-400 drop-shadow-md'}`}>
+                {isMe ? '👑 VOCÊ' : msg.from?.name}
+              </span>
+              <span className="text-[13px] text-white font-medium drop-shadow-lg leading-tight">
+                {msg.message}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/20 rounded-full p-1 pl-4 shrink-0">
         <input 
           type="text" 
-          placeholder="Fale com os fãs..." 
+          placeholder="Falar com os fãs..." 
           className="flex-1 bg-transparent border-none text-[16px] text-white outline-none placeholder:text-white/50 py-2" 
           value={message} 
           onChange={(e) => setMessage(e.target.value)} 
