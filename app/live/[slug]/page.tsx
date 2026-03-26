@@ -70,7 +70,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const publicSecRef = useRef(0);
   const privateSecRef = useRef(0);
 
-  // Estados Financeiros
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<any>(null);
@@ -83,6 +82,9 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
   const [isBlurred, setIsBlurred] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+
+  // Exibe a degustação
+  const [showPreviewBadge, setShowPreviewBadge] = useState(balance < 0.35);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -107,13 +109,11 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     try { roomRef.current.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch(e) {}
   }, [clientName]);
 
-  // Atualiza o saldo real se ele mudou por fora
   useEffect(() => {
     balanceRef.current = balance;
     syncBalanceWithModel(balance, 0);
   }, [balance, syncBalanceWithModel]);
 
-  // Sincronia inicial
   useEffect(() => { setTimeout(() => syncBalanceWithModel(balanceRef.current, 0), 2000); }, [syncBalanceWithModel]);
 
   useEffect(() => {
@@ -140,42 +140,56 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
   }, [room, clientName, router]);
 
-  // Motor de Desconto no Banco
   const deductFromDatabase = async (amount: number) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
           await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}`, {
               method: 'PATCH',
               headers: headers,
-              body: JSON.stringify({ live_tokens: balanceRef.current }) // Atualiza com o valor descontado
+              body: JSON.stringify({ live_tokens: balanceRef.current }) 
           });
       } catch(e) {}
   };
 
+  // 🔥 MOTOR DE COBRANÇA (COM DEGUSTAÇÃO DE 20 SEGUNDOS) 🔥
   useEffect(() => {
     const timer = setInterval(() => {
       let deducted = 0;
+      
       if (isPrivateRef.current) {
         privateSecRef.current += 1;
         if (privateSecRef.current > 0 && privateSecRef.current % 60 === 0) deducted = 3.10;
+        
+        if (deducted > 0 && balanceRef.current >= deducted) {
+            balanceRef.current -= deducted; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, deducted); deductFromDatabase(deducted);
+        }
+
+        if (balanceRef.current < 3.10) {
+            if (!showShopModal && !showPixModal) setShowShopModal(true); 
+        }
+
       } else {
         publicSecRef.current += 1;
-        if (publicSecRef.current > 0 && publicSecRef.current % 60 === 0) deducted = 0.35;
-      }
+        
+        // Esconde o badge de degustação se passar de 20s
+        if (publicSecRef.current >= 20 && showPreviewBadge) setShowPreviewBadge(false);
 
-      if (deducted > 0) {
-        balanceRef.current -= deducted; 
-        setBalance(balanceRef.current); 
-        syncBalanceWithModel(balanceRef.current, deducted);
-        deductFromDatabase(deducted); // Desconta real do banco!
-      }
-
-      if ((isPrivateRef.current && balanceRef.current < 3.10) || (!isPrivateRef.current && balanceRef.current < 0.35)) {
-         if (!showShopModal && !showPixModal) setShowShopModal(true); 
+        // Se deu 20 segundos E o cliente NÃO TEM CRÉDITOS, bloqueia a tela!
+        if (publicSecRef.current >= 20 && balanceRef.current < 0.35) {
+            if (!showShopModal && !showPixModal) setShowShopModal(true);
+        } else {
+            // Cliente tem grana, vamos cobrar dele o minuto normal
+            if (publicSecRef.current === 20 || (publicSecRef.current > 20 && (publicSecRef.current - 20) % 60 === 0)) {
+                deducted = 0.35;
+            }
+            if (deducted > 0 && balanceRef.current >= deducted) {
+                balanceRef.current -= deducted; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, deducted); deductFromDatabase(deducted);
+            }
+        }
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [syncBalanceWithModel, showShopModal, showPixModal, playerPhone]);
+  }, [syncBalanceWithModel, showShopModal, showPixModal, playerPhone, showPreviewBadge]);
 
   useEffect(() => {
     const handleVisibility = () => setIsBlurred(document.hidden);
@@ -183,7 +197,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  // 🔥 GERAÇÃO DE PIX REAL DENTRO DA LIVE 🔥
   const generatePix = async (amount: number) => {
     setGeneratingPix(true);
     setPixTimeLeft(600);
@@ -221,7 +234,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     }
   };
 
-  // 🔥 POLLING DE PAGAMENTO (Checa o banco de dados) 🔥
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (showPixModal && pixData && !paymentSuccess) {
@@ -235,7 +247,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
                   
                   if (currentTokens > initialBalanceCheck) {
                       setBalance(currentTokens);
-                      balanceRef.current = currentTokens; // Sincroniza o ref
+                      balanceRef.current = currentTokens; 
                       clearInterval(interval); 
                       setPaymentSuccess(true);
                       setTimeout(() => { 
@@ -265,7 +277,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     if (balanceRef.current < gift.price) { showToast("LiveTokens insuficientes."); setShowGiftMenu(false); return setShowShopModal(true); }
     balanceRef.current -= gift.price; 
     setBalance(balanceRef.current); 
-    deductFromDatabase(gift.price); // Atualiza no banco na hora!
+    deductFromDatabase(gift.price); 
     setShowGiftMenu(false);
 
     const payload = JSON.stringify({ type: "GIFT", senderIdentity: roomRef.current.localParticipant.identity, senderName: clientName, giftIcon: gift.icon, giftPrice: gift.price });
@@ -308,7 +320,8 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   };
 
   const neonClass = isPrivateShow ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)] border-2" : "border-none";
-  const isLowBalance = (balance / (isPrivateShow ? 3.10 : 0.35)) <= 3 && balance > 0;
+  // O aviso de saldo baixo não aparece na degustação pra não estragar o clima
+  const isLowBalance = (balance / (isPrivateShow ? 3.10 : 0.35)) <= 3 && balance > 0 && !showPreviewBadge;
 
   return (
     <>
@@ -335,11 +348,13 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
       </div>
 
       {showShopModal && (
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-xl z-[90] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
-          <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+          {/* Se ele tiver grana pra fechar o modal ou for recarregar, deixa o X. Se a tela travou pq ele tá duro no preview, não tem X */}
+          {balance > 0.35 && <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>}
+          
           <Coins size={40} className="text-[#00f0ff] mb-4" />
-          <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Comprar LiveTokens</h2>
-          <p className="text-white/60 text-xs font-bold mb-8">1 LiveToken = R$ 1,00. Adicione saldo exclusivo para Lives.</p>
+          <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Seu Tempo Acabou</h2>
+          <p className="text-white/60 text-xs font-bold mb-8">Adicione LiveTokens para continuar assistindo!</p>
           <div className="flex flex-col gap-4 w-full max-w-sm">
             {[ {name: "Básico", p: 30}, {name: "VIP", p: 50}, {name: "Premium", p: 100} ].map(pkg => (
               <button key={pkg.p} onClick={() => generatePix(pkg.p)} disabled={generatingPix} className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-2xl hover:border-[#00f0ff]/50 transition-all disabled:opacity-50">
@@ -371,7 +386,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
           </div>
       )}
 
-      {!showShopModal && !showPixModal && isLowBalance && (
+      {isLowBalance && (
         <div className="absolute top-28 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-xl border border-red-400 px-6 py-3 rounded-full flex items-center gap-4 animate-pulse w-max shadow-[0_0_30px_rgba(220,38,38,0.5)]">
            <AlertTriangle size={16} className="text-white" />
            <div className="flex flex-col"><span className="text-white font-black uppercase text-[10px] tracking-widest">Tokens Acabando</span></div>
@@ -395,6 +410,9 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
                 <span className={`font-black text-[10px] ${isPrivateShow ? "text-[#ff0055]" : "text-[#00f0ff]"}`}>{balance.toFixed(2).replace('.', ',')} LT</span>
               </div>
               <button onClick={() => setShowShopModal(true)} className="bg-white/10 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] shadow-lg">+ Comprar</button>
+              
+              {/* Badge de Degustação */}
+              {showPreviewBadge && <div className="bg-emerald-500 text-black px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-1 shadow-lg"> Degustação 20s</div>}
               {isPrivateShow && <div className="bg-[#ff0055] text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-1 animate-pulse shadow-[0_0_15px_rgba(255,0,85,0.6)]"><Lock size={10} /> Privado Ativo</div>}
             </div>
          </div>
@@ -499,7 +517,6 @@ function LiveClientContent() {
   const [token, setToken] = useState("");
   const [clientName, setClientName] = useState("");
   
-  // Estados para dados reais do banco
   const [playerPhone, setPlayerPhone] = useState<string>("");
   const [realBalance, setRealBalance] = useState<number | null>(null);
 
@@ -521,14 +538,12 @@ function LiveClientContent() {
         const tempName = `VIP_${Math.floor(Math.random() * 1000)}`; 
         setClientName(tempName);
 
-        // Puxa o saldo real do banco para iniciar a live
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=live_tokens`, { headers });
         const pData = await pRes.json();
         const startBalance = pData[0]?.live_tokens || 0;
         setRealBalance(startBalance);
 
-        // Gera token do LiveKit
         const safeRoom = `live_${modelSlug.toLowerCase()}`;
         const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(tempName)}&isModel=false`);
         const data = await res.json(); 
@@ -544,7 +559,6 @@ function LiveClientContent() {
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       <LiveKitRoom video={false} audio={false} token={token} serverUrl={LIVEKIT_URL} className="w-full h-full">
-        {/* Agora o componente recebe o saldo Real e o telefone do usuário Real! */}
         <InteractiveRoom clientName={clientName} playerPhone={playerPhone} initialBalance={realBalance} modelSlug={modelSlug} />
       </LiveKitRoom>
       <style jsx global>{`
