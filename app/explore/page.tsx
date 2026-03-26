@@ -2,27 +2,30 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Search, Flame, Lock, Coins, Sparkles, Loader2, User, Home, Heart, Maximize2, X, QrCode, Copy, CheckCircle, Bell } from "lucide-react";
+import { Wallet, Search, Flame, Lock, Coins, Sparkles, Loader2, User, Home, Heart, Maximize2, X, QrCode, Copy, CheckCircle, Bell, LogOut } from "lucide-react";
 
 export default function ExploreLivePage() {
   const router = useRouter();
   const [initialLoading, setInitialLoading] = useState(true);
   
   const [playerPhone, setPlayerPhone] = useState<string | null>(null);
-  const [balance, setBalance] = useState(0); // Saldo Real de LiveTokens
+  const [balance, setBalance] = useState(0); 
+  const [initialBalanceCheck, setInitialBalanceCheck] = useState(0); // Usado para saber se o pix caiu
   
   const [search, setSearch] = useState("");
   const [models, setModels] = useState<any[]>([]);
 
-  // Estados do Mini Perfil
   const [selectedModel, setSelectedModel] = useState<any | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // Estados da Loja de Créditos
+  // Estados Financeiros (Reais)
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState<number>(0);
-  const [pixTimeLeft, setPixTimeLeft] = useState(180);
+  const [pixData, setPixData] = useState<any>(null);
+  const [generatingPix, setGeneratingPix] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -31,26 +34,22 @@ export default function ExploreLivePage() {
     async function loadRealData() {
       try {
         const phone = localStorage.getItem("labz_player_phone");
-        if (!phone) { router.push('/'); return; }
-        setPlayerPhone(phone);
-
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-        
-        // 1. Puxa o Cliente para ver o Saldo de LiveTokens
-        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=*`, { headers });
-        if (pRes.ok) {
-            const pData = await pRes.json();
-            if (pData && pData.length > 0) {
-                // Lê a coluna live_tokens (se não existir no seu DB ainda, usa 0)
-                setBalance(pData[0].live_tokens || 0);
+
+        if (phone) {
+            setPlayerPhone(phone);
+            const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=*`, { headers });
+            if (pRes.ok) {
+                const pData = await pRes.json();
+                if (pData && pData.length > 0) setBalance(pData[0].live_tokens || 0);
             }
         }
 
-        // 2. Puxa as Modelos, Configs e Mídias reais
+        // 🔥 PUXA SÓ MÍDIAS COM PREÇO = 0 (Gratuitas) 🔥
         const [mRes, cRes, medRes] = await Promise.all([
             fetch(`${supabaseUrl}/rest/v1/Models?select=*`, { headers }),
             fetch(`${supabaseUrl}/rest/v1/Configs?select=*`, { headers }),
-            fetch(`${supabaseUrl}/rest/v1/Media?select=*`, { headers }) // Puxa as fotos reais para o mini perfil
+            fetch(`${supabaseUrl}/rest/v1/Media?price=eq.0&select=*`, { headers }) 
         ]);
 
         if (mRes.ok && cRes.ok) {
@@ -60,8 +59,7 @@ export default function ExploreLivePage() {
 
             const combinedData = mData.map((m: any) => {
                 const config = cData.find((c: any) => c.model_id === m.id);
-                // Filtra fotos da modelo específica
-                const modelMedia = medData.filter((med: any) => med.model_id === m.id && med.media_type === 'image').map((med: any) => med.url);
+                const modelMedia = medData.filter((med: any) => med.model_id === m.id).map((med: any) => med.url);
 
                 return {
                     id: m.id,
@@ -69,71 +67,130 @@ export default function ExploreLivePage() {
                     slug: m.slug,
                     image: config?.profile_url || null,
                     bio: config?.bio || "Bem-vindo ao meu mundo exclusivo. Acompanhe minhas lives e conteúdos quentes!",
-                    status: m.live_status || "offline", // Puxa o status real do banco (online, vip, offline)
-                    price: config?.live_price || 3.10, // Preço real do banco (ou fallback de 3.10)
-                    publicPhotos: modelMedia.length > 0 ? modelMedia : [config?.profile_url].filter(Boolean)
+                    status: m.live_status || "offline",
+                    price: config?.live_price || 3.10, 
+                    publicPhotos: modelMedia
                 };
             });
             
             setModels(combinedData);
         }
       } catch (e) {
-        console.error("Erro ao carregar dados reais:", e);
+        console.error("Erro ao carregar dados:", e);
       } finally {
         setInitialLoading(false);
       }
     }
     loadRealData();
-  }, [supabaseUrl, supabaseKey, router]);
+  }, [supabaseUrl, supabaseKey]);
 
   const filteredModels = models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()) || m.slug.toLowerCase().includes(search.toLowerCase()));
+  
+  // 🔥 LÓGICA DO "EM ALTA AGORA" (Pega a primeira online ou a primeira da lista)
+  const trendingModel = models.find(m => m.status === 'online' || m.status === 'vip') || models[0];
 
   const handleJoinLive = (slug: string, status: string) => {
-    // Se quiser permitir entrar mesmo offline para ver se ela tá lá, comente a linha abaixo
-    // if (status === "offline") return alert("Esta musa não está transmitindo no momento.");
+    if (!playerPhone) {
+        alert("Você precisa fazer login para entrar nas lives!");
+        router.push('/');
+        return;
+    }
     router.push(`/live/${slug}`);
   };
 
   const openMiniProfile = (e: React.MouseEvent, model: any) => {
     e.stopPropagation();
     setSelectedModel(model);
-    setIsFollowing(false); // Futuro: checar na tabela Followers
+    setIsFollowing(false); 
   };
 
-  // 🔥 COMPRA DE LIVETOKENS 🔥
-  const handleBuyPackage = (amount: number) => {
-    setSelectedPackage(amount);
-    setShowShopModal(false);
-    setShowPixModal(true);
-    setPixTimeLeft(180);
+  const handleLogout = () => {
+    if(confirm("Deseja mesmo sair da sua conta?")) {
+        localStorage.removeItem("labz_player_phone");
+        localStorage.removeItem("labz_player_logged");
+        router.push('/');
+    }
   };
 
-  const simulatePaymentWebhook = async () => {
-    // Simula a adição real no banco de dados
-    const newBalance = balance + selectedPackage;
-    setBalance(newBalance);
-    setShowPixModal(false);
+  // 🔥 GERADOR DE PIX REAL 🔥
+  const generatePix = async (amount: number) => {
+    if (!playerPhone) { alert("Faça login para comprar!"); router.push('/'); return; }
     
-    // Opcional: Já manda pro Supabase pra atualizar de verdade
+    setGeneratingPix(true);
+    setPixTimeLeft(600);
     try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
-        await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone || '')}`, {
-            method: 'PATCH',
-            headers: headers,
-            body: JSON.stringify({ live_tokens: newBalance })
-        });
-    } catch(e) {}
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}&select=id`, { headers });
+        const pData = await pRes.json();
+        const playerId = pData[0]?.id;
 
-    alert(`PIX Confirmado! ${selectedPackage} LiveTokens adicionados à sua carteira de Lives.`);
+        if (!playerId) throw new Error("Jogador não encontrado no banco.");
+
+        const response = await fetch('/api/checkout/hub', {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: amount, userId: playerId, type: 'live_tokens' }),
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Erro API Pix");
+
+        if (data.qr_code_base64 || data.qrCodeBase64) {
+            setPixData({ 
+                qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, 
+                qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, 
+                value: amount
+            });
+            setInitialBalanceCheck(balance); // Salva o saldo atual para comparar depois
+            setShowShopModal(false);
+            setShowPixModal(true);
+        }
+    } catch (error: any) {
+        alert(`Falha ao gerar PIX: ${error.message}`);
+    } finally { 
+        setGeneratingPix(false); 
+    }
   };
+
+  // 🔥 VERIFICADOR DE PIX (POLLING NO BANCO DE DADOS) 🔥
+  useEffect(() => {
+      let interval: NodeJS.Timeout;
+      if (showPixModal && pixData && !paymentSuccess) {
+          interval = setInterval(async () => {
+              try {
+                  const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+                  const res = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone || '')}&select=live_tokens`, { headers });
+                  const data = await res.json();
+                  
+                  const currentTokens = data[0]?.live_tokens || 0;
+                  
+                  // Se o token for maior que o saldo inicial, é porque o PIX caiu!
+                  if (currentTokens > initialBalanceCheck) {
+                      setBalance(currentTokens);
+                      clearInterval(interval); 
+                      setPaymentSuccess(true);
+                      setTimeout(() => { 
+                          setShowPixModal(false); 
+                          setPixData(null); 
+                          setPaymentSuccess(false); 
+                      }, 3000);
+                  }
+              } catch(e) {}
+          }, 4000); 
+      }
+      return () => clearInterval(interval);
+  }, [showPixModal, pixData, paymentSuccess, initialBalanceCheck, playerPhone, supabaseKey, supabaseUrl]);
 
   useEffect(() => {
     let pixTimer: NodeJS.Timeout;
-    if (showPixModal && pixTimeLeft > 0) pixTimer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
+    if (showPixModal && pixTimeLeft > 0 && !paymentSuccess) pixTimer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
     else if (pixTimeLeft === 0) setShowPixModal(false);
     return () => clearInterval(pixTimer);
-  }, [showPixModal, pixTimeLeft]);
+  }, [showPixModal, pixTimeLeft, paymentSuccess]);
 
+  const handleCopyPix = () => {
+      if (pixData?.qrCodeCopiaCola) { navigator.clipboard.writeText(pixData.qrCodeCopiaCola); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  };
 
   if (initialLoading) {
       return (
@@ -147,7 +204,7 @@ export default function ExploreLivePage() {
   return (
     <div className="min-h-[100dvh] bg-[#050505] text-white pb-20 font-sans relative">
       
-      {/* MODAL DE LOJA DE LIVETOKENS */}
+      {/* MODAL DE LOJA */}
       {showShopModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>
@@ -156,32 +213,37 @@ export default function ExploreLivePage() {
           <p className="text-white/60 text-xs font-bold mb-8">1 LiveToken = R$ 1,00. Adicione saldo exclusivo para Lives.</p>
           <div className="flex flex-col gap-4 w-full max-w-sm">
             {[ {name: "Básico", p: 30}, {name: "VIP", p: 50}, {name: "Premium", p: 100} ].map(pkg => (
-              <button key={pkg.p} onClick={() => handleBuyPackage(pkg.p)} className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-2xl hover:border-[#00f0ff]/50 transition-all">
+              <button key={pkg.p} onClick={() => generatePix(pkg.p)} disabled={generatingPix} className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-2xl hover:border-[#00f0ff]/50 transition-all disabled:opacity-50">
                 <span className="text-white font-black uppercase text-sm">{pkg.name}</span>
-                <span className="bg-[#00f0ff] text-black px-4 py-1.5 rounded-full font-black text-xs">{pkg.p} LT (R$ {pkg.p})</span>
+                <span className="bg-[#00f0ff] text-black px-4 py-1.5 rounded-full font-black text-xs">{generatingPix ? <Loader2 size={12} className="animate-spin inline" /> : `${pkg.p} LT (R$ ${pkg.p})`}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* MODAL PIX */}
-      {showPixModal && (
-        <div className="fixed inset-0 z-[210] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
-            <div className="bg-[#0a0a0a] border border-[#00f0ff] rounded-3xl p-8 max-w-sm w-full flex flex-col items-center shadow-[0_0_50px_rgba(0,240,255,0.3)] relative">
-                <div className="flex items-center justify-between w-full mb-6">
-                    <h3 className="text-[#00f0ff] font-black uppercase tracking-widest text-xs">PIX: R$ {selectedPackage},00</h3>
-                    <button onClick={() => setShowPixModal(false)} className="text-white/50 hover:text-white"><X size={16} /></button>
-                </div>
-                <div className="bg-white p-2 rounded-xl mb-6"><QrCode size={150} className="text-black" /></div>
-                <button className="w-full flex items-center justify-center gap-2 bg-white/10 text-white py-3 rounded-full border border-white/10 text-[10px] font-black uppercase mb-3 hover:bg-white/20 transition-all"><Copy size={14} /> Copiar Chave PIX</button>
-                <button onClick={simulatePaymentWebhook} className="w-full bg-[#00f0ff] text-black py-3 rounded-full font-black uppercase text-[10px] shadow-[0_0_20px_rgba(0,240,255,0.4)]">Pago (Simular Webhook)</button>
-                <div className="mt-4 text-[#00f0ff] font-mono text-xl font-black">{Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
-            </div>
-        </div>
+      {/* MODAL PIX REAL */}
+      {showPixModal && pixData && (
+          <div className="fixed inset-0 z-[210] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative text-center">
+                  {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24}/></button>}
+                  {paymentSuccess ? (
+                      <div className="py-10 animate-in zoom-in duration-500"><div className="w-24 h-24 bg-[#00f0ff] rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(0,240,255,0.6)]"><CheckCircle size={50} className="text-black"/></div><h2 className="text-3xl font-black uppercase italic text-[#00f0ff] mb-2">Pago!</h2><p className="text-xs text-white/60 uppercase font-black tracking-widest">{pixData.value} LiveTokens na Carteira.</p></div>
+                  ) : (
+                      <>
+                          <h2 className="text-2xl font-black uppercase italic mb-2 text-[#00f0ff]">Comprar Tokens</h2>
+                          <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 flex items-center justify-center"><img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full object-contain rounded-xl" /></div>
+                          <p className="text-3xl font-black text-white mb-6">R$ {pixData.value.toFixed(2)}</p>
+                          <div className="mb-6 flex items-center justify-center gap-2 text-[#00f0ff] font-black font-mono text-xl animate-pulse">⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
+                          <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-5 rounded-2xl font-black uppercase text-xs mb-4">{copied ? <CheckCircle size={18} className="text-[#00f0ff]" /> : <Copy size={18} />} {copied ? "Copiado!" : "Copiar Chave PIX"}</button>
+                          <div className="bg-[#00f0ff]/10 border border-[#00f0ff]/30 p-4 rounded-xl flex items-center justify-center gap-3"><Loader2 size={16} className="animate-spin text-[#00f0ff]" /><span className="text-[9px] text-[#00f0ff] uppercase font-black tracking-widest">Aguardando Pagamento...</span></div>
+                      </>
+                  )}
+              </div>
+          </div>
       )}
 
-      {/* MINI PERFIL MODAL (HUB) */}
+      {/* MINI PERFIL MODAL */}
       {selectedModel && (
         <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center sm:p-4">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedModel(null)}></div>
@@ -208,11 +270,11 @@ export default function ExploreLivePage() {
                         </button>
                     </div>
 
-                    <p className="text-sm text-white/70 italic leading-relaxed mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <p className="text-sm text-white/70 italic leading-relaxed mb-6 bg-white/5 p-4 rounded-2xl border border-white/5 line-clamp-3">
                         "{selectedModel.bio}"
                     </p>
 
-                    <h3 className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3">Fotos da Galeria</h3>
+                    <h3 className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3">Fotos Públicas</h3>
                     <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2 mb-6">
                         {selectedModel.publicPhotos.map((photo: string, idx: number) => (
                             <div key={idx} className="w-24 h-32 shrink-0 rounded-xl overflow-hidden border border-white/10">
@@ -220,7 +282,7 @@ export default function ExploreLivePage() {
                             </div>
                         ))}
                         {selectedModel.publicPhotos.length === 0 && (
-                           <p className="text-xs text-white/30 italic">Nenhuma foto pública.</p>
+                           <p className="text-xs text-white/30 italic">Nenhuma foto pública gratuita.</p>
                         )}
                     </div>
 
@@ -238,7 +300,6 @@ export default function ExploreLivePage() {
       )}
 
 
-      {/* HEADER LIQUID GLASS FIXO */}
       <header className="sticky top-0 z-40 bg-black/60 backdrop-blur-xl border-b border-white/10 px-4 py-4 flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-2">
           <Sparkles className="text-[#00f0ff]" size={20} />
@@ -250,19 +311,25 @@ export default function ExploreLivePage() {
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-full transition-all">
             <Home size={14} className="text-white/70" />
-            <span className="font-black text-[9px] uppercase text-white/70 tracking-widest">Painel</span>
+            <span className="font-black text-[9px] uppercase text-white/70 tracking-widest hidden sm:block">Painel</span>
           </button>
 
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full shadow-inner cursor-pointer" onClick={() => setShowShopModal(true)}>
             <Wallet size={14} className="text-[#00f0ff]" />
             <span className="font-black text-[12px] text-[#00f0ff]">{balance.toFixed(2).replace('.', ',')} LT</span>
           </div>
+
+          {/* BOTÃO DE LOGOUT DISCRETO */}
+          {playerPhone && (
+            <button onClick={handleLogout} className="flex items-center justify-center w-10 h-10 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-full transition-all">
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 pt-6 space-y-8">
         
-        {/* BARRA DE PESQUISA */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={18} />
           <input 
@@ -274,24 +341,33 @@ export default function ExploreLivePage() {
           />
         </div>
 
+        {/* 🔥 SEÇÃO EM ALTA DINÂMICA 🔥 */}
+        {trendingModel && (
         <section>
           <div className="flex items-center gap-2 mb-4">
             <Flame className="text-[#ff0055]" size={18} />
             <h2 className="text-sm font-black uppercase tracking-widest text-white/80">Em Alta Agora</h2>
           </div>
-          <div className="h-40 rounded-[2rem] bg-gradient-to-r from-[#ff0055]/20 to-[#00f0ff]/20 border border-white/10 overflow-hidden relative flex items-center justify-center cursor-pointer hover:border-[#00f0ff]/50 transition-colors shadow-2xl">
-             <div className="absolute inset-0 bg-black opacity-40 mix-blend-overlay"></div>
-             <div className="relative z-10 text-center">
-               <h3 className="text-3xl font-black uppercase tracking-widest text-white drop-shadow-2xl">Descubra</h3>
-               <p className="text-[#00f0ff] font-bold text-xs uppercase tracking-widest mt-1 animate-pulse">Shows Exclusivos</p>
+          <div onClick={(e) => openMiniProfile(e, trendingModel)} className="h-48 rounded-[2rem] bg-[#0a0a0a] border border-white/10 overflow-hidden relative flex items-center justify-between cursor-pointer hover:border-[#00f0ff]/50 transition-colors shadow-2xl group p-6 sm:p-8">
+             <div className="absolute inset-0">
+                <img src={trendingModel.image} className="w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-700" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/50 to-transparent"></div>
+             </div>
+             <div className="relative z-10 flex flex-col items-start max-w-[70%]">
+               <span className="bg-[#ff0055] text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full mb-2 shadow-[0_0_15px_rgba(255,0,85,0.5)]">
+                 {trendingModel.status === 'vip' ? 'Em Show VIP' : 'Destaque'}
+               </span>
+               <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-widest text-white drop-shadow-2xl">{trendingModel.name}</h3>
+               <p className="text-white/70 font-medium text-[10px] sm:text-xs mt-1 line-clamp-2 italic">"{trendingModel.bio}"</p>
+               <button className="mt-4 bg-[#00f0ff] text-black px-5 py-2 rounded-xl text-[10px] font-black uppercase shadow-[0_0_20px_rgba(0,240,255,0.4)]">Ver Perfil</button>
              </div>
           </div>
         </section>
+        )}
 
-        {/* GRID DE MODELOS */}
         <section>
           <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-black uppercase tracking-widest text-white/80">Câmeras Ao Vivo</h2>
+              <h2 className="text-sm font-black uppercase tracking-widest text-white/80">Câmeras</h2>
               <span className="text-[10px] text-white/40 font-bold uppercase">{filteredModels.length} Musas</span>
           </div>
           
