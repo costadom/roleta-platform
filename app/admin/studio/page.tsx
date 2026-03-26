@@ -80,7 +80,6 @@ function ViewerList({ viewerBalances, onBlock }: { viewerBalances: Record<string
   );
 }
 
-// 🔥 CHAT CORRIGIDO PARA IDENTIFICAR A MODELO 🔥
 function CustomChat({ modelName }: { modelName: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
@@ -98,9 +97,7 @@ function CustomChat({ modelName }: { modelName: string }) {
     <div className="absolute bottom-4 left-4 right-4 sm:w-80 h-[50vh] flex flex-col justify-end z-20 pointer-events-none">
       <div className="overflow-y-auto p-2 space-y-3 custom-scrollbar pointer-events-auto mask-image-top mb-4 flex flex-col justify-end" ref={chatContainerRef}>
         {chatMessages.map((msg, i) => {
-          // Confere se quem enviou foi a modelo pelo slug
           const isMe = msg.from?.name?.toLowerCase() === modelName.toLowerCase() || msg.from?.identity?.toLowerCase() === modelName.toLowerCase();
-          
           return (
             <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
               <span className={`text-[10px] font-black uppercase mb-0.5 ${isMe ? 'text-[#ff0055] drop-shadow-md' : 'text-emerald-400 drop-shadow-md'}`}>
@@ -171,6 +168,31 @@ function StudioContent() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showBrilhe, setShowBrilhe] = useState(false);
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // 🔥 FUNÇÃO QUE AVISA O BANCO DE DADOS O STATUS DA LIVE 🔥
+  const setModelStatus = async (status: string) => {
+    if (!modelId) return;
+    try {
+        await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, {
+            method: 'PATCH',
+            headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ live_status: status })
+        });
+    } catch(e) {}
+  };
+
+  // Garante que fique offline se fechar a aba
+  useEffect(() => {
+    const handleUnload = () => { setModelStatus('offline'); };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      setModelStatus('offline'); // Limpa ao desmontar o componente
+    };
+  }, [modelId]);
+
   useEffect(() => {
     if (!modelId || !modelSlug) return router.push("/admin");
     const fetchToken = async () => {
@@ -189,13 +211,17 @@ function StudioContent() {
     setTimeout(() => setCountdown(2), 1000);
     setTimeout(() => setCountdown(1), 2000);
     setTimeout(() => {
-      setCountdown(null); setShowBrilhe(true); setPreJoinChoices(choices); 
+      setCountdown(null); 
+      setShowBrilhe(true); 
+      setPreJoinChoices(choices); 
+      setModelStatus('online'); // 🔥 FICA ONLINE NA VITRINE 🔥
       setTimeout(() => setShowBrilhe(false), 2000); 
     }, 3000);
   };
 
   const handleAcceptPrivate = async (roomContext: any) => {
     setIsPrivateMode(true);
+    setModelStatus('vip'); // 🔥 FICA VIP NA VITRINE 🔥
     const payload = JSON.stringify({ type: "PRIVATE_ACCEPTED", targetClient: currentPrivateRequest.senderName });
     try { await roomContext.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch (e) {}
     setCurrentPrivateRequest(null);
@@ -203,6 +229,7 @@ function StudioContent() {
 
   const handleEndPrivateModel = async (roomContext: any) => {
     setIsPrivateMode(false);
+    setModelStatus('online'); // 🔥 VOLTA A FICAR ONLINE NA VITRINE 🔥
     const payload = JSON.stringify({ type: "PRIVATE_ENDED", targetClient: "all" });
     try { await roomContext.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch (e) {}
   };
@@ -278,7 +305,13 @@ function StudioContent() {
                   <div className="flex flex-col gap-2 items-end pointer-events-auto">
                      <div className="flex gap-2">
                         <MicToggleButton />
-                        <button onClick={() => { if(confirm("Encerrar Live?")) { setPreJoinChoices(undefined); setSessionEarnings(0); } }} className="bg-black/60 hover:bg-red-600 backdrop-blur-md border border-white/10 text-white w-12 h-12 flex items-center justify-center rounded-2xl transition-all shadow-lg">
+                        <button onClick={() => { 
+                            if(confirm("Encerrar Live?")) { 
+                                setModelStatus('offline'); // 🔥 FICA OFFLINE 🔥
+                                setPreJoinChoices(undefined); 
+                                setSessionEarnings(0); 
+                            } 
+                        }} className="bg-black/60 hover:bg-red-600 backdrop-blur-md border border-white/10 text-white w-12 h-12 flex items-center justify-center rounded-2xl transition-all shadow-lg">
                           <X size={20} />
                         </button>
                      </div>
