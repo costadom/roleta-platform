@@ -13,26 +13,36 @@ const GIFTS = [
   { id: 3, name: "Coroa VIP", icon: "👑", price: 50.00 },
 ];
 
+const BAD_WORDS = ["puta", "vadia", "buceta", "caralho", "porra", "merda", "fuder", "foder", "cuzinho", "cu", "pau", "piroca", "rola", "putinha", "safada"];
+const filterText = (text: string) => {
+  let filtered = text;
+  BAD_WORDS.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    filtered = filtered.replace(regex, "***");
+  });
+  return filtered;
+};
+
 function ToastNotification({ message, onClose }: { message: string | null, onClose: () => void }) {
   if (!message) return null;
   return (
-    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] bg-[#00f0ff] text-black px-6 py-3 rounded-full font-black uppercase tracking-widest text-[10px] shadow-[0_0_30px_rgba(0,240,255,0.6)] flex items-center gap-3 animate-bounce">
+    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] bg-[#ff0055] text-white px-6 py-3 rounded-full font-black uppercase tracking-widest text-[10px] shadow-[0_0_30px_rgba(255,0,85,0.6)] flex items-center gap-3 animate-bounce">
       {message}
       <button onClick={onClose} className="bg-black/20 p-1 rounded-full hover:bg-black/40"><X size={12} /></button>
     </div>
   );
 }
 
-// VÍDEO FULL SCREEN (Z-INDEX 0)
 function ModelVideoFeed() {
-  const tracks = useTracks([Track.Source.Camera]);
+  // Configurado para garantir que a câmera seja puxada mesmo se demorar 1 segundo
+  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], { onlySubscribed: false });
   const remoteTrack = tracks.find(t => !t.participant.isLocal);
   return (
     <div className="absolute inset-0 w-full h-full bg-[#050505] z-0">
       {remoteTrack ? <VideoTrack trackRef={remoteTrack} className="w-full h-full object-cover" /> : 
         <div className="flex flex-col items-center justify-center h-full gap-4 text-[#D946EF]/50 z-20">
           <Loader2 size={48} className="animate-spin" />
-          <span className="font-black uppercase tracking-widest text-xs animate-pulse text-center px-6">Conectando...</span>
+          <span className="font-black uppercase tracking-widest text-xs animate-pulse text-center px-6">Conectando à Câmera...</span>
         </div>}
     </div>
   );
@@ -47,6 +57,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
   const [balance, setBalance] = useState(initialBalance);
   
   const [requestingPrivate, setRequestingPrivate] = useState(false);
+  const [showHotInvite, setShowHotInvite] = useState(false); // Animação do VIP
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   
   const [isPrivateShow, setIsPrivateShow] = useState(false);
@@ -62,8 +73,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
 
   const [showGiftMenu, setShowGiftMenu] = useState(false);
   const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
-
-  // Anti-Print / Background Blur
   const [isBlurred, setIsBlurred] = useState(false);
 
   useEffect(() => { roomRef.current = room; }, [room]);
@@ -90,8 +99,9 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
         if (data.type === "PRIVATE_ACCEPTED" && data.targetClient === clientName) {
-          setIsPrivateShow(true); isPrivateRef.current = true; privateSecRef.current = 0; setRequestingPrivate(false);
-          showToast("Privado Iniciado! Azul Neon Ativado!");
+          setIsPrivateShow(true); isPrivateRef.current = true; privateSecRef.current = 0; 
+          setRequestingPrivate(false); setShowHotInvite(false); // Esconde a animação
+          showToast("O Clima Esquentou! Privado Ativado 🔥");
         }
         if (data.type === "PRIVATE_ENDED" && (data.targetClient === clientName || data.targetClient === "all")) {
           setIsPrivateShow(false); isPrivateRef.current = false;
@@ -100,8 +110,7 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
         if (data.type === "GIFT") triggerGiftAnimation(data.giftIcon, data.senderName === clientName ? "Você" : "Alguém");
         
         if (data.type === "BLOCK_USER" && data.targetClientIdentity === roomRef.current.localParticipant.identity) {
-           alert("Você foi banido da sala.");
-           router.push('/hub');
+           alert("Você foi banido da sala."); router.push('/hub');
         }
       } catch (e) {}
     };
@@ -139,7 +148,6 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     return () => clearInterval(pixTimer);
   }, [showPixModal, pixTimeLeft, router]);
 
-  // TRUQUE ANTI-PRINT NATIVO (Escurece se trocar aba)
   useEffect(() => {
     const handleVisibility = () => setIsBlurred(document.hidden);
     document.addEventListener("visibilitychange", handleVisibility);
@@ -160,8 +168,15 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
   const handleRequestPrivate = async () => {
     if (balanceRef.current < 6.20) { showToast("Mínimo R$ 6,20 (2 min)."); return setShowShopModal(true); }
     setRequestingPrivate(true);
+    setShowHotInvite(true); // 🔥 ATIVA A ANIMAÇÃO 🔥
+    
     const payload = JSON.stringify({ type: "PRIVATE_REQUEST", senderName: clientName });
-    try { await room.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); showToast("Aguardando..."); setTimeout(() => setRequestingPrivate(false), 20000); } catch (e) { setRequestingPrivate(false); }
+    try { 
+      await room.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); 
+      setTimeout(() => {
+        if(requestingPrivate) { setRequestingPrivate(false); setShowHotInvite(false); showToast("A modelo não respondeu."); }
+      }, 20000); 
+    } catch (e) { setRequestingPrivate(false); setShowHotInvite(false); }
   };
 
   const handleEndPrivateClient = () => {
@@ -177,24 +192,36 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
     setIsPrivateShow(false); isPrivateRef.current = false; privateSecRef.current = 0;
   };
 
-  const neonClass = isPrivateShow ? "border-[#00f0ff] shadow-[inset_0_0_50px_rgba(0,240,255,0.4)] border-2" : "border-none";
+  // VERMELHO QUENTE PARA O VIP
+  const neonClass = isPrivateShow ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)] border-2" : "border-none";
   const isLowBalance = (balance / (isPrivateShow ? 3.10 : 1.50)) <= 3 && balance > 0;
 
   return (
     <>
       <ToastNotification message={toastMsg} onClose={() => setToastMsg(null)} />
       
-      {/* CAMADA DE ANIMAÇÃO DE PRESENTES */}
+      {/* 🔥 TELA DE CONVITE HOT 🔥 */}
+      {showHotInvite && (
+        <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+           <div className="w-24 h-24 bg-[#ff0055]/20 rounded-full flex items-center justify-center mb-6 animate-pulse border border-[#ff0055]">
+              <span className="text-5xl">🔥</span>
+           </div>
+           <h2 className="text-3xl font-black text-white uppercase tracking-widest text-shadow-sm mb-3 text-[#ff0055]">Esquentando...</h2>
+           <p className="text-white/80 font-bold text-sm uppercase tracking-widest leading-relaxed">Convidando a modelo para uma<br/>conversa mais íntima</p>
+           <Loader2 className="animate-spin text-[#ff0055] mt-8" size={32} />
+        </div>
+      )}
+
       <div className="absolute inset-0 pointer-events-none z-[70] overflow-hidden flex items-center justify-center">
         {activeGifts.map(g => (
           <div key={g.id} className="flex flex-col items-center gift-anim absolute">
             <span className="text-8xl drop-shadow-[0_0_30px_rgba(255,255,255,0.5)] mb-2">{g.icon}</span>
-            <span className="text-[#00f0ff] font-black uppercase text-[12px] bg-black/80 px-4 py-2 rounded-full border border-white/10">{g.sender} enviou!</span>
+            <span className="text-white font-black uppercase text-[12px] bg-[#ff0055] px-4 py-2 rounded-full shadow-lg">{g.sender} enviou!</span>
           </div>
         ))}
       </div>
 
-      {/* LOJA E PIX MODALS (Omitido para não repetir, igual ao anterior) */}
+      {/* LOJA E PIX MODALS */}
       {showShopModal && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-xl z-[90] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>
@@ -226,39 +253,28 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
         </div>
       )}
 
-      {!showShopModal && !showPixModal && isLowBalance && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-xl border border-red-400 px-6 py-3 rounded-full flex items-center gap-4 animate-pulse w-max shadow-[0_0_30px_rgba(220,38,38,0.5)]">
-           <AlertTriangle size={16} className="text-white" />
-           <div className="flex flex-col"><span className="text-white font-black uppercase text-[10px] tracking-widest">Tokens Acabando</span></div>
-           <button onClick={() => setShowShopModal(true)} className="bg-white text-red-600 px-4 py-1.5 rounded-full text-[9px] font-black uppercase">+ Tokens</button>
-        </div>
-      )}
-
-      {/* TELA PRINCIPAL (FULLSCREEN, ANTI-PRINT VIA CSS) */}
+      {/* TELA PRINCIPAL (FULLSCREEN, ANTI-PRINT) */}
       <div className={`absolute inset-0 transition-all duration-1000 select-none ${neonClass} ${isBlurred ? 'opacity-0' : 'opacity-100'}`} style={{ WebkitTouchCallout: 'none' }}>
          <ModelVideoFeed />
          
-         {/* HEADER TRANSPARENTE E ORGANIZADO */}
          <div className="absolute top-6 left-4 right-4 z-30 flex justify-between items-start pointer-events-none">
             <button onClick={() => router.push('/hub')} className="bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl pointer-events-auto transition-all shadow-lg"><ArrowLeft size={16} /></button>
             <div className="flex flex-col items-end gap-2 pointer-events-auto">
               <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl shadow-lg">
-                <Wallet size={12} className="text-[#00f0ff]" />
-                <span className="text-[#00f0ff] font-black text-[10px]">{balance.toFixed(2).replace('.', ',')} LT</span>
+                <Wallet size={12} className={isPrivateShow ? "text-[#ff0055]" : "text-[#00f0ff]"} />
+                <span className={`font-black text-[10px] ${isPrivateShow ? "text-[#ff0055]" : "text-[#00f0ff]"}`}>{balance.toFixed(2).replace('.', ',')} LT</span>
               </div>
-              <button onClick={() => setShowShopModal(true)} className="bg-[#00f0ff] text-black px-4 py-2 rounded-xl font-black uppercase text-[9px] shadow-[0_0_15px_rgba(0,240,255,0.4)]">+ Comprar</button>
-              {isPrivateShow && <div className="bg-[#00f0ff] text-black px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-1 animate-pulse shadow-[0_0_15px_rgba(0,240,255,0.5)]"><Lock size={10} /> Privado Ativo</div>}
+              <button onClick={() => setShowShopModal(true)} className="bg-white/10 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] shadow-lg">+ Comprar</button>
+              {isPrivateShow && <div className="bg-[#ff0055] text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-1 animate-pulse shadow-[0_0_15px_rgba(255,0,85,0.6)]"><Lock size={10} /> Privado Ativo</div>}
             </div>
          </div>
 
-         {/* BOTÕES LATERAIS (ESTILO TIKTOK) */}
+         {/* BOTÕES LATERAIS */}
          {!showShopModal && !showPixModal && (
            <div className="absolute bottom-[90px] right-4 z-30 flex flex-col gap-4 items-center pointer-events-auto">
-              
-              {/* MENU PRESENTE */}
               <div className="relative">
                 {showGiftMenu && (
-                  <div className="absolute bottom-0 right-[120%] bg-black/60 backdrop-blur-xl border border-white/10 rounded-3xl p-2 flex flex-col gap-2 animate-slideUp">
+                  <div className="absolute bottom-0 right-[120%] bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl p-2 flex flex-col gap-2 animate-slideUp">
                     {GIFTS.map(g => (
                       <button key={g.id} onClick={() => handleSendGift(g)} className="flex items-center gap-3 hover:bg-white/10 p-2 rounded-2xl transition-colors w-36">
                          <span className="text-2xl">{g.icon}</span>
@@ -267,33 +283,31 @@ function InteractiveRoom({ clientName, initialBalance }: { clientName: string, i
                     ))}
                   </div>
                 )}
-                <button onClick={() => setShowGiftMenu(!showGiftMenu)} className={`w-12 h-12 flex items-center justify-center rounded-full transition-all border shadow-xl ${showGiftMenu ? 'bg-[#D946EF] border-[#D946EF] text-white shadow-[0_0_20px_rgba(217,70,239,0.5)]' : 'bg-black/50 backdrop-blur-md border-white/10 text-white'}`}>
-                  <Gift size={20} className={showGiftMenu ? "" : "text-[#D946EF]"} />
+                <button onClick={() => setShowGiftMenu(!showGiftMenu)} className={`w-12 h-12 flex items-center justify-center rounded-full transition-all border shadow-xl ${showGiftMenu ? 'bg-[#D946EF] border-[#D946EF] text-white' : 'bg-black/50 backdrop-blur-md border-white/10 text-white'}`}>
+                  <Gift size={20} />
                 </button>
               </div>
 
-              {/* BOTÃO PRIVADO (REDONDO PRA COMBINAR) */}
               {isPrivateShow ? (
                 <button onClick={handleEndPrivateClient} className="w-12 h-12 flex items-center justify-center rounded-full bg-red-600 border border-red-400 text-white shadow-lg transition-all animate-pulse" title="Sair do Privado">
                     <X size={20} />
                 </button>
               ) : (
-                <button onClick={handleRequestPrivate} disabled={requestingPrivate} className="w-12 h-12 flex flex-col items-center justify-center rounded-full bg-black/50 backdrop-blur-md border border-[#00f0ff] text-[#00f0ff] shadow-[0_0_20px_rgba(0,240,255,0.3)] disabled:opacity-50 transition-all">
-                  {requestingPrivate ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+                <button onClick={handleRequestPrivate} disabled={requestingPrivate} className="w-12 h-12 flex flex-col items-center justify-center rounded-full bg-black/60 backdrop-blur-md border border-[#ff0055] text-[#ff0055] shadow-[0_0_20px_rgba(255,0,85,0.4)] transition-all">
+                  <Lock size={14} />
                   <span className="text-[7px] font-black uppercase mt-0.5">VIP</span>
                 </button>
               )}
            </div>
          )}
 
-         {/* CHAT DO CLIENTE (TEXTO FLUTUANTE EMBAIXO) */}
+         {/* CHAT DO CLIENTE */}
          <ClientChat clientName={clientName} />
       </div>
     </>
   );
 }
 
-// CHAT DO CLIENTE (TikTok Style: Transparente, no rodapé, input 16px)
 function ClientChat({ clientName }: { clientName: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
@@ -301,10 +315,15 @@ function ClientChat({ clientName }: { clientName: string }) {
   
   useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
   
+  const handleSend = () => {
+     if (!message.trim()) return;
+     // Aplica o filtro de palavrões antes de enviar
+     const safeMessage = filterText(message);
+     send(safeMessage).then(() => setMessage(''));
+  }
+
   return (
     <div className="absolute bottom-4 left-4 right-20 z-20 flex flex-col justify-end h-[40vh] pointer-events-none">
-      
-      {/* Mensagens (Só a modelo tem nome, resto é FÃ VIP) */}
       <div className="flex-1 overflow-y-auto space-y-2 pb-2 custom-scrollbar pointer-events-auto mask-image-top flex flex-col justify-end" ref={chatContainerRef}>
         {chatMessages.map((msg, i) => {
           const isMe = msg.from?.identity === clientName;
@@ -313,10 +332,10 @@ function ClientChat({ clientName }: { clientName: string }) {
           
           return (
             <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-              <span className={`text-[9px] font-black uppercase mb-0.5 ${isMe ? 'text-white' : isModel ? 'text-[#D946EF]' : 'text-emerald-400'}`}>
+              <span className={`text-[9px] font-black uppercase mb-0.5 ${isMe ? 'text-white' : isModel ? 'text-[#ff0055]' : 'text-[#00f0ff]'}`}>
                 {isModel && "👑"} {displayName}
               </span>
-              <span className="text-[12px] text-white font-medium leading-tight">
+              <span className="text-[13px] text-white font-medium leading-tight">
                 {msg.message}
               </span>
             </div>
@@ -324,7 +343,6 @@ function ClientChat({ clientName }: { clientName: string }) {
         })}
       </div>
 
-      {/* Input de Mensagem (text-[16px] OBRIGATÓRIO PARA IOS NÃO DAR ZOOM) */}
       <div className="mt-2 pointer-events-auto">
         <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md border border-white/10 rounded-full p-1 pl-4 shadow-lg">
           <input 
@@ -333,9 +351,9 @@ function ClientChat({ clientName }: { clientName: string }) {
              className="flex-1 bg-transparent border-none text-[16px] text-white outline-none placeholder:text-white/60 py-2" 
              value={message} 
              onChange={(e) => setMessage(e.target.value)} 
-             onKeyDown={(e) => e.key === 'Enter' && send(message).then(()=>setMessage(''))} 
+             onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
           />
-          <button onClick={() => send(message).then(()=>setMessage(''))} className="w-10 h-10 rounded-full bg-[#00f0ff] hover:bg-[#00d0dd] text-black flex items-center justify-center transition-colors shadow-md">
+          <button onClick={handleSend} className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors shadow-md">
              <Send size={14} className="-ml-0.5" />
           </button>
         </div>
@@ -356,7 +374,9 @@ function LiveClientContent() {
     const initPage = async () => {
       const tempName = "Rafael_VIP"; setClientName(tempName);
       try {
-        const res = await fetch(`/api/livekit/token?room=live_${modelSlug}&username=${encodeURIComponent(tempName)}&isModel=false`);
+        // FORÇA O SLUG PARA MINÚSCULO PARA NÃO DAR ERRO DE SALA DIFERENTE
+        const safeRoom = `live_${modelSlug.toLowerCase()}`;
+        const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(tempName)}&isModel=false`);
         const data = await res.json(); if (data.token) setToken(data.token);
       } catch (err) {}
     };
@@ -367,8 +387,7 @@ function LiveClientContent() {
 
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
-      <LiveKitRoom video={false} audio={false} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || ""} className="w-full h-full">
-        {/* Começando com 15 LiveTokens para o Teste */}
+      <LiveKitRoom video={false} audio={false} autoSubscribe={true} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || ""} className="w-full h-full">
         <InteractiveRoom clientName={clientName} initialBalance={15.00} />
         <RoomAudioRenderer />
       </LiveKitRoom>

@@ -7,26 +7,34 @@ import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, MessageCircle, Video, DollarSign, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp } from "lucide-react";
 
-// MODAL DE ACEITE VIP
+const BAD_WORDS = ["puta", "vadia", "buceta", "caralho", "porra", "merda", "fuder", "foder", "cuzinho", "cu", "pau", "piroca", "rola", "putinha", "safada"];
+const filterText = (text: string) => {
+  let filtered = text;
+  BAD_WORDS.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    filtered = filtered.replace(regex, "***");
+  });
+  return filtered;
+};
+
 function PrivateRequestModal({ request, onAccept, onDecline }: { request: any, onAccept: () => void, onDecline: () => void }) {
   if (!request) return null;
   return (
-    <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
-      <div className="bg-black/80 border border-[#00f0ff]/50 rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(0,240,255,0.3)] backdrop-blur-xl">
-        <div className="w-16 h-16 mx-auto rounded-full bg-[#00f0ff]/20 border border-[#00f0ff] flex items-center justify-center mb-4"><Lock size={28} className="text-[#00f0ff] animate-pulse" /></div>
+    <div className="absolute inset-0 bg-black/80 backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-fadeIn">
+      <div className="bg-black border border-[#ff0055]/50 rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(255,0,85,0.4)]">
+        <div className="w-16 h-16 mx-auto rounded-full bg-[#ff0055]/20 border border-[#ff0055] flex items-center justify-center mb-4"><Lock size={28} className="text-[#ff0055] animate-pulse" /></div>
         <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-1">Pedido Privado!</h2>
-        <p className="text-[#00f0ff] text-[10px] font-bold uppercase tracking-widest mb-4 bg-[#00f0ff]/10 inline-block px-3 py-1 rounded-full">Sua Parte: 70% (R$ 2,17/min)</p>
-        <p className="text-white/80 text-sm mb-6">O fã <span className="text-[#00f0ff] font-black uppercase">{request.senderName}</span> quer ir pro VIP.</p>
+        <p className="text-[#ff0055] text-[10px] font-bold uppercase tracking-widest mb-4 bg-[#ff0055]/10 inline-block px-3 py-1 rounded-full">Sua Parte: 70% (R$ 2,17/min)</p>
+        <p className="text-white/80 text-sm mb-6">O fã <span className="text-[#ff0055] font-black uppercase">{request.senderName}</span> quer ir pro VIP.</p>
         <div className="flex gap-3 w-full">
           <button onClick={onDecline} className="flex-1 bg-white/5 hover:bg-white/10 text-white/70 py-4 rounded-xl text-[12px] font-black uppercase transition-all">Recusar</button>
-          <button onClick={onAccept} className="flex-1 bg-[#00f0ff] text-black py-4 rounded-xl text-[12px] font-black uppercase shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all">Aceitar</button>
+          <button onClick={onAccept} className="flex-1 bg-[#ff0055] text-white py-4 rounded-xl text-[12px] font-black uppercase shadow-[0_0_20px_rgba(255,0,85,0.5)] transition-all">Aceitar</button>
         </div>
       </div>
     </div>
   );
 }
 
-// CÂMERA FULL SCREEN (FUNDO)
 function MyVideoStage() {
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const localTrack = tracks.find(t => t.participant.isLocal);
@@ -37,7 +45,6 @@ function MyVideoStage() {
   );
 }
 
-// LISTA DE FÃS (COM BOTÃO MINIMIZAR)
 function ViewerList({ viewerBalances, onBlock }: { viewerBalances: Record<string, number>, onBlock: (identity: string) => void }) {
   const participants = useParticipants();
   const viewers = participants.filter(p => !p.isLocal);
@@ -49,7 +56,6 @@ function ViewerList({ viewerBalances, onBlock }: { viewerBalances: Record<string
         <h3 className="text-emerald-400 font-black uppercase text-[10px] tracking-widest flex items-center gap-1"><Users size={12} /> {viewers.length} na sala</h3>
         {isMinimized ? <ChevronDown size={14} className="text-white/50" /> : <ChevronUp size={14} className="text-white/50" />}
       </div>
-      
       {!isMinimized && (
         <div className="flex flex-col gap-2 p-2 max-h-[30vh] overflow-y-auto custom-scrollbar">
            {viewers.length === 0 ? <span className="text-white/30 text-[9px] uppercase font-bold text-center py-2">Vazio</span> : 
@@ -74,7 +80,6 @@ function ViewerList({ viewerBalances, onBlock }: { viewerBalances: Record<string
   );
 }
 
-// CHAT ESTILO TIKTOK (SÓ TEXTO, SEM FUNDO PRETO)
 function CustomChat({ modelName }: { modelName: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
@@ -82,14 +87,18 @@ function CustomChat({ modelName }: { modelName: string }) {
   
   useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
   
+  const handleSend = () => {
+     if (!message.trim()) return;
+     const safeMessage = filterText(message);
+     send(safeMessage).then(() => setMessage(''));
+  }
+
   return (
     <div className="absolute bottom-4 left-4 right-4 sm:w-80 h-[50vh] flex flex-col justify-end z-20 pointer-events-none">
-      
-      {/* Área de mensagens flutuantes (Fade no topo) */}
       <div className="overflow-y-auto p-2 space-y-3 custom-scrollbar pointer-events-auto mask-image-top mb-4 flex flex-col justify-end" ref={chatContainerRef}>
         {chatMessages.map((msg, i) => (
           <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-            <span className={`text-[10px] font-black uppercase mb-0.5 ${msg.from?.identity === modelName ? 'text-[#D946EF] drop-shadow-md' : 'text-emerald-400 drop-shadow-md'}`}>
+            <span className={`text-[10px] font-black uppercase mb-0.5 ${msg.from?.identity === modelName ? 'text-[#ff0055] drop-shadow-md' : 'text-emerald-400 drop-shadow-md'}`}>
               {msg.from?.identity === modelName ? '👑 Você' : msg.from?.name}
             </span>
             <span className="text-[13px] text-white font-medium drop-shadow-lg leading-tight">
@@ -99,7 +108,6 @@ function CustomChat({ modelName }: { modelName: string }) {
         ))}
       </div>
 
-      {/* Input de Texto (Evita zoom com text-[16px]) */}
       <div className="pointer-events-auto flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/20 rounded-full p-1 pl-4 shrink-0">
         <input 
           type="text" 
@@ -107,9 +115,9 @@ function CustomChat({ modelName }: { modelName: string }) {
           className="flex-1 bg-transparent border-none text-[16px] text-white outline-none placeholder:text-white/50 py-2" 
           value={message} 
           onChange={(e) => setMessage(e.target.value)} 
-          onKeyDown={(e) => e.key === 'Enter' && send(message).then(()=>setMessage(''))} 
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
         />
-        <button onClick={() => send(message).then(()=>setMessage(''))} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shrink-0 shadow-lg"><Send size={14} className="-ml-0.5" /></button>
+        <button onClick={handleSend} className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center shrink-0 shadow-lg"><Send size={14} className="-ml-0.5" /></button>
       </div>
 
       <style jsx>{`.mask-image-top { mask-image: linear-gradient(to bottom, transparent, black 15%); }`}</style>
@@ -154,35 +162,30 @@ function StudioContent() {
   const [viewerBalances, setViewerBalances] = useState<Record<string, number>>({});
   const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
 
-  // Estado da Contagem Regressiva
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showBrilhe, setShowBrilhe] = useState(false);
-
-  const roomName = `live_${modelSlug}`;
-  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud";
 
   useEffect(() => {
     if (!modelId || !modelSlug) return router.push("/admin");
     const fetchToken = async () => {
       try {
-        const res = await fetch(`/api/livekit/token?room=${roomName}&username=${encodeURIComponent(modelSlug)}&isModel=true`);
+        // FORÇA O SLUG PARA MINÚSCULO IGUAL NO CLIENTE!
+        const safeRoom = `live_${modelSlug.toLowerCase()}`;
+        const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(modelSlug)}&isModel=true`);
         const data = await res.json();
         if (data.token) setToken(data.token);
       } catch (err) {}
     };
     fetchToken();
-  }, [router, modelId, modelSlug, roomName]);
+  }, [router, modelId, modelSlug]);
 
-  // Lógica da Contagem Regressiva
   const startLive = (choices: LocalUserChoices) => {
     setCountdown(3);
     setTimeout(() => setCountdown(2), 1000);
     setTimeout(() => setCountdown(1), 2000);
     setTimeout(() => {
-      setCountdown(null);
-      setShowBrilhe(true);
-      setPreJoinChoices(choices); // Entra na sala de fato
-      setTimeout(() => setShowBrilhe(false), 2000); // Tira o "Brilhe" depois de 2s
+      setCountdown(null); setShowBrilhe(true); setPreJoinChoices(choices); 
+      setTimeout(() => setShowBrilhe(false), 2000); 
     }, 3000);
   };
 
@@ -217,7 +220,6 @@ function StudioContent() {
 
   if (!token) return <div className="h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#D946EF]" size={50} /></div>;
 
-  // Tela de Preparação (Atrás da Contagem)
   if (!preJoinChoices && countdown === null && !showBrilhe) return (
     <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 bg-cover bg-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
@@ -228,7 +230,6 @@ function StudioContent() {
     </div>
   );
 
-  // Tela de Contagem Regressiva
   if (countdown !== null) return (
     <div className="h-[100dvh] bg-black flex items-center justify-center relative">
       <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm">
@@ -237,20 +238,19 @@ function StudioContent() {
     </div>
   );
 
-  const neonBorder = isPrivateMode ? "border-[#00f0ff] shadow-[inset_0_0_50px_rgba(0,240,255,0.4)]" : "border-black"; 
+  // VIP FICA VERMELHO PRA ELA TAMBÉM
+  const neonBorder = isPrivateMode ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)]" : "border-black"; 
 
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
-      
-      {/* O BRILHE! */}
       {showBrilhe && (
         <div className="absolute inset-0 flex items-center justify-center z-[200] pointer-events-none">
-          <h1 className="text-6xl font-black text-[#00f0ff] uppercase tracking-widest drop-shadow-[0_0_50px_rgba(0,240,255,1)] animate-pulse">Brilhe!</h1>
+          <h1 className="text-6xl font-black text-white uppercase tracking-widest drop-shadow-[0_0_50px_rgba(255,255,255,1)] animate-pulse">Brilhe!</h1>
         </div>
       )}
 
       {preJoinChoices && (
-        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={livekitUrl} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-2`}>
+        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || ""} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-2`}>
           <MyVideoStage />
           <RoomAudioRenderer />
           <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} onBalanceUpdate={handleBalanceUpdate} onPrivateEnd={() => setIsPrivateMode(false)} onGiftReceived={handleGiftReceived} />
@@ -260,21 +260,17 @@ function StudioContent() {
               <>
                <PrivateRequestModal request={currentPrivateRequest} onAccept={() => handleAcceptPrivate(room)} onDecline={() => setCurrentPrivateRequest(null)} />
                
-               {/* HEADER: HARMONIOSO E LIMPO */}
                <header className="absolute top-6 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
-                  
-                  {/* Bloco Esquerdo: Ganhos e Status */}
                   <div className="flex flex-col gap-2 pointer-events-auto">
                      <div className="bg-black/60 backdrop-blur-md border border-white/10 px-5 py-2.5 rounded-2xl flex flex-col shadow-lg min-w-[140px]">
-                       <span className="text-[9px] text-white/60 uppercase font-black tracking-widest">Faturamento</span>
+                       <span className="text-[9px] text-white/60 uppercase font-black tracking-widest">Faturamento (70%)</span>
                        <span className="text-lg font-black text-emerald-400 leading-none mt-1">R$ {sessionEarnings.toFixed(2).replace('.', ',')}</span>
                      </div>
-                     <div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full w-max shadow-lg flex items-center gap-2 ${isPrivateMode ? 'bg-[#00f0ff] text-black shadow-[#00f0ff]/50' : 'bg-[#D946EF]'}`}>
+                     <div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full w-max shadow-lg flex items-center gap-2 ${isPrivateMode ? 'bg-[#ff0055] shadow-[#ff0055]/50 animate-pulse' : 'bg-[#D946EF]'}`}>
                         {isPrivateMode ? <><Lock size={12}/> VIP ATIVO</> : <><div className="w-2 h-2 rounded-full bg-white animate-pulse"></div> AO VIVO</>}
                      </div>
                   </div>
 
-                  {/* Bloco Direito: Controles */}
                   <div className="flex flex-col gap-2 items-end pointer-events-auto">
                      <div className="flex gap-2">
                         <MicToggleButton />
@@ -295,7 +291,7 @@ function StudioContent() {
                 {activeGifts.map(gift => (
                   <div key={gift.id} className="flex flex-col items-center gift-anim absolute">
                     <span className="text-8xl drop-shadow-[0_0_30px_rgba(255,255,255,0.5)] mb-2">{gift.icon}</span>
-                    <span className="text-[#00f0ff] font-black uppercase text-[12px] bg-black/80 px-4 py-2 rounded-full backdrop-blur-md border border-white/10">{gift.sender} enviou!</span>
+                    <span className="text-white font-black uppercase text-[12px] bg-[#ff0055] px-4 py-2 rounded-full backdrop-blur-md shadow-lg">{gift.sender} enviou!</span>
                   </div>
                 ))}
                </div>
