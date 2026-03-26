@@ -10,7 +10,7 @@ export default function ExploreLivePage() {
   
   const [playerPhone, setPlayerPhone] = useState<string | null>(null);
   const [balance, setBalance] = useState(0); 
-  const [initialBalanceCheck, setInitialBalanceCheck] = useState(0); // Usado para saber se o pix caiu
+  const [initialBalanceCheck, setInitialBalanceCheck] = useState(0);
   
   const [search, setSearch] = useState("");
   const [models, setModels] = useState<any[]>([]);
@@ -18,7 +18,6 @@ export default function ExploreLivePage() {
   const [selectedModel, setSelectedModel] = useState<any | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // Estados Financeiros (Reais)
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<any>(null);
@@ -26,6 +25,9 @@ export default function ExploreLivePage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pixTimeLeft, setPixTimeLeft] = useState(600);
+
+  // 🔥 NOVO: MODAL DE LOGIN PARA VISITANTES 🔥
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -45,7 +47,6 @@ export default function ExploreLivePage() {
             }
         }
 
-        // 🔥 PUXA SÓ MÍDIAS COM PREÇO = 0 (Gratuitas) 🔥
         const [mRes, cRes, medRes] = await Promise.all([
             fetch(`${supabaseUrl}/rest/v1/Models?select=*`, { headers }),
             fetch(`${supabaseUrl}/rest/v1/Configs?select=*`, { headers }),
@@ -86,16 +87,19 @@ export default function ExploreLivePage() {
 
   const filteredModels = models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()) || m.slug.toLowerCase().includes(search.toLowerCase()));
   
-  // 🔥 LÓGICA DO "EM ALTA AGORA" (Pega a primeira online ou a primeira da lista)
   const trendingModel = models.find(m => m.status === 'online' || m.status === 'vip') || models[0];
 
+  // 🔥 INTERCEPTADOR DE AÇÕES (Exige Login) 🔥
+  const requireAuth = (callback: () => void) => {
+      if (!playerPhone) {
+          setShowAuthModal(true);
+      } else {
+          callback();
+      }
+  };
+
   const handleJoinLive = (slug: string, status: string) => {
-    if (!playerPhone) {
-        alert("Você precisa fazer login para entrar nas lives!");
-        router.push('/');
-        return;
-    }
-    router.push(`/live/${slug}`);
+      requireAuth(() => router.push(`/live/${slug}`));
   };
 
   const openMiniProfile = (e: React.MouseEvent, model: any) => {
@@ -108,63 +112,62 @@ export default function ExploreLivePage() {
     if(confirm("Deseja mesmo sair da sua conta?")) {
         localStorage.removeItem("labz_player_phone");
         localStorage.removeItem("labz_player_logged");
-        router.push('/');
+        setPlayerPhone(null);
+        setBalance(0);
+        router.refresh();
     }
   };
 
-  // 🔥 GERADOR DE PIX REAL 🔥
   const generatePix = async (amount: number) => {
-    if (!playerPhone) { alert("Faça login para comprar!"); router.push('/'); return; }
-    
-    setGeneratingPix(true);
-    setPixTimeLeft(600);
-    try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}&select=id`, { headers });
-        const pData = await pRes.json();
-        const playerId = pData[0]?.id;
+    requireAuth(async () => {
+        setGeneratingPix(true);
+        setPixTimeLeft(600);
+        try {
+            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+            const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone!)}&select=id`, { headers });
+            const pData = await pRes.json();
+            const playerId = pData[0]?.id;
 
-        if (!playerId) throw new Error("Jogador não encontrado no banco.");
+            if (!playerId) throw new Error("Jogador não encontrado no banco.");
 
-        const response = await fetch('/api/checkout/hub', {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount: amount, userId: playerId, type: 'live_tokens' }),
-        });
-        
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Erro API Pix");
-
-        if (data.qr_code_base64 || data.qrCodeBase64) {
-            setPixData({ 
-                qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, 
-                qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, 
-                value: amount
+            const response = await fetch('/api/checkout/hub', {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: amount, userId: playerId, type: 'live_tokens' }),
             });
-            setInitialBalanceCheck(balance); // Salva o saldo atual para comparar depois
-            setShowShopModal(false);
-            setShowPixModal(true);
+            
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Erro API Pix");
+
+            if (data.qr_code_base64 || data.qrCodeBase64) {
+                setPixData({ 
+                    qrCodeBase64: data.qr_code_base64 || data.qrCodeBase64, 
+                    qrCodeCopiaCola: data.qr_code || data.qrCode || data.copy_paste, 
+                    value: amount
+                });
+                setInitialBalanceCheck(balance);
+                setShowShopModal(false);
+                setShowPixModal(true);
+            }
+        } catch (error: any) {
+            alert(`Falha ao gerar PIX: ${error.message}`);
+        } finally { 
+            setGeneratingPix(false); 
         }
-    } catch (error: any) {
-        alert(`Falha ao gerar PIX: ${error.message}`);
-    } finally { 
-        setGeneratingPix(false); 
-    }
+    });
   };
 
-  // 🔥 VERIFICADOR DE PIX (POLLING NO BANCO DE DADOS) 🔥
   useEffect(() => {
       let interval: NodeJS.Timeout;
-      if (showPixModal && pixData && !paymentSuccess) {
+      if (showPixModal && pixData && !paymentSuccess && playerPhone) {
           interval = setInterval(async () => {
               try {
                   const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
-                  const res = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone || '')}&select=live_tokens`, { headers });
+                  const res = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}&select=live_tokens`, { headers });
                   const data = await res.json();
                   
                   const currentTokens = data[0]?.live_tokens || 0;
                   
-                  // Se o token for maior que o saldo inicial, é porque o PIX caiu!
                   if (currentTokens > initialBalanceCheck) {
                       setBalance(currentTokens);
                       clearInterval(interval); 
@@ -204,7 +207,23 @@ export default function ExploreLivePage() {
   return (
     <div className="min-h-[100dvh] bg-[#050505] text-white pb-20 font-sans relative">
       
-      {/* MODAL DE LOJA */}
+      {/* 🔥 MODAL DE ACESSO RESTRITO (LOGIN) 🔥 */}
+      {showAuthModal && (
+          <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-2xl relative text-center">
+                  <button onClick={() => setShowAuthModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={20}/></button>
+                  <div className="w-16 h-16 bg-[#00f0ff]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#00f0ff]/30">
+                      <Lock size={28} className="text-[#00f0ff]"/>
+                  </div>
+                  <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-2">Acesso Restrito</h2>
+                  <p className="text-xs text-white/60 mb-8 leading-relaxed">Você precisa fazer login para entrar nas lives, comprar créditos ou seguir musas.</p>
+                  <button onClick={() => router.push('/')} className="w-full bg-[#00f0ff] hover:bg-[#00d0dd] text-black py-4 rounded-xl text-[11px] font-black uppercase shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all">
+                      Fazer Login ou Cadastro
+                  </button>
+              </div>
+          </div>
+      )}
+
       {showShopModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>
@@ -222,9 +241,8 @@ export default function ExploreLivePage() {
         </div>
       )}
 
-      {/* MODAL PIX REAL */}
       {showPixModal && pixData && (
-          <div className="fixed inset-0 z-[210] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
+          <div className="fixed inset-0 z-[210] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative text-center">
                   {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24}/></button>}
                   {paymentSuccess ? (
@@ -243,7 +261,6 @@ export default function ExploreLivePage() {
           </div>
       )}
 
-      {/* MINI PERFIL MODAL */}
       {selectedModel && (
         <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center sm:p-4">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedModel(null)}></div>
@@ -265,7 +282,7 @@ export default function ExploreLivePage() {
                             <h2 className="text-2xl font-black text-white uppercase tracking-tighter">{selectedModel.name}</h2>
                             <p className="text-[10px] text-[#00f0ff] font-bold uppercase tracking-widest mt-1">@{selectedModel.slug}</p>
                         </div>
-                        <button onClick={() => setIsFollowing(!isFollowing)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all shadow-lg ${isFollowing ? 'bg-white/10 text-white border border-white/20' : 'bg-[#ff0055] text-white shadow-[#ff0055]/40'}`}>
+                        <button onClick={() => requireAuth(() => setIsFollowing(!isFollowing))} className={`flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all shadow-lg ${isFollowing ? 'bg-white/10 text-white border border-white/20' : 'bg-[#ff0055] text-white shadow-[#ff0055]/40'}`}>
                             {isFollowing ? <><CheckCircle size={14}/> Seguindo</> : <><Bell size={14}/> Seguir Musa</>}
                         </button>
                     </div>
@@ -282,12 +299,12 @@ export default function ExploreLivePage() {
                             </div>
                         ))}
                         {selectedModel.publicPhotos.length === 0 && (
-                           <p className="text-xs text-white/30 italic">Nenhuma foto pública gratuita.</p>
+                           <p className="text-xs text-white/30 italic font-bold">Nenhuma foto pública gratuita.</p>
                         )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 mt-auto">
-                        <button onClick={() => router.push(`/profile/${selectedModel.slug}`)} className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white py-4 rounded-xl text-[10px] font-black uppercase transition-all border border-white/10">
+                        <button onClick={() => requireAuth(() => router.push(`/profile/${selectedModel.slug}`))} className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white py-4 rounded-xl text-[10px] font-black uppercase transition-all border border-white/10">
                             <Maximize2 size={14}/> Perfil Completo
                         </button>
                         <button onClick={() => handleJoinLive(selectedModel.slug, selectedModel.status)} className="flex items-center justify-center gap-2 bg-[#00f0ff] hover:bg-[#00d0dd] text-black py-4 rounded-xl text-[10px] font-black uppercase transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)]">
@@ -309,19 +326,18 @@ export default function ExploreLivePage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/vitrine')} className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-full transition-all">
+          <button onClick={() => requireAuth(() => router.push('/vitrine'))} className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-full transition-all">
             <Home size={14} className="text-white/70" />
-            <span className="font-black text-[9px] uppercase text-white/70 tracking-widest hidden sm:block">Painel</span>
+            <span className="font-black text-[9px] uppercase text-white/70 tracking-widest hidden sm:block">Vitrine Principal</span>
           </button>
 
-          <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full shadow-inner cursor-pointer" onClick={() => setShowShopModal(true)}>
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full shadow-inner cursor-pointer" onClick={() => requireAuth(() => setShowShopModal(true))}>
             <Wallet size={14} className="text-[#00f0ff]" />
             <span className="font-black text-[12px] text-[#00f0ff]">{balance.toFixed(2).replace('.', ',')} LT</span>
           </div>
 
-          {/* BOTÃO DE LOGOUT DISCRETO */}
           {playerPhone && (
-            <button onClick={handleLogout} className="flex items-center justify-center w-10 h-10 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-full transition-all">
+            <button onClick={handleLogout} className="flex items-center justify-center w-10 h-10 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-full transition-all" title="Sair">
               <LogOut size={16} />
             </button>
           )}
@@ -341,7 +357,6 @@ export default function ExploreLivePage() {
           />
         </div>
 
-        {/* 🔥 SEÇÃO EM ALTA DINÂMICA 🔥 */}
         {trendingModel && (
         <section>
           <div className="flex items-center gap-2 mb-4">
@@ -409,9 +424,10 @@ export default function ExploreLivePage() {
                 <div className="absolute top-3 right-3 z-20">
                   <button 
                     onClick={(e) => openMiniProfile(e, model)}
-                    className="bg-black/60 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white p-2 rounded-full transition-all shadow-lg"
+                    className="flex items-center gap-1.5 bg-black/60 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 rounded-full transition-all shadow-lg"
                   >
-                    <User size={14} />
+                    <User size={12} />
+                    <span className="text-[8px] font-black uppercase tracking-widest">Mini Perfil</span>
                   </button>
                 </div>
 
