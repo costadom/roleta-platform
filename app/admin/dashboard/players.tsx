@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, Wallet } from "lucide-react";
+import { User, Wallet, ShieldCheck } from "lucide-react";
 
 export default function PlayersManager({ modelId, isSuperAdmin }: { modelId: string | null; isSuperAdmin: boolean }) {
   const [players, setPlayers] = useState<any[]>([]);
@@ -64,8 +64,16 @@ export default function PlayersManager({ modelId, isSuperAdmin }: { modelId: str
           players.map(p => (
             <div key={p.id} className="bg-black/40 border border-white/5 p-5 rounded-2xl flex items-center justify-between hover:border-[#FF1493]/30 transition-all">
               <div>
-                <h3 className="text-xs font-black uppercase text-white flex items-center gap-2">{p.name}</h3>
-                <p className="text-[9px] font-mono text-white/30 mt-1">{p.whatsapp}</p>
+                <h3 className="text-xs font-black uppercase text-white flex items-center gap-2">{p.name || p.nickname || "Fã VIP"}</h3>
+                
+                {/* 🔥 PROTEÇÃO DE DADOS APLICADA AQUI 🔥 */}
+                {isSuperAdmin ? (
+                  <p className="text-[9px] font-mono text-[#FFD700] mt-1">{p.whatsapp}</p>
+                ) : (
+                  <p className="text-[9px] font-mono text-white/30 mt-1 flex items-center gap-1">
+                    <ShieldCheck size={10} className="text-[#FF1493]"/> Número Protegido
+                  </p>
+                )}
               </div>
               
               <div className="flex items-center gap-4">
