@@ -56,7 +56,6 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  // 🔥 NOVO TIPO NA ABA: followers 🔥
   const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
@@ -99,7 +98,7 @@ function DashboardContent() {
   // 🔥 ESTADOS DE NOTIFICAÇÃO DA MODELO 🔥
   const [unreadChatCounts, setUnreadChatCounts] = useState(0);
 
-  // 🔥 ESTADOS DE SEGUIDORES E INTERAÇÕES (NOVIDADE) 🔥
+  // 🔥 ESTADOS DE SEGUIDORES E INTERAÇÕES 🔥
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [showMediaStats, setShowMediaStats] = useState<any | null>(null);
   const [mediaComments, setMediaComments] = useState<any[]>([]);
@@ -164,7 +163,7 @@ function DashboardContent() {
       setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
       setMediaList(Array.isArray(resMedia) ? resMedia : []); setVideoRequests(Array.isArray(resVideos) ? resVideos : []); setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
       
-      setFollowersList(Array.isArray(resFollowers) ? resFollowers : []); // 🔥 SALVA OS SEGUIDORES
+      setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
 
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
       setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
@@ -173,7 +172,6 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 CARREGAR CURTIDAS E COMENTÁRIOS DA FOTO ESPECÍFICA 🔥
   const loadMediaStats = async (mediaItem: any) => {
       setShowMediaStats(mediaItem);
       try {
@@ -187,7 +185,6 @@ function DashboardContent() {
       } catch(e){}
   }
 
-  // 🔥 APAGAR COMENTÁRIO (MODERAÇÃO) 🔥
   const handleDeleteComment = async (commentId: string) => {
       if(!confirm("Apagar este comentário?")) return;
       try {
@@ -196,7 +193,6 @@ function DashboardContent() {
       } catch(e) {}
   }
 
-  // 🔥 CHECAR NOTIFICAÇÕES (MODELO) 🔥
   const checkModelNotifications = async () => {
       if (!modelId) return;
       try {
@@ -224,7 +220,6 @@ function DashboardContent() {
     }
   }, [modelId]);
 
-  // 🔥 CARREGAR LISTA DE CHATS DA MODELO 🔥
   useEffect(() => {
     if (activeTab === 'chat' && modelId) {
       loadChatList();
@@ -257,7 +252,6 @@ function DashboardContent() {
               const msgs = await res.json();
               setChatMessages(msgs);
               
-              // Marca como lida as do fã
               const unread = msgs.filter((m:any) => m.sender_type === 'player' && !m.is_read);
               if (unread.length > 0) {
                   setUnreadChatCounts(0);
@@ -298,12 +292,9 @@ function DashboardContent() {
       } catch(e) { console.error("Erro envio", e) }
   };
 
-  // 🔥 GRAVAÇÃO DE ÁUDIO OTIMIZADA PARA IPHONE E ANDROID 🔥
   const startRecording = async () => {
       try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          
-          // Verifica se é iPhone (Safari) e usa o melhor formato suportado
           let mimeType = 'audio/webm'; 
           if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4'; 
           else if (MediaRecorder.isTypeSupported('audio/aac')) mimeType = 'audio/aac';
@@ -317,7 +308,6 @@ function DashboardContent() {
           };
 
           mediaRecorder.onstop = async () => {
-              // Pegamos a extensão correta baseada no MIME
               const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('aac') ? 'aac' : 'webm';
               const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
               stream.getTracks().forEach(track => track.stop());
@@ -594,14 +584,13 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
           
-          {/* 🔥 NOVA ABA SEGUIDORES 🔥 */}
+          {/* 🔥 ABA SEGUIDORES 🔥 */}
           <button onClick={() => setActiveTab("followers")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "followers" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Seguidores</button>
           
-          {/* Aba Jogadores Master (Intacta) */}
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Gerir Fãs</button>
         </div>
 
-        {/* 🔥 NOVA ÁREA: SEGUIDORES DA MUSA 🔥 */}
+        {/* 🔥 ÁREA: SEGUIDORES DA MUSA (PRIVACIDADE APLICADA) 🔥 */}
         {activeTab === "followers" && (
             <div className="animate-in slide-in-from-bottom-4">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
@@ -613,8 +602,9 @@ function DashboardContent() {
                                     <User size={20} className="text-[#FF1493]"/>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
+                                    {/* Escondeu WhatsApp, mostra Nome/Nickname ou "Fã VIP" */}
                                     <p className="text-xs font-black uppercase text-white truncate">{fan.name || fan.nickname || "Fã VIP"}</p>
-                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">{fan.whatsapp}</p>
+                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Fã da Musa</p>
                                 </div>
                                 <button onClick={() => setActiveTab("chat")} className="p-3 bg-white/5 rounded-xl hover:bg-[#FF1493] hover:text-white transition-all text-white/50"><MessageCircle size={16}/></button>
                             </div>
@@ -626,7 +616,7 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 ABA DE CHAT DA MODELO COMO LISTA (O Modal flutuante abre ao clicar) 🔥 */}
+        {/* 🔥 ABA DE CHAT DA MODELO (PRIVACIDADE APLICADA) 🔥 */}
         {activeTab === "chat" && (
             <div className="animate-in slide-in-from-bottom-4">
                 <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl">
@@ -642,7 +632,8 @@ function DashboardContent() {
                                     <User size={24} className="text-[#D946EF]"/>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    <p className="text-xs font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.whatsapp || "Cliente"}</p>
+                                    {/* Nome ou "Fã VIP" - Sem WhatsApp */}
+                                    <p className="text-xs font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.nickname || "Fã VIP"}</p>
                                     <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir conversa</p>
                                 </div>
                                 <button className="bg-white/5 text-white/50 p-3 rounded-xl group-hover:bg-[#D946EF] group-hover:text-white transition-all"><MessageCircle size={16}/></button>
@@ -655,7 +646,7 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL FLUTUANTE DA CONVERSA DA MODELO 🔥 */}
+        {/* 🔥 MODAL FLUTUANTE DA CONVERSA DA MODELO (PRIVACIDADE) 🔥 */}
         {activeTab === "chat" && activeChat && (
             <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
                 <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
@@ -668,7 +659,7 @@ function DashboardContent() {
                             <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
                                 <User size={16} className="text-[#D946EF]"/>
                             </div>
-                            <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.whatsapp || "Cliente"}</h3>
+                            <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.nickname || "Fã VIP"}</h3>
                         </div>
                         <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
                     </div>
@@ -832,7 +823,8 @@ function DashboardContent() {
                             <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
                                 <div>
-                                    <p className="text-xs font-black text-white uppercase">{sale.player_phone || "Cliente VIP"}</p>
+                                    {/* Escondeu WhatsApp, exibe Fã VIP */}
+                                    <p className="text-xs font-black text-white uppercase">Fã VIP</p>
                                     <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
                                     <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
                                 </div>
@@ -977,10 +969,15 @@ function DashboardContent() {
                     {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
-                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="pointer-events-auto p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={24}/></button>
+                            
+                            {/* 🔥 BARRINHA DE BOTÕES (MÓVEL E DESKTOP AMIGÁVEL) 🔥 */}
+                            <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between border-t border-white/10">
+                                <div className="flex items-center gap-2 text-[#FFD700] text-[10px] font-black uppercase"><Star size={12}/> Ativa</div>
+                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
+                                    <Trash2 size={16}/>
+                                </button>
                             </div>
-                            <div className="absolute top-4 left-4"><Star size={16} fill="#FFD700" className="text-[#FFD700] drop-shadow-md" /></div>
+                            
                         </div>
                     )) : <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem]">Vazio.</div>}
                 </div>
@@ -1032,14 +1029,17 @@ function DashboardContent() {
                     {mediaList.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            
-                            {/* 🔥 BOTÕES DA GALERIA OTIMIZADOS (VER E APAGAR) 🔥 */}
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none gap-2">
-                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="pointer-events-auto p-3 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={20}/></button>
-                                <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="pointer-events-auto p-3 bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/50 rounded-full hover:bg-[#FF1493] hover:text-white transition-colors shadow-lg"><Eye size={20}/></button>
-                            </div>
-
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
+                            
+                            {/* 🔥 BARRINHA DE BOTÕES (MÓVEL E DESKTOP AMIGÁVEL) 🔥 */}
+                            <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between gap-2 border-t border-white/10">
+                                <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#FF1493]/20 text-[#FF1493] rounded-xl hover:bg-[#FF1493] hover:text-white transition-colors text-[10px] font-black uppercase">
+                                    <Eye size={14}/> Ver Infos
+                                </button>
+                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
+                                    <Trash2 size={16}/>
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -1083,7 +1083,7 @@ function DashboardContent() {
                                 <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
                                 
                                 {/* Botão de Moderação (Apagar Comentário) */}
-                                <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
+                                <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
                                     <Trash2 size={14}/>
                                 </button>
                             </div>
