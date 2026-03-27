@@ -32,13 +32,23 @@ export default function VitrinePage() {
             const modelsData = await modelsRes.json();
             const configsData = await configsRes.json();
 
-            // Junta as informações no código com segurança
-            const activeModels = modelsData.filter((m: any) => {
+            // Junta as informações no código com segurança e filtra as ativas
+            let activeModels = modelsData.filter((m: any) => {
                 const config = configsData.find((c: any) => c.model_id === m.id);
                 m.config = config; // Salva a config dentro da modelo
                 return config && config.showcase_visible === true && config.model_name;
             });
             
+            // 🔥 ORDENAÇÃO: MODELOS EM LIVE PRIMEIRO 🔥
+            activeModels.sort((a: any, b: any) => {
+                const aIsLive = a.live_status === 'online' || a.live_status === 'vip';
+                const bIsLive = b.live_status === 'online' || b.live_status === 'vip';
+                
+                if (aIsLive && !bIsLive) return -1; // A vem antes de B
+                if (!aIsLive && bIsLive) return 1;  // B vem antes de A
+                return 0; // Se ambas estiverem (ou não estiverem) em live, mantém a ordem original
+            });
+
             setModels(activeModels);
         }
       } catch (err) { 
