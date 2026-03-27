@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, useTracks, ParticipantTile, useChat, useRoomContext, useParticipants, useLocalParticipant, VideoTrack } from "@livekit/components-react";
-import { Track, RoomEvent, VideoPresets, TrackPublishDefaults } from "livekit-client";
+import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video, Sparkles } from "lucide-react";
 
@@ -39,10 +39,8 @@ function MyVideoStage() {
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const localTrack = tracks.find(t => t.participant.isLocal);
   return (
-    // 🔥 CORREÇÃO DE LAYOUT: Container preto centralizado 🔥
     <div className="absolute inset-0 w-full h-full bg-black z-0 flex items-center justify-center overflow-hidden">
       {localTrack ? (
-          // 🔥 object-contain garante que a imagem não estica e aparece inteira 🔥
           <VideoTrack trackRef={localTrack} className="w-full h-full object-contain max-w-full max-h-full" />
       ) : (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-[#D946EF]/50"><Video size={48} className="animate-pulse" /></div>
@@ -314,7 +312,7 @@ function StudioContent() {
         <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em] mb-10 text-center">Teste sua câmera e microfone antes de entrar.</p>
         
         <div className="w-full rounded-2xl overflow-hidden border-2 border-white/10 shadow-inner bg-black">
-           {/* 🔥 TENTATIVA DE FORÇAR QUALIDADE NO PREJOIN 🔥 */}
+           {/* 🔥 CONFIGURAÇÃO LIMPA SEM FORÇAR RESOLUÇÃO (Evita o TypeError) 🔥 */}
            <PreJoin 
              defaults={{ videoEnabled: true, audioEnabled: true }} 
              onSubmit={startLive} 
@@ -342,13 +340,6 @@ function StudioContent() {
 
   const neonBorder = isPrivateMode ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)]" : "border-black"; 
 
-  // 🔥 CONFIGURAÇÕES DE ALTA QUALIDADE PARA TRANSMISSÃO 🔥
-  const trackPublishDefaults: TrackPublishDefaults = {
-    videoEncoding: VideoPresets.h1080.encoding, // Tenta 1080p. O LiveKit ajusta se a net for ruim.
-    simulcast: true, // Importante para entregar qualidade diferente conforme a net do fã
-    screenShareEncoding: VideoPresets.h1080_fps30.encoding,
-  };
-
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       {showBrilhe && (
@@ -360,13 +351,12 @@ function StudioContent() {
       )}
 
       {preJoinChoices && (
-        // 🔥 APLICANDO HQ NA ROOM 🔥
+        // 🔥 LIVEKIT ROOM LIMPA 🔥
         <LiveKitRoom 
           video={preJoinChoices.videoEnabled} 
           audio={preJoinChoices.audioEnabled} 
           token={token} 
           serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud"} 
-          publishDefaults={trackPublishDefaults} // 🔥 Aplica HQ aqui
           className={`w-full h-full transition-all duration-1000 ${neonBorder} border-4 box-border`}
         >
           <MyVideoStage />
@@ -433,7 +423,6 @@ function StudioContent() {
         .custom-scrollbar::-webkit-scrollbar { width: 3px; } 
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
         
-        /* 🔥 Customiza o botão vermelho horroroso padrão do LiveKit 🔥 */
         .custom-prejoin button {
             background: #D946EF !important;
             border-radius: 1rem !important;
