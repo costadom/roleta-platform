@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles, MessageCircle, Radio
+  Loader2, Lock, Play, ArrowLeft, Gamepad2, LayoutGrid, X, Video, Clock, CheckCircle, Heart, QrCode, Copy, User, CheckCircle2, Sparkles, MessageCircle, Radio, Bell, Send
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
@@ -24,7 +24,14 @@ export default function ModelProfile() {
   const pricing = { 3: 70, 5: 110, 10: 150 };
 
   const [viewingMedia, setViewingMedia] = useState<any>(null);
+  
+  // 🔥 ESTADOS NOVOS: CURTIDAS, COMENTÁRIOS E SEGUIR 🔥
   const [liked, setLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [loadingComment, setLoadingComment] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
 
   const [checkoutData, setCheckoutData] = useState<{ type: 'photo' | 'video', price: number, itemInfo: any } | null>(null);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string, qrCodeCopiaCola: string, txId: string } | null>(null);
@@ -53,10 +60,11 @@ export default function ModelProfile() {
       let currentPlayerId = null;
       const phone = localStorage.getItem("labz_player_phone");
       if (logged && phone) {
-        const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=id`, { headers }).then(r => r.json());
+        const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&model_id=eq.${modelData.id}&select=id`, { headers }).then(r => r.json());
         if (playerRes && playerRes[0]) {
           currentPlayerId = playerRes[0].id;
           setPlayerId(currentPlayerId);
+          setIsFollowing(true); // Se ele tem conta nessa musa, ele já segue
         }
       }
 
@@ -77,6 +85,109 @@ export default function ModelProfile() {
       }
     } catch (e) { console.error("Erro", e); } finally { setLoading(false); }
   }
+
+  // 🔥 FUNÇÃO DE SEGUIR A MODELO 🔥
+  const handleFollow = async () => {
+      if (!isLoggedIn) return setShowAuth(true);
+      if (isFollowing) return; // Já segue
+
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+          const phone = localStorage.getItem("labz_player_phone");
+          
+          // Pega os dados básicos do jogador para clonar a conta para essa musa
+          const baseRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone || '')}&limit=1`, { headers });
+          const baseData = await baseRes.json();
+          
+          if (baseData && baseData[0]) {
+              const baseUser = baseData[0];
+              const newPlayerPayload = {
+                  whatsapp: baseUser.whatsapp, password: baseUser.password, email: baseUser.email,
+                  full_name: baseUser.full_name, nickname: baseUser.nickname, cpf: baseUser.cpf,
+                  name: baseUser.name, credits: 0, model_id: model.id
+              };
+              
+              const insertRes = await fetch(`${supabaseUrl}/rest/v1/Players`, { method: "POST", headers, body: JSON.stringify(newPlayerPayload) });
+              if (insertRes.ok) {
+                  setIsFollowing(true);
+                  const newPlayerData = await insertRes.json();
+                  setPlayerId(newPlayerData[0].id);
+                  alert("Você agora está seguindo esta Musa! Ela já está no seu Hub VIP.");
+              }
+          }
+      } catch (e) { console.error("Erro ao seguir", e); }
+  };
+
+  // 🔥 LÓGICA DE CURTIDAS E COMENTÁRIOS DA MÍDIA 🔥
+  useEffect(() => {
+      if (!viewingMedia) return;
+      
+      async function loadInteractions() {
+          try {
+              const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+              const phone = localStorage.getItem("labz_player_phone") || "";
+
+              // Puxa Curtidas
+              const likesRes = await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${viewingMedia.id}&select=player_phone`, { headers });
+              if (likesRes.ok) {
+                  const likesData = await likesRes.json();
+                  setLikesCount(likesData.length);
+                  setLiked(likesData.some((l: any) => l.player_phone === phone));
+              }
+
+              // Puxa Comentários
+              const commentsRes = await fetch(`${supabaseUrl}/rest/v1/Comments?media_id=eq.${viewingMedia.id}&order=created_at.asc`, { headers });
+              if (commentsRes.ok) {
+                  const commentsData = await commentsRes.json();
+                  setComments(commentsData);
+              }
+          } catch (e) { console.error(e); }
+      }
+      loadInteractions();
+  }, [viewingMedia, supabaseUrl, supabaseKey]);
+
+  const handleToggleLike = async () => {
+      if (!isLoggedIn) return setShowAuth(true);
+      const phone = localStorage.getItem("labz_player_phone");
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' };
+
+      try {
+          if (liked) {
+              await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${viewingMedia.id}&player_phone=eq.${encodeURIComponent(phone || '')}`, { method: 'DELETE', headers });
+              setLiked(false);
+              setLikesCount(prev => prev - 1);
+          } else {
+              await fetch(`${supabaseUrl}/rest/v1/Likes`, { method: 'POST', headers, body: JSON.stringify({ media_id: viewingMedia.id, player_phone: phone }) });
+              setLiked(true);
+              setLikesCount(prev => prev + 1);
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  const handlePostComment = async () => {
+      if (!isLoggedIn) return setShowAuth(true);
+      if (!newComment.trim()) return;
+      setLoadingComment(true);
+
+      const phone = localStorage.getItem("labz_player_phone");
+      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+
+      try {
+          // Busca o nickname do jogador
+          const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone || '')}&limit=1`, { headers });
+          const pData = await pRes.json();
+          const playerName = pData[0]?.nickname || 'Fã VIP';
+
+          const payload = { media_id: viewingMedia.id, player_phone: phone, player_name: playerName, content: newComment };
+          
+          const res = await fetch(`${supabaseUrl}/rest/v1/Comments`, { method: 'POST', headers, body: JSON.stringify(payload) });
+          if (res.ok) {
+              const inserted = await res.json();
+              setComments(prev => [...prev, inserted[0]]);
+              setNewComment("");
+          }
+      } catch (e) { console.error(e); } finally { setLoadingComment(false); }
+  };
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -202,7 +313,18 @@ export default function ModelProfile() {
             
             <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-auto">
                 
-                {/* 🔥 BOTÃO DE LIVE DINÂMICO 🔥 */}
+                {/* 🔥 BOTÃO SEGUIR 🔥 */}
+                <button 
+                    onClick={handleFollow} 
+                    disabled={isFollowing}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase transition-all shadow-lg min-w-[140px] border ${
+                        isFollowing ? 'bg-white/10 text-white/50 border-white/5 cursor-not-allowed' : 'bg-emerald-500 text-black border-emerald-400 hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+                    }`}
+                >
+                    {isFollowing ? <CheckCircle size={16}/> : <Bell size={16}/>} 
+                    {isFollowing ? 'Seguindo' : 'Seguir Musa'}
+                </button>
+
                 <button 
                     onClick={() => isOnline && handleJoinLive()} 
                     disabled={!isOnline}
@@ -224,7 +346,6 @@ export default function ModelProfile() {
                     <Gamepad2 size={16}/> Roleta
                 </button>
                 
-                {/* 🔥 BOTÃO DE RASPADINHA RESTAURADO 🔥 */}
                 <button onClick={() => { if(!isLoggedIn) return setShowAuth(true); router.push(`/game/${slug}/raspadinha`); }} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase shadow-[0_10px_30px_rgba(255,215,0,0.3)] hover:scale-105 transition-all min-w-[120px]">
                     <Sparkles size={16} fill="currentColor"/> Raspadinha
                 </button>
@@ -251,7 +372,7 @@ export default function ModelProfile() {
                     onClick={() => { 
                         if(!isLoggedIn) return setShowAuth(true); 
                         if(!isUnlocked) { openCheckout('photo', item.price, item); }
-                        else { setViewingMedia(item); setLiked(false); }
+                        else { setViewingMedia({ ...item, modelInfo: modelConfig }); } // Passa info da modelo
                     }}>
                     <img src={item.url} className={`w-full h-full object-cover transition-all duration-1000 ${!isUnlocked ? 'blur-2xl sm:blur-3xl brightness-50 scale-125' : 'group-hover:scale-110'}`} />
                     {!isUnlocked && (
@@ -335,13 +456,49 @@ export default function ModelProfile() {
           </div>
       )}
 
+      {/* 🔥 MODAL DE MÍDIA COM COMENTÁRIOS E CURTIDAS 🔥 */}
       {viewingMedia && (
-          <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
-             <button onClick={() => setViewingMedia(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full transition-colors z-[210]"><X size={24}/></button>
-             <div className="relative max-w-2xl w-full h-[60vh] sm:h-[70vh] flex items-center justify-center mb-6 sm:mb-8"><img src={viewingMedia.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl" /></div>
-             <div className="flex flex-col items-center gap-4 text-center max-w-md w-full">
-                <button onClick={() => setLiked(!liked)} className={`p-4 sm:p-5 rounded-full transition-all shadow-2xl ${liked ? 'bg-red-500 text-white scale-110 shadow-[0_0_30px_rgba(239,68,68,0.5)]' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}><Heart size={24} fill={liked ? "currentColor" : "none"} /></button>
-                <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{viewingMedia.caption}"</p>
+          <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
+             <button onClick={() => setViewingMedia(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
+                 <X size={20}/>
+             </button>
+             
+             {/* LADO DA IMAGEM */}
+             <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
+                 <img src={viewingMedia.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
+             </div>
+             
+             {/* LADO DOS COMENTÁRIOS E INFOS */}
+             <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
+                
+                {/* Cabeçalho do Modal */}
+                <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center">
+                    <button onClick={handleToggleLike} className={`p-4 rounded-full transition-all shadow-xl mb-3 border ${liked ? 'bg-red-500 text-white border-red-400 scale-110 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10'}`}>
+                        <Heart size={20} fill={liked ? "currentColor" : "none"} />
+                    </button>
+                    <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-2">{likesCount} Curtidas</p>
+                    {viewingMedia.caption && <p className="text-sm italic text-white/80 leading-relaxed font-medium text-center">"{viewingMedia.caption}"</p>}
+                </div>
+
+                {/* Lista de Comentários */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
+                    {comments.length > 0 ? comments.map(c => (
+                        <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm">
+                            <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
+                            <p className="text-xs text-white/80 leading-relaxed">{c.content}</p>
+                        </div>
+                    )) : (
+                        <p className="text-center text-white/30 text-xs italic font-medium mt-10">Seja o primeiro a comentar...</p>
+                    )}
+                </div>
+
+                {/* Input de Comentário */}
+                <div className="p-4 border-t border-white/5 bg-black shrink-0">
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full p-1 pl-4 focus-within:border-[#D946EF]/50 transition-all">
+                        <input type="text" placeholder="Adicionar comentário..." value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>e.key==='Enter' && handlePostComment()} className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 py-2" />
+                        <button onClick={handlePostComment} disabled={!newComment.trim() || loadingComment} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shrink-0 disabled:opacity-50"><Send size={14} className="-ml-0.5" /></button>
+                    </div>
+                </div>
              </div>
           </div>
       )}
