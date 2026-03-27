@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext, useLocalParticipant } from "@livekit/components-react";
+import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext, useParticipants, useLocalParticipant } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2, CheckCircle, Clock, User, Heart } from "lucide-react";
@@ -86,6 +86,9 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const [isBlurred, setIsBlurred] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
 
+  // 🔥 NOVO ESTADO: Guarda a URL da foto da modelo 🔥
+  const [modelProfilePic, setModelProfilePic] = useState<string | null>(null);
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -108,6 +111,37 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     const payload = JSON.stringify({ type: "BALANCE_UPDATE", senderIdentity: roomRef.current.localParticipant.identity, senderName: clientName, currentBalance: currentBal, deductedAmount: deducted });
     try { roomRef.current.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch(e) {}
   }, [clientName]);
+
+  // 🔥 NOVO EFFECT: Busca a foto da modelo baseada no slug 🔥
+  useEffect(() => {
+    const fetchModelInfo = async () => {
+        try {
+            const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+            
+            // Passo 1: Acha a ID da modelo pelo Slug
+            const modelRes = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${modelSlug}&select=id`, { headers });
+            const modelData = await modelRes.json();
+            
+            if (modelData && modelData.length > 0) {
+                const modelId = modelData[0].id;
+                
+                // Passo 2: Acha a foto do perfil na tabela Configs usando a ID
+                const configRes = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=profile_url`, { headers });
+                const configData = await configRes.json();
+                
+                if (configData && configData.length > 0 && configData[0].profile_url) {
+                    setModelProfilePic(configData[0].profile_url);
+                }
+            }
+        } catch (err) {
+            console.error("Falha ao buscar foto da musa:", err);
+        }
+    };
+
+    if (modelSlug) {
+        fetchModelInfo();
+    }
+  }, [modelSlug, supabaseKey, supabaseUrl]);
 
   useEffect(() => {
     balanceRef.current = balance;
@@ -340,7 +374,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     <div className="h-[100dvh] w-full bg-[#111113] flex flex-col lg:flex-row overflow-hidden relative font-sans text-white">
       <ToastNotification message={toastMsg} onClose={() => setToastMsg(null)} />
       
-      {/* OVERLAYS E MODAIS TOTAIS (Hot Invite, Gifts, Shop) */}
+      {/* OVERLAYS E MODAIS TOTAIS */}
       {showHotInvite && (
         <div className="absolute inset-0 z-[200] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
            <div className="w-24 h-24 bg-[#ff0055]/20 rounded-full flex items-center justify-center mb-6 animate-pulse border border-[#ff0055]">
@@ -416,9 +450,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
           </div>
       )}
 
-      {/* ==================================================================================== */}
-      {/* 🔥 ÁREA 1: PALCO DO VÍDEO (Esquerda no PC, Topo no Mobile) 🔥 */}
-      {/* ==================================================================================== */}
+      {/* ÁREA 1: PALCO DO VÍDEO (Esquerda no PC, Topo no Mobile) */}
       <div className={`relative flex-1 lg:w-3/4 flex flex-col transition-all duration-1000 ${neonClass} ${isBlurred ? 'opacity-0' : 'opacity-100'}`}>
           
           {/* TOPO DO VÍDEO: Botão Voltar + Degustação/Alerta de Saldo */}
@@ -446,7 +478,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
              <ModelVideoFeed />
           </div>
 
-          {/* BARRA DE AÇÃO (Fica ancorada embaixo do vídeo) */}
+          {/* BARRA DE AÇÃO */}
           <div className="bg-[#050505] p-3 sm:p-4 border-t border-white/5 flex flex-wrap sm:flex-nowrap items-center gap-3 z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
               {isPrivateShow ? (
                 <button onClick={handleEndPrivateClient} className="flex-1 min-w-[140px] h-12 flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg transition-all animate-pulse" title="Sair do Privado">
@@ -480,16 +512,20 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
           </div>
       </div>
 
-      {/* ==================================================================================== */}
-      {/* 🔥 ÁREA 2: PAINEL LATERAL (Direita no PC, Fundo no Mobile) 🔥 */}
-      {/* ==================================================================================== */}
+      {/* ÁREA 2: PAINEL LATERAL (Direita no PC, Fundo no Mobile) */}
       <div className={`w-full lg:w-1/4 h-[40vh] lg:h-full bg-[#111113] flex flex-col z-30 transition-all duration-1000 ${isBlurred ? 'opacity-0' : 'opacity-100'}`}>
           
           {/* Header da Sidebar (Info da Modelo e Carteira) */}
           <div className="p-4 border-b border-white/5 bg-[#0a0a0a] flex items-center justify-between shrink-0 shadow-md">
               <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                      <User size={18} className="text-[#D946EF]" />
+                  {/* 🔥 CÍRCULO DA FOTO ATUALIZADO 🔥 */}
+                  <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                      {/* Se houver foto da modelo, mostra ela. Senão, mostra o ícone fallback */}
+                      {modelProfilePic ? (
+                        <img src={modelProfilePic} alt={modelSlug} className="w-full h-full object-cover" />
+                      ) : (
+                        <User size={18} className="text-[#D946EF]" />
+                      )}
                   </div>
                   <div className="flex flex-col">
                       <span className="text-xs font-black uppercase text-white truncate max-w-[100px] sm:max-w-none">{modelSlug}</span>
@@ -662,7 +698,7 @@ function LiveClientContent() {
 
 // Pequeno ícone de coroa que eu adicionei no Chat da Modelo para dar destaque
 function Crown(props: any) {
-  return <svg xmlns="http://www.w3.org/2000/svg" width={props.size||24} height={props.size||24} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round" className={props.className}><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>;
+  return <svg xmlns="http://www.w3.org/2000/svg" width={props.size||24} height={props.size||24} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>;
 }
 
 export default function LiveClientPage() {
