@@ -153,9 +153,8 @@ function StudioContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Pega os dados da URL vindos do Dashboard
-  const modelId = searchParams.get("model");
-  const modelSlug = searchParams.get("slug");
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [modelSlug, setModelSlug] = useState<string | null>(null);
 
   const [token, setToken] = useState("");
   const [preJoinChoices, setPreJoinChoices] = useState<LocalUserChoices | undefined>(undefined);
@@ -173,13 +172,10 @@ function StudioContent() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 SOLUÇÃO DEFINITIVA DE LOGIN DO ESTÚDIO 🔥
   useEffect(() => {
-    // 1. Tenta pegar da URL (passado pelo Dashboard)
     const urlId = searchParams.get("model");
     const urlSlug = searchParams.get("slug");
     
-    // 2. Tenta pegar do LocalStorage (se houver)
     const localId = localStorage.getItem("labz_model_id");
     const localSlug = localStorage.getItem("labz_model_slug");
 
@@ -192,16 +188,15 @@ function StudioContent() {
         return;
     }
     
-    // Setando via estado não reflete a tempo no primeiro render do botão voltar, 
-    // então guardamos no session para uso rápido se precisar
     sessionStorage.setItem('current_model_id', finalId);
     sessionStorage.setItem('current_model_slug', finalSlug);
+    
+    setModelId(finalId);
+    setModelSlug(finalSlug);
   }, [router, searchParams]);
 
-  // Usamos as variáveis locais para não depender do delay do useEffect
   const currentModelId = searchParams.get("model") || (typeof window !== 'undefined' ? localStorage.getItem("labz_model_id") : null);
   const currentModelSlug = searchParams.get("slug") || (typeof window !== 'undefined' ? localStorage.getItem("labz_model_slug") : null);
-
 
   const setModelStatus = async (status: string) => {
     if (!currentModelId) return;
@@ -209,7 +204,8 @@ function StudioContent() {
         await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentModelId}`, {
             method: 'PATCH',
             headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ live_status: status })
+            body: JSON.stringify({ live_status: status }),
+            keepalive: true // 🔥 GARANTE QUE VAI AVISAR O BANCO MESMO SE FECHAR A ABA RÁPIDO 🔥
         });
     } catch(e) {}
   };
@@ -217,14 +213,20 @@ function StudioContent() {
   useEffect(() => {
     const handleUnload = () => { setModelStatus('offline'); };
     window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload); // 🔥 PEGA FECHAMENTO NO CELULAR (iOS/Android) 🔥
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
       setModelStatus('offline'); 
     };
   }, [currentModelId]);
 
   useEffect(() => {
     if (!currentModelId || !currentModelSlug) return;
+    
+    // 🔥 AUTO-LIMPEZA: Se entrou na tela de preparação, garante que está offline até clicar em Iniciar 🔥
+    setModelStatus('offline');
+
     const fetchToken = async () => {
       try {
         const safeRoom = `live_${currentModelSlug.toLowerCase()}`;
@@ -310,7 +312,6 @@ function StudioContent() {
            <PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={startLive} className="!bg-transparent !p-0 custom-prejoin" joinLabel="🔴 INICIAR TRANSMISSÃO" />
         </div>
         
-        {/* 🔥 CORREÇÃO 1: Redirecionamento completo do botão VOLTAR 🔥 */}
         <button onClick={() => router.push(`/admin/dashboard?model=${currentModelId}&slug=${currentModelSlug}`)} className="mt-8 text-white/30 hover:text-white uppercase font-black text-[10px] tracking-widest flex items-center gap-2 transition-colors">
             <ArrowLeft size={14}/> Voltar para o Painel
         </button>
@@ -366,7 +367,6 @@ function StudioContent() {
                      <div className="flex gap-2">
                         <MicToggleButton />
                         
-                        {/* 🔥 CORREÇÃO 2: Redirecionamento completo do botão ENCERRAR 🔥 */}
                         <button onClick={() => { 
                             if(confirm("Encerrar Live e voltar pro Painel?")) { 
                                 setModelStatus('offline'); 
