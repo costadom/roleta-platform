@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, useTracks, ParticipantTile, useChat, useRoomContext, useParticipants, useLocalParticipant } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, Send, Users, Lock, X, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video, Sparkles } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video, Play } from "lucide-react";
 
 const BAD_WORDS = ["puta", "vadia", "buceta", "caralho", "porra", "merda", "fuder", "foder", "cuzinho", "cu", "pau", "piroca", "rola", "putinha", "safada"];
 const filterText = (text: string) => {
@@ -111,7 +111,7 @@ function CustomChat({ modelName }: { modelName: string }) {
         })}
       </div>
 
-      <div className="pointer-events-auto flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/20 rounded-full p-1 pl-5 shrink-0 shadow-2xl">
+      <div className="pointer-events-auto flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-white/20 rounded-full p-1 pl-5 shrink-0 shadow-2xl">
         <input 
           type="text" 
           placeholder="Falar com os fãs..." 
@@ -151,11 +151,10 @@ function InteractiveModelRoom({ onPrivateRequest, onBalanceUpdate, onPrivateEnd,
 
 function StudioContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   
-  // Pega os dados da URL vindos do Dashboard
-  const modelId = searchParams.get("model");
-  const modelSlug = searchParams.get("slug");
+  // 🔥 ADIÇÃO 1: Puxar do LocalStorage para nunca dar erro de URL 🔥
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [modelSlug, setModelSlug] = useState<string | null>(null);
 
   const [token, setToken] = useState("");
   const [preJoinChoices, setPreJoinChoices] = useState<LocalUserChoices | undefined>(undefined);
@@ -172,6 +171,21 @@ function StudioContent() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Carrega as credenciais da musa na inicialização da página
+  useEffect(() => {
+    const logged = localStorage.getItem("labz_model_logged") === "true";
+    const mId = localStorage.getItem("labz_model_id");
+    const mSlug = localStorage.getItem("labz_model_slug");
+
+    if (!logged || !mId || !mSlug) {
+        alert("Acesso negado. Faça login no seu painel primeiro.");
+        router.push("/admin");
+        return;
+    }
+    setModelId(mId);
+    setModelSlug(mSlug);
+  }, [router]);
 
   const setModelStatus = async (status: string) => {
     if (!modelId) return;
@@ -250,21 +264,11 @@ function StudioContent() {
     setTimeout(() => { setActiveGifts(prev => prev.filter(g => g.id !== newGift.id)); }, 3000);
   }, []);
 
-  if (!modelId || !modelSlug) {
-      return (
-          <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 text-center">
-              <Lock size={50} className="text-red-500 mb-4" />
-              <h1 className="text-white text-xl font-black uppercase tracking-widest mb-2">Acesso Negado</h1>
-              <p className="text-white/50 text-xs uppercase mb-6">Você precisa acessar o estúdio através do seu Painel de Modelo.</p>
-              <button onClick={() => router.push('/admin')} className="bg-[#D946EF] text-white px-6 py-3 rounded-xl font-black uppercase text-[10px]">Ir para o Painel</button>
-          </div>
-      );
-  }
-
   if (!token) return <div className="h-[100dvh] bg-black flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={50} /><span className="text-[#D946EF] font-black uppercase text-[10px] tracking-widest animate-pulse">Preparando Estúdio...</span></div>;
 
   if (!preJoinChoices && countdown === null && !showBrilhe) return (
     <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 bg-[url('https://images.unsplash.com/photo-1516481157630-05bc0aeb8b19?w=1000&q=80')] bg-cover bg-center relative">
+      {/* 🔥 ADIÇÃO 2: TELA PRE-JOIN LIQUID GLASS COM TRIDENTE 🔥 */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-xl"></div>
       
       <div className="relative z-10 w-full max-w-md bg-[#0a0a0a]/90 backdrop-blur-2xl border border-white/10 rounded-[3rem] p-10 shadow-[0_0_60px_rgba(217,70,239,0.15)] flex flex-col items-center">
