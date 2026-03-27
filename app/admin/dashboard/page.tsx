@@ -151,6 +151,10 @@ function DashboardContent() {
       
       if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
+        
+        // 🔥 SALVA NO LOCALSTORAGE PARA A LIVE PUXAR 🔥
+        localStorage.setItem("labz_model_id", resModel[0].id);
+        localStorage.setItem("labz_model_slug", resModel[0].slug);
       }
       if (resConfig && resConfig[0]) {
         setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
@@ -488,13 +492,9 @@ function DashboardContent() {
       else { alert("O link é: " + text); }
   };
 
-  // 🔥 ESPIÃO E REDIRECIONAMENTO CORRIGIDO 🔥
+  // 🔥 HANDLER DA ROTA DE LIVE DA MODELO 🔥
   const handleStartLiveStudio = () => {
-    // Espião Labz ativado!
-    alert(`🔍 ESPIÃO LABZ: O botão foi clicado!\n\nRota atual bloqueada pelos fãs: /live/studio\n\nRedirecionando você para a Rota Segura Admin:\n/admin/studio?model=${modelId}&slug=${modelSlug}\n\nIMPORTANTE: Se der tela preta/erro 404 agora, significa que você precisa MUDAR A PASTA do estúdio de "app/live/studio" para "app/admin/studio" no seu código fonte!`);
-    
-    // Manda para a rota administrativa que os fãs não tem acesso
-    router.push(`/admin/studio?model=${modelId}&slug=${modelSlug}`);
+    router.push(`/admin/studio`);
   };
 
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
