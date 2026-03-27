@@ -498,10 +498,10 @@ function DashboardContent() {
       return `${m}:${s}`;
   };
 
-  // 🔥 HANDLER DA ROTA DE LIVE 🔥
+  // 🔥 HANDLER DA ROTA DE LIVE CORRIGIDO (ENVIA PARÂMETROS) 🔥
   const handleStartLiveStudio = () => {
-    // Redireciona para o estúdio de live (sala de aquecimento)
-    router.push(`/live/studio`);
+    // Agora o estúdio não fica perdido, ele recebe o modelId e modelSlug
+    router.push(`/live/studio?model=${modelId}&slug=${modelSlug}`);
   };
 
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
