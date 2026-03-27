@@ -53,7 +53,7 @@ export default function SuperAdmin() {
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=50`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers }) // 🔥 BUSCA VÍDEOS PAGOS
       ]);
 
@@ -152,7 +152,7 @@ export default function SuperAdmin() {
         method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ status: 'pago', is_read: false })
       });
-      if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii! Seu PIX de R$ ${amount.toFixed(2)} foi enviado! 💸`)}`, '_blank');
+      if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii! Seu PIX de R$ ${amount.toFixed(2)} foi enviado!`)}`, '_blank');
       fetchData();
     } catch (err) { alert("Erro."); }
   };
@@ -163,8 +163,10 @@ export default function SuperAdmin() {
     try {
       const now = new Date().toISOString();
       const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
-      const generatedEmail = `${app.nickname.toLowerCase()}@admin.com`;
-      const generatedPass = `${capNick}Admin26`;
+      
+      // 🔥 CRIAÇÃO DO PERFIL: Usa o e-mail real da modelo, e gera uma senha padrão segura 🔥
+      const generatedEmail = app.email || `${app.nickname.toLowerCase()}@labzsexy.com`;
+      const generatedPass = `${capNick}Labz2026!`;
       
       const payloadModel = { 
           slug: app.nickname.toLowerCase(), 
@@ -189,7 +191,8 @@ export default function SuperAdmin() {
           setSelectedApp(null); 
           fetchData();
 
-          const msg = `Oi, ${app.full_name.split(' ')[0]} (${capNick})! Que alegria ter você com a gente 💖\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${generatedEmail}\n\n🔑 Senha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+          // 🔥 MENSAGEM WHATSAPP LIMPA: Puxando os dados reais e sem emojis que quebram 🔥
+          const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\n\nLogin: ${generatedEmail}\nSenha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui. Bora fazer muito dinheiro!`;
           window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
       }
     } catch (err) { alert("Erro ao aprovar."); } finally { setLoading(false); }
@@ -270,7 +273,7 @@ export default function SuperAdmin() {
                     </div>
                   </div>
                   <button onClick={() => {
-                    const msg = encodeURIComponent(`Oi linda! Você tem um novo Vídeo VIP pago de ${req.duration} minutos! O pedido é: "${req.description}". Aceite no seu painel para garantir seu saldo! 💸🚀`);
+                    const msg = encodeURIComponent(`Oi linda! Você tem um novo pedido de Vídeo VIP! Aceite no seu painel para garantir seu saldo!`);
                     window.open(`https://wa.me/${req.Models?.whatsapp?.replace(/\D/g, '')}?text=${msg}`, '_blank');
                   }} className="w-full bg-blue-600 text-white py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-500 transition-all">
                     <MessageCircle size={14}/> Enviar para Modelo
@@ -293,13 +296,13 @@ export default function SuperAdmin() {
                     <div className="mb-4">
                       <p className="text-[12px] text-white uppercase font-black">{cart.player_name || 'Cliente VIP'}</p>
                       <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
-                      <p className="text-[9px] text-white/50 uppercase font-mono">Na roleta: {cart.model_name}</p>
+                      <p className="text-[9px] text-white/50 uppercase font-mono">Item: {cart.model_name}</p>
                     </div>
                     <div className="flex gap-2">
                       <button 
                         disabled={!phone}
                         onClick={() => {
-                          const msg = `Oii ${cart.player_name}! Vi aqui que você tentou comprar os créditos na roleta da ${cart.model_name}, mas o PIX não concluiu.\n\nA roleta dela tá pegando fogo hoje! 🔥 Quer que eu te mande a chave PIX de novo pra você não perder os bônus?`;
+                          const msg = `Oii ${cart.player_name || 'VIP'}! Vi aqui que você tentou acessar um conteúdo da ${cart.model_name.split(' ')[0]}, mas o PIX não concluiu.\n\nQuer que eu te mande a chave PIX de novo pra você não perder o bônus?`;
                           window.open(`https://wa.me/${phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
                         }} 
                         className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 transition-transform ${phone ? 'bg-emerald-500 text-black hover:scale-105' : 'bg-white/5 text-white/20'}`}
@@ -452,6 +455,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
+      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -463,6 +467,11 @@ export default function SuperAdmin() {
               <div className="flex-1 space-y-2">
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
+                
+                {/* 🔥 EXIBIÇÃO DE EMAIL E CPF 🔥 */}
+                <div><p className="text-[8px] text-white/40 uppercase font-black">E-mail de Cadastro</p><p className="text-[10px] font-bold text-white">{selectedApp.email || "Não informado"}</p></div>
+                <div><p className="text-[8px] text-white/40 uppercase font-black">CPF / Nasc.</p><p className="text-[10px] font-bold text-white">{selectedApp.cpf || "Não informado"} - {selectedApp.birth_date}</p></div>
+
                 {selectedApp.referred_by && <div><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest mt-2">👑 Indicação Ativa</p></div>}
               </div>
             </div>
