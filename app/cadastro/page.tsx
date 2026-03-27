@@ -2,7 +2,40 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, CheckCircle2, AlertTriangle, AlertOctagon, Sparkles, ShieldCheck } from "lucide-react";
+import { User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, CheckCircle2, AlertTriangle, AlertOctagon, Sparkles, Mail } from "lucide-react";
+
+// 🔥 ALGORITMO OFICIAL DE VALIDAÇÃO DE CPF 🔥
+const isValidCPF = (cpf: string) => {
+  cpf = cpf.replace(/[^\d]+/g, '');
+  if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+  let split = cpf.split('');
+  let v1 = 0; let v2 = 0;
+  for (let i = 0; i < 9; i++) v1 += parseInt(split[i]) * (10 - i);
+  v1 = (v1 * 10) % 11; if (v1 === 10 || v1 === 11) v1 = 0;
+  if (v1 !== parseInt(split[9])) return false;
+  for (let i = 0; i < 10; i++) v2 += parseInt(split[i]) * (11 - i);
+  v2 = (v2 * 10) % 11; if (v2 === 10 || v2 === 11) v2 = 0;
+  if (v2 !== parseInt(split[10])) return false;
+  return true;
+};
+
+// MÁSCARA PARA O CPF (000.000.000-00)
+const formatCPF = (v: string) => {
+  v = v.replace(/\D/g, "").slice(0, 11);
+  if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, "$1.$2.$3");
+  else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, "$1.$2");
+  return v;
+};
+
+// MÁSCARA PARA O WHATSAPP ((00) 00000-0000)
+const formatPhone = (v: string) => {
+  v = v.replace(/\D/g, "").slice(0, 11);
+  if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+  else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, "($1) $2");
+  return v;
+};
 
 // Separamos o conteúdo principal para que o Next.js não reclame do useSearchParams
 function CadastroContent() {
@@ -15,7 +48,7 @@ function CadastroContent() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
 
   const [formData, setFormData] = useState({
-    full_name: "", nickname: "", whatsapp: "", cpf: "", birth_date: "", pix_1: "", bg_url: "", profile_url: "",
+    full_name: "", nickname: "", email: "", whatsapp: "", cpf: "", birth_date: "", pix_1: "", bg_url: "", profile_url: "",
   });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -51,7 +84,7 @@ function CadastroContent() {
     }
   }, [searchParams, supabaseUrl, supabaseKey]);
 
-  // 🔥 SISTEMA DE UPLOAD
+  // 🔥 SISTEMA DE UPLOAD BASE64
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'bg_url' | 'profile_url') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -70,19 +103,32 @@ function CadastroContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // VERIFICAÇÕES DE SEGURANÇA ANTES DE ENVIAR
     if (!formData.bg_url || !formData.profile_url) {
       alert("ATENÇÃO: Você precisa carregar as DUAS fotos (Vitrine e Fundo) para continuar!");
+      return;
+    }
+    if (!isValidCPF(formData.cpf)) {
+      alert("ATENÇÃO: CPF Inválido. Por favor, digite um CPF real e válido para continuar.");
       return;
     }
     if (!ageConfirmed) {
         alert("Você precisa confirmar que tem mais de 18 anos para se cadastrar.");
         return;
     }
+    
     setLoading(true);
 
     try {
+      // Limpa as máscaras para mandar os números limpos pro banco
+      const cleanCPF = formData.cpf.replace(/\D/g, '');
+      const cleanPhone = formData.whatsapp.replace(/\D/g, '');
+
       const payload = {
         ...formData,
+        cpf: cleanCPF,
+        whatsapp: cleanPhone,
         prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Surpresa", "Acesso VIP"]),
         status: "pendente", 
         referred_by: referralId, 
@@ -94,7 +140,11 @@ function CadastroContent() {
       });
       setSuccess(true);
       localStorage.removeItem("labz_referral_slug"); 
-    } catch (error) { alert("Erro ao enviar cadastro. Tente novamente."); } finally { setLoading(false); }
+    } catch (error) { 
+        alert("Erro ao enviar cadastro. Tente novamente."); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   if (success) return (
@@ -103,7 +153,7 @@ function CadastroContent() {
             <span className="text-6xl drop-shadow-[0_0_15px_rgba(217,70,239,0.8)] text-[#D946EF]">🔱</span>
         </div>
         <h1 className="text-4xl font-black uppercase text-white mb-4 italic tracking-tighter">Cadastro <span className="text-[#D946EF]">Enviado!</span></h1>
-        <p className="text-white/60 text-xs font-bold uppercase tracking-widest max-w-sm mb-12 leading-relaxed">Sua aplicação está em análise pela nossa equipe. Fique atenta ao seu WhatsApp, entraremos em contato muito em breve!</p>
+        <p className="text-white/60 text-xs font-bold uppercase tracking-widest max-w-sm mb-12 leading-relaxed">Sua aplicação está em análise pela nossa equipe. Fique atenta ao seu E-mail e WhatsApp, entraremos em contato muito em breve!</p>
         <button onClick={() => router.push("/")} className="bg-white/5 border border-white/10 text-white px-10 py-5 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 hover:border-[#D946EF]/50 transition-all flex items-center gap-2">
             <ArrowLeft size={16} /> Voltar para o Início
         </button>
@@ -167,20 +217,28 @@ function CadastroContent() {
                   <label className="text-[9px] font-black text-white/40 uppercase block mb-2">WhatsApp</label>
                   <div className="relative">
                       <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/>
-                      <input type="tel" required value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} className="w-full bg-white/5 backdrop-blur-sm border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" placeholder="(00) 00000-0000" />
+                      <input type="tel" required value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: formatPhone(e.target.value)})} className="w-full bg-white/5 backdrop-blur-sm border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" placeholder="(00) 00000-0000" />
                   </div>
               </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
-                  <label className="text-[9px] font-black text-white/40 uppercase block mb-2">CPF</label>
-                  <input type="text" required value={formData.cpf} onChange={e => setFormData({...formData, cpf: e.target.value})} className="w-full bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" placeholder="000.000.000-00" />
+                  <label className="text-[9px] font-black text-white/40 uppercase block mb-2">CPF (Somente Números Reais)</label>
+                  <input type="text" required value={formData.cpf} onChange={e => setFormData({...formData, cpf: formatCPF(e.target.value)})} className="w-full bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" placeholder="000.000.000-00" />
               </div>
               <div>
                   <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Nascimento</label>
                   <input type="date" required value={formData.birth_date} onChange={e => setFormData({...formData, birth_date: e.target.value})} className="w-full bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl text-xs text-white/70 outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all" />
               </div>
+            </div>
+
+            <div>
+                <label className="text-[9px] font-black text-white/40 uppercase block mb-2">E-mail Profissional</label>
+                <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16}/>
+                    <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-white/5 backdrop-blur-sm border border-white/10 p-4 pl-12 rounded-2xl text-xs text-white outline-none focus:border-[#D946EF] focus:bg-white/10 transition-all placeholder:text-white/30" placeholder="exemplo@email.com" />
+                </div>
             </div>
           </div>
 
@@ -215,7 +273,7 @@ function CadastroContent() {
             </div>
           </div>
 
-          <h2 className="text-[11px] font-black uppercase text-[#D946EF] tracking-widest mb-6 border-b border-white/10 pb-4 pt-8 flex items-center gap-2"><ShieldCheck size={16} /> Recebimento & Segurança</h2>
+          <h2 className="text-[11px] font-black uppercase text-[#D946EF] tracking-widest mb-6 border-b border-white/10 pb-4 pt-8 flex items-center gap-2"><KeyRound size={16} /> Recebimento & Segurança</h2>
           
           <div>
               <label className="text-[9px] font-black text-white/40 uppercase block mb-2">Chave PIX Principal (Obrigatório)</label>
@@ -252,7 +310,7 @@ function CadastroContent() {
   );
 }
 
-// 🔥 A MÁGICA ACONTECE AQUI: A página principal agora é apenas o Suspense que envolve o conteúdo 🔥
+// A MÁGICA ACONTECE AQUI: A página principal agora é apenas o Suspense que envolve o conteúdo
 export default function CadastroModeloPage() {
   return (
     <Suspense fallback={
