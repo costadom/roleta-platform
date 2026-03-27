@@ -39,14 +39,20 @@ export default function VitrinePage() {
                 return config && config.showcase_visible === true && config.model_name;
             });
             
-            // 🔥 ORDENAÇÃO: MODELOS EM LIVE PRIMEIRO 🔥
+            // 🔥 NOVA ORDENAÇÃO AGRESSIVA: VIP > ONLINE > OFFLINE 🔥
             activeModels.sort((a: any, b: any) => {
-                const aIsLive = a.live_status === 'online' || a.live_status === 'vip';
-                const bIsLive = b.live_status === 'online' || b.live_status === 'vip';
+                // Atribui pesos: vip=2, online=1, outros=0
+                const getWeight = (status: string) => {
+                    if (status === 'vip') return 2;
+                    if (status === 'online') return 1;
+                    return 0;
+                };
                 
-                if (aIsLive && !bIsLive) return -1; // A vem antes de B
-                if (!aIsLive && bIsLive) return 1;  // B vem antes de A
-                return 0; // Se ambas estiverem (ou não estiverem) em live, mantém a ordem original
+                const weightA = getWeight(a.live_status);
+                const weightB = getWeight(b.live_status);
+                
+                // Ordenação decrescente (maior peso primeiro)
+                return weightB - weightA;
             });
 
             setModels(activeModels);
@@ -70,7 +76,7 @@ export default function VitrinePage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20">
       
-      {/* CABEÇALHO COM O BOTÃO DE LIVES ADICIONADO */}
+      {/* CABEÇALHO */}
       <header className="fixed top-0 left-0 w-full h-20 bg-black/80 backdrop-blur-xl border-b border-white/5 z-[100] px-6 flex items-center justify-between shadow-xl">
           <div>
             <h1 className="text-xl font-black italic text-[#D946EF] tracking-tighter">SAVANAH <span className="text-white">LABZ</span></h1>
@@ -78,7 +84,6 @@ export default function VitrinePage() {
           </div>
           
           <div className="flex items-center gap-3">
-              {/* 🔥 NOVO BOTÃO DE LIVES 🔥 */}
               <button onClick={() => router.push('/explore')} className="hidden sm:flex items-center gap-1.5 bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30 px-4 py-2.5 rounded-full hover:bg-[#00f0ff] hover:text-black transition-all shadow-[0_0_10px_rgba(0,240,255,0.2)]">
                   <Radio size={14} className="animate-pulse" />
                   <span className="font-black text-[10px] uppercase tracking-widest">Lives Ao Vivo</span>
@@ -102,7 +107,7 @@ export default function VitrinePage() {
             <p className="text-[#FFD700] text-[10px] font-bold uppercase tracking-[0.3em] mt-2 flex items-center justify-center gap-2"><Sparkles size={12}/> HUB PRIVADO E ROLETA VIP <Sparkles size={12}/></p>
         </div>
 
-        {/* BOTÃO LIVES MOBILE (Para não quebrar o layout do cabeçalho em telas pequenas) */}
+        {/* BOTÃO LIVES MOBILE */}
         <div className="sm:hidden flex justify-center mb-8">
             <button onClick={() => router.push('/explore')} className="flex w-full items-center justify-center gap-2 bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30 px-6 py-4 rounded-2xl hover:bg-[#00f0ff] hover:text-black transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)]">
                 <Radio size={18} className="animate-pulse" />
@@ -119,7 +124,7 @@ export default function VitrinePage() {
                 
                 <img src={m.config?.profile_url} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-1000 opacity-80 group-hover:opacity-100" />
                 
-                {/* 🔥 BADGE AO VIVO SE A MUSA ESTIVER ONLINE 🔥 */}
+                {/* 🔥 BADGE AO VIVO 🔥 */}
                 {isOnline && (
                   <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
                       <span className={`w-2 h-2 rounded-full animate-pulse ${m.live_status === 'vip' ? 'bg-[#ff0055] shadow-[0_0_10px_rgba(255,0,85,0.8)]' : 'bg-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.8)]'}`}></span>
@@ -131,7 +136,7 @@ export default function VitrinePage() {
                     <h3 className="text-3xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl mb-1">{m.config?.model_name}</h3>
                     <p className="text-white/70 text-xs italic mb-6 line-clamp-2 px-2">{m.bio || "Acesse meu Hub para ver meus conteúdos e roleta."}</p>
                     
-                    <button className="w-full flex items-center justify-center gap-3 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-2xl transition-all group-hover:scale-[1.03] group-active:scale-95 pointer-events-auto" onClick={(e) => { e.stopPropagation(); if(!isLoggedIn) return setShowAuthModal(true); router.push(`/profile/${m.slug}`); }}>
+                    <button className="w-full flex items-center justify-center gap-3 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-2xl transition-all group-hover:scale-[1.03] group-active:scale-95 pointer-events-auto" onClick={(evt) => { evt.stopPropagation(); if(!isLoggedIn) return setShowAuthModal(true); router.push(`/profile/${m.slug}`); }}>
                         <User size={16}/> Acessar Hub Privado
                     </button>
                 </div>
