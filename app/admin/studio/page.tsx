@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, useTracks, ParticipantTile, useChat, useRoomContext, useParticipants, useLocalParticipant } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video, Play } from "lucide-react";
 
 const BAD_WORDS = ["puta", "vadia", "buceta", "caralho", "porra", "merda", "fuder", "foder", "cuzinho", "cu", "pau", "piroca", "rola", "putinha", "safada"];
 const filterText = (text: string) => {
@@ -21,14 +21,14 @@ function PrivateRequestModal({ request, onAccept, onDecline }: { request: any, o
   if (!request) return null;
   return (
     <div className="absolute inset-0 bg-black/80 backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-fadeIn">
-      <div className="bg-black border border-[#ff0055]/50 rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(255,0,85,0.4)]">
+      <div className="bg-[#0a0a0a] border border-[#ff0055]/50 rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(255,0,85,0.4)]">
         <div className="w-16 h-16 mx-auto rounded-full bg-[#ff0055]/20 border border-[#ff0055] flex items-center justify-center mb-4"><Lock size={28} className="text-[#ff0055] animate-pulse" /></div>
         <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-1">Pedido Privado!</h2>
-        <p className="text-[#ff0055] text-[10px] font-bold uppercase tracking-widest mb-4 bg-[#ff0055]/10 inline-block px-3 py-1 rounded-full">Sua Parte: 70% (R$ 2,17/min)</p>
+        <p className="text-[#ff0055] text-[10px] font-bold uppercase tracking-widest mb-4 bg-[#ff0055]/10 inline-block px-3 py-1 rounded-full border border-[#ff0055]/30">Sua Parte: 70% (R$ 2,17/min)</p>
         <p className="text-white/80 text-sm mb-6">O fã <span className="text-[#ff0055] font-black uppercase">{request.senderName}</span> quer ir pro VIP.</p>
         <div className="flex gap-3 w-full">
-          <button onClick={onDecline} className="flex-1 bg-white/5 hover:bg-white/10 text-white/70 py-4 rounded-xl text-[12px] font-black uppercase transition-all">Recusar</button>
-          <button onClick={onAccept} className="flex-1 bg-[#ff0055] text-white py-4 rounded-xl text-[12px] font-black uppercase shadow-[0_0_20px_rgba(255,0,85,0.5)] transition-all">Aceitar</button>
+          <button onClick={onDecline} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 py-4 rounded-xl text-[12px] font-black uppercase transition-all">Recusar</button>
+          <button onClick={onAccept} className="flex-1 bg-gradient-to-r from-[#ff0055] to-[#c20042] text-white py-4 rounded-xl text-[12px] font-black uppercase shadow-[0_0_20px_rgba(255,0,85,0.5)] hover:scale-105 active:scale-95 transition-all">Aceitar</button>
         </div>
       </div>
     </div>
@@ -51,21 +51,21 @@ function ViewerList({ viewerBalances, onBlock }: { viewerBalances: Record<string
   const [isMinimized, setIsMinimized] = useState(false);
 
   return (
-    <div className="absolute top-20 right-4 w-48 bg-black/50 backdrop-blur-md border border-white/10 rounded-2xl z-20 flex flex-col overflow-hidden transition-all duration-300">
+    <div className="absolute top-20 right-4 w-48 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl z-20 flex flex-col overflow-hidden transition-all duration-300 shadow-2xl">
       <div onClick={() => setIsMinimized(!isMinimized)} className="p-3 flex items-center justify-between cursor-pointer bg-white/5 hover:bg-white/10">
-        <h3 className="text-emerald-400 font-black uppercase text-[10px] tracking-widest flex items-center gap-1"><Users size={12} /> {viewers.length} na sala</h3>
+        <h3 className="text-[#00f0ff] font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5"><Users size={12} /> {viewers.length} na sala</h3>
         {isMinimized ? <ChevronDown size={14} className="text-white/50" /> : <ChevronUp size={14} className="text-white/50" />}
       </div>
       {!isMinimized && (
-        <div className="flex flex-col gap-2 p-2 max-h-[30vh] overflow-y-auto custom-scrollbar">
-           {viewers.length === 0 ? <span className="text-white/30 text-[9px] uppercase font-bold text-center py-2">Vazio</span> : 
+        <div className="flex flex-col gap-2 p-2 max-h-[30vh] overflow-y-auto custom-scrollbar bg-black/50">
+           {viewers.length === 0 ? <span className="text-white/30 text-[9px] uppercase font-bold text-center py-4 italic">Nenhum fã na sala</span> : 
               viewers.map(p => {
                  const bal = viewerBalances[p.identity];
                  return (
-                   <div key={p.identity} className="flex items-center justify-between bg-white/5 p-2 rounded-lg group">
+                   <div key={p.identity} className="flex items-center justify-between bg-white/5 p-2 rounded-lg border border-white/5 group hover:border-[#D946EF]/50 transition-all">
                       <div className="flex flex-col overflow-hidden">
                         <span className="text-white text-[10px] font-bold uppercase truncate">{p.name || p.identity}</span>
-                        <span className="text-[#00f0ff] text-[9px] font-black">{bal !== undefined ? `${bal.toFixed(2)} LT` : '---'}</span>
+                        <span className="text-[#00f0ff] text-[9px] font-black">{bal !== undefined ? `${bal.toFixed(2)} LT` : 'Calculando...'}</span>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); if(confirm(`Expulsar ${p.name}?`)) onBlock(p.identity); }} className="text-white/20 hover:text-red-500 p-2 rounded-full transition-colors opacity-0 group-hover:opacity-100">
                         <Ban size={14} />
@@ -99,11 +99,11 @@ function CustomChat({ modelName }: { modelName: string }) {
         {chatMessages.map((msg, i) => {
           const isMe = msg.from?.name?.toLowerCase() === modelName.toLowerCase() || msg.from?.identity?.toLowerCase() === modelName.toLowerCase();
           return (
-            <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-              <span className={`text-[10px] font-black uppercase mb-0.5 ${isMe ? 'text-[#ff0055] drop-shadow-md' : 'text-emerald-400 drop-shadow-md'}`}>
-                {isMe ? '👑 VOCÊ' : msg.from?.name}
+            <div key={i} className="flex flex-col items-start drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+              <span className={`text-[10px] font-black uppercase mb-0.5 tracking-widest ${isMe ? 'text-[#ff0055] drop-shadow-md' : 'text-[#00f0ff] drop-shadow-md'}`}>
+                {isMe ? '👑 MUSA (VOCÊ)' : msg.from?.name}
               </span>
-              <span className="text-[13px] text-white font-medium drop-shadow-lg leading-tight">
+              <span className="text-[13px] text-white font-medium drop-shadow-lg leading-tight bg-black/40 px-3 py-1.5 rounded-xl border border-white/5">
                 {msg.message}
               </span>
             </div>
@@ -111,16 +111,16 @@ function CustomChat({ modelName }: { modelName: string }) {
         })}
       </div>
 
-      <div className="pointer-events-auto flex items-center gap-2 bg-black/60 backdrop-blur-md border border-white/20 rounded-full p-1 pl-4 shrink-0">
+      <div className="pointer-events-auto flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-white/20 rounded-full p-1 pl-5 shrink-0 shadow-2xl">
         <input 
           type="text" 
           placeholder="Falar com os fãs..." 
-          className="flex-1 bg-transparent border-none text-[16px] text-white outline-none placeholder:text-white/50 py-2" 
+          className="flex-1 bg-transparent border-none text-[14px] text-white outline-none placeholder:text-white/40 py-2" 
           value={message} 
           onChange={(e) => setMessage(e.target.value)} 
           onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
         />
-        <button onClick={handleSend} className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center shrink-0 shadow-lg"><Send size={14} className="-ml-0.5" /></button>
+        <button onClick={handleSend} disabled={!message.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(217,70,239,0.4)] disabled:opacity-50 hover:bg-[#f062ff] transition-all"><Send size={14} className="-ml-0.5" /></button>
       </div>
 
       <style jsx>{`.mask-image-top { mask-image: linear-gradient(to bottom, transparent, black 15%); }`}</style>
@@ -151,9 +151,10 @@ function InteractiveModelRoom({ onPrivateRequest, onBalanceUpdate, onPrivateEnd,
 
 function StudioContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const modelId = searchParams.get("model");
-  const modelSlug = searchParams.get("slug");
+  
+  // 🔥 ADIÇÃO 1: Puxar do LocalStorage para nunca dar erro de URL 🔥
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [modelSlug, setModelSlug] = useState<string | null>(null);
 
   const [token, setToken] = useState("");
   const [preJoinChoices, setPreJoinChoices] = useState<LocalUserChoices | undefined>(undefined);
@@ -171,7 +172,21 @@ function StudioContent() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 FUNÇÃO QUE AVISA O BANCO DE DADOS O STATUS DA LIVE 🔥
+  // Carrega as credenciais da musa na inicialização da página
+  useEffect(() => {
+    const logged = localStorage.getItem("labz_model_logged") === "true";
+    const mId = localStorage.getItem("labz_model_id");
+    const mSlug = localStorage.getItem("labz_model_slug");
+
+    if (!logged || !mId || !mSlug) {
+        alert("Acesso negado. Faça login no seu painel primeiro.");
+        router.push("/admin");
+        return;
+    }
+    setModelId(mId);
+    setModelSlug(mSlug);
+  }, [router]);
+
   const setModelStatus = async (status: string) => {
     if (!modelId) return;
     try {
@@ -183,18 +198,17 @@ function StudioContent() {
     } catch(e) {}
   };
 
-  // Garante que fique offline se fechar a aba
   useEffect(() => {
     const handleUnload = () => { setModelStatus('offline'); };
     window.addEventListener('beforeunload', handleUnload);
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
-      setModelStatus('offline'); // Limpa ao desmontar o componente
+      setModelStatus('offline'); 
     };
   }, [modelId]);
 
   useEffect(() => {
-    if (!modelId || !modelSlug) return router.push("/admin");
+    if (!modelId || !modelSlug) return;
     const fetchToken = async () => {
       try {
         const safeRoom = `live_${modelSlug.toLowerCase()}`;
@@ -204,7 +218,7 @@ function StudioContent() {
       } catch (err) {}
     };
     fetchToken();
-  }, [router, modelId, modelSlug]);
+  }, [modelId, modelSlug]);
 
   const startLive = (choices: LocalUserChoices) => {
     setCountdown(3);
@@ -214,14 +228,14 @@ function StudioContent() {
       setCountdown(null); 
       setShowBrilhe(true); 
       setPreJoinChoices(choices); 
-      setModelStatus('online'); // 🔥 FICA ONLINE NA VITRINE 🔥
+      setModelStatus('online'); 
       setTimeout(() => setShowBrilhe(false), 2000); 
     }, 3000);
   };
 
   const handleAcceptPrivate = async (roomContext: any) => {
     setIsPrivateMode(true);
-    setModelStatus('vip'); // 🔥 FICA VIP NA VITRINE 🔥
+    setModelStatus('vip'); 
     const payload = JSON.stringify({ type: "PRIVATE_ACCEPTED", targetClient: currentPrivateRequest.senderName });
     try { await roomContext.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch (e) {}
     setCurrentPrivateRequest(null);
@@ -229,7 +243,7 @@ function StudioContent() {
 
   const handleEndPrivateModel = async (roomContext: any) => {
     setIsPrivateMode(false);
-    setModelStatus('online'); // 🔥 VOLTA A FICAR ONLINE NA VITRINE 🔥
+    setModelStatus('online'); 
     const payload = JSON.stringify({ type: "PRIVATE_ENDED", targetClient: "all" });
     try { await roomContext.localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true }); } catch (e) {}
   };
@@ -250,22 +264,39 @@ function StudioContent() {
     setTimeout(() => { setActiveGifts(prev => prev.filter(g => g.id !== newGift.id)); }, 3000);
   }, []);
 
-  if (!token) return <div className="h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#D946EF]" size={50} /></div>;
+  if (!token) return <div className="h-[100dvh] bg-black flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={50} /><span className="text-[#D946EF] font-black uppercase text-[10px] tracking-widest animate-pulse">Preparando Estúdio...</span></div>;
 
   if (!preJoinChoices && countdown === null && !showBrilhe) return (
-    <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 bg-cover bg-center">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
-      <div className="relative z-10 w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 shadow-2xl">
-        <h1 className="text-2xl font-black text-center text-white mb-6 uppercase tracking-widest">Preparar Live</h1>
-        <PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={startLive} className="!bg-transparent !p-0" joinLabel="Iniciar Transmissão" />
+    <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 bg-[url('https://images.unsplash.com/photo-1516481157630-05bc0aeb8b19?w=1000&q=80')] bg-cover bg-center relative">
+      {/* 🔥 ADIÇÃO 2: TELA PRE-JOIN LIQUID GLASS COM TRIDENTE 🔥 */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-xl"></div>
+      
+      <div className="relative z-10 w-full max-w-md bg-[#0a0a0a]/90 backdrop-blur-2xl border border-white/10 rounded-[3rem] p-10 shadow-[0_0_60px_rgba(217,70,239,0.15)] flex flex-col items-center">
+        
+        <div className="w-20 h-20 bg-black/50 border border-[#D946EF]/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(217,70,239,0.3)] animate-pulse">
+            <span className="text-4xl drop-shadow-[0_0_10px_rgba(217,70,239,0.8)] text-[#D946EF]">🔱</span>
+        </div>
+        
+        <h1 className="text-3xl font-black text-center text-white mb-2 uppercase tracking-tighter italic">Studio <span className="text-[#D946EF]">Ao Vivo</span></h1>
+        <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em] mb-10 text-center">Teste sua câmera e microfone antes de entrar.</p>
+        
+        <div className="w-full rounded-2xl overflow-hidden border-2 border-white/10 shadow-inner bg-black">
+           <PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={startLive} className="!bg-transparent !p-0 custom-prejoin" joinLabel="🔴 INICIAR TRANSMISSÃO" />
+        </div>
+        
+        <button onClick={() => router.push('/admin/dashboard')} className="mt-8 text-white/30 hover:text-white uppercase font-black text-[10px] tracking-widest flex items-center gap-2 transition-colors">
+            <ArrowLeft size={14}/> Voltar para o Painel
+        </button>
+
       </div>
     </div>
   );
 
   if (countdown !== null) return (
-    <div className="h-[100dvh] bg-black flex items-center justify-center relative">
-      <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm">
-         <span className="text-[150px] font-black text-white drop-shadow-[0_0_50px_rgba(217,70,239,0.8)] animate-ping">{countdown}</span>
+    <div className="h-[100dvh] bg-black flex items-center justify-center relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(217,70,239,0.2)_0%,rgba(0,0,0,1)_70%)]"></div>
+      <div className="absolute inset-0 flex items-center justify-center z-50">
+         <span className="text-[200px] font-black text-white drop-shadow-[0_0_80px_rgba(217,70,239,1)] animate-ping">{countdown}</span>
       </div>
     </div>
   );
@@ -275,13 +306,15 @@ function StudioContent() {
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       {showBrilhe && (
-        <div className="absolute inset-0 flex items-center justify-center z-[200] pointer-events-none">
-          <h1 className="text-6xl font-black text-white uppercase tracking-widest drop-shadow-[0_0_50px_rgba(255,255,255,1)] animate-pulse">Brilhe!</h1>
+        <div className="absolute inset-0 flex items-center justify-center z-[200] pointer-events-none bg-black/60 backdrop-blur-sm">
+          <h1 className="text-6xl sm:text-8xl font-black text-white uppercase tracking-widest drop-shadow-[0_0_50px_rgba(255,255,255,1)] animate-pulse flex items-center gap-4">
+              <Sparkles size={60} className="text-[#D946EF]" /> BRILHE!
+          </h1>
         </div>
       )}
 
       {preJoinChoices && (
-        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud"} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-2`}>
+        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud"} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-4 box-border`}>
           <MyVideoStage />
           <RoomAudioRenderer />
           <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} onBalanceUpdate={handleBalanceUpdate} onPrivateEnd={() => setIsPrivateMode(false)} onGiftReceived={handleGiftReceived} />
@@ -292,31 +325,34 @@ function StudioContent() {
                <PrivateRequestModal request={currentPrivateRequest} onAccept={() => handleAcceptPrivate(room)} onDecline={() => setCurrentPrivateRequest(null)} />
                
                <header className="absolute top-6 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
-                  <div className="flex flex-col gap-2 pointer-events-auto">
-                     <div className="bg-black/60 backdrop-blur-md border border-white/10 px-5 py-2.5 rounded-2xl flex flex-col shadow-lg min-w-[140px]">
-                       <span className="text-[9px] text-white/60 uppercase font-black tracking-widest">Faturamento (70%)</span>
-                       <span className="text-lg font-black text-emerald-400 leading-none mt-1">R$ {sessionEarnings.toFixed(2).replace('.', ',')}</span>
+                  <div className="flex flex-col gap-3 pointer-events-auto">
+                     <div className="bg-black/60 backdrop-blur-xl border border-white/10 px-5 py-3 rounded-[1.5rem] flex flex-col shadow-2xl min-w-[150px]">
+                       <span className="text-[9px] text-white/60 uppercase font-black tracking-widest mb-1 flex items-center gap-1.5"><DollarSign size={10} className="text-emerald-400"/> Faturamento (70%)</span>
+                       <span className="text-xl font-black text-emerald-400 leading-none">R$ {sessionEarnings.toFixed(2).replace('.', ',')}</span>
                      </div>
-                     <div className={`text-white text-[10px] font-black uppercase px-4 py-2 rounded-full w-max shadow-lg flex items-center gap-2 ${isPrivateMode ? 'bg-[#ff0055] shadow-[#ff0055]/50 animate-pulse' : 'bg-[#D946EF]'}`}>
-                        {isPrivateMode ? <><Lock size={12}/> VIP ATIVO</> : <><div className="w-2 h-2 rounded-full bg-white animate-pulse"></div> AO VIVO</>}
+                     <div className={`text-white text-[10px] font-black uppercase px-5 py-2.5 rounded-full w-max shadow-xl flex items-center gap-2 border ${isPrivateMode ? 'bg-[#ff0055]/20 border-[#ff0055] text-[#ff0055] shadow-[0_0_20px_rgba(255,0,85,0.4)] animate-pulse' : 'bg-[#D946EF]/20 border-[#D946EF] text-[#D946EF] shadow-[0_0_20px_rgba(217,70,239,0.3)]'}`}>
+                        {isPrivateMode ? <><Lock size={12}/> VIP ATIVO</> : <><div className="w-2 h-2 rounded-full bg-[#D946EF] animate-pulse"></div> AO VIVO</>}
                      </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 items-end pointer-events-auto">
+                  <div className="flex flex-col gap-3 items-end pointer-events-auto">
                      <div className="flex gap-2">
                         <MicToggleButton />
                         <button onClick={() => { 
-                            if(confirm("Encerrar Live?")) { 
-                                setModelStatus('offline'); // 🔥 FICA OFFLINE 🔥
+                            if(confirm("Encerrar Live e voltar pro Painel?")) { 
+                                setModelStatus('offline'); 
                                 setPreJoinChoices(undefined); 
                                 setSessionEarnings(0); 
+                                router.push('/admin/dashboard');
                             } 
-                        }} className="bg-black/60 hover:bg-red-600 backdrop-blur-md border border-white/10 text-white w-12 h-12 flex items-center justify-center rounded-2xl transition-all shadow-lg">
-                          <X size={20} />
+                        }} className="bg-black/60 hover:bg-red-600 backdrop-blur-xl border border-white/10 text-white w-12 h-12 flex items-center justify-center rounded-[1rem] transition-all shadow-xl group">
+                          <X size={20} className="group-hover:scale-110 transition-transform" />
                         </button>
                      </div>
                      {isPrivateMode && (
-                        <button onClick={() => handleEndPrivateModel(room)} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg border border-red-400">Derrubar Privado</button>
+                        <button onClick={() => handleEndPrivateModel(room)} className="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-xl border border-red-500/50 transition-all flex items-center gap-2">
+                           <Lock size={12}/> Derrubar Privado
+                        </button>
                      )}
                   </div>
                </header>
@@ -328,7 +364,7 @@ function StudioContent() {
                 {activeGifts.map(gift => (
                   <div key={gift.id} className="flex flex-col items-center gift-anim absolute">
                     <span className="text-8xl drop-shadow-[0_0_30px_rgba(255,255,255,0.5)] mb-2">{gift.icon}</span>
-                    <span className="text-white font-black uppercase text-[12px] bg-[#ff0055] px-4 py-2 rounded-full backdrop-blur-md shadow-lg">{gift.sender} enviou!</span>
+                    <span className="text-white font-black uppercase text-[12px] bg-gradient-to-r from-[#ff0055] to-[#c20042] px-6 py-2 rounded-full backdrop-blur-md shadow-[0_0_20px_rgba(255,0,85,0.4)] border border-white/20">{gift.sender} enviou!</span>
                   </div>
                 ))}
                </div>
@@ -340,6 +376,18 @@ function StudioContent() {
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 3px; } 
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        
+        /* 🔥 Customiza o botão vermelho horroroso padrão do LiveKit 🔥 */
+        .custom-prejoin button {
+            background: #D946EF !important;
+            border-radius: 1rem !important;
+            font-weight: 900 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.1em !important;
+            box-shadow: 0 0 20px rgba(217,70,239,0.4) !important;
+        }
+        .custom-prejoin button:hover { background: #f062ff !important; }
+
         @keyframes flyUpFade { 0% { transform: translateY(100px) scale(0.5); opacity: 0; } 20% { transform: translateY(0px) scale(1.2); opacity: 1; } 80% { transform: translateY(-150px) scale(1); opacity: 1; } 100% { transform: translateY(-200px) scale(0.8); opacity: 0; } }
         .gift-anim { animation: flyUpFade 3.5s ease-out forwards; }
       `}</style>
@@ -358,8 +406,8 @@ function MicToggleButton() {
   };
 
   return (
-    <button onClick={toggleMic} className={`w-12 h-12 flex items-center justify-center rounded-2xl backdrop-blur-md border transition-all shadow-lg ${isMicOn ? 'bg-black/60 border-white/10 text-white' : 'bg-red-500 border-red-400 text-white'}`}>
-      {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
+    <button onClick={toggleMic} className={`w-12 h-12 flex items-center justify-center rounded-[1rem] backdrop-blur-xl border transition-all shadow-xl ${isMicOn ? 'bg-black/60 border-white/10 text-white' : 'bg-red-500/20 border-red-500/50 text-red-500 animate-pulse'}`}>
+      {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
     </button>
   );
 }
@@ -370,5 +418,5 @@ function RoomContextConsumer({ children }: { children: (room: any) => React.Reac
 }
 
 export default function ModelStudio() {
-  return <Suspense fallback={<div className="h-screen bg-black" />}><StudioContent /></Suspense>;
+  return <Suspense fallback={<div className="h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#D946EF]" size={40}/></div>}><StudioContent /></Suspense>;
 }
