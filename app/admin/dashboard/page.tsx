@@ -120,6 +120,10 @@ function DashboardContent() {
   const [isChatMediaPaid, setIsChatMediaPaid] = useState(false);
   const [chatMediaPrice, setChatMediaPrice] = useState("");
 
+  // 🔥 ESTADOS DO PAINEL CENTRAL DE NOTIFICAÇÕES 🔥
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -152,7 +156,6 @@ function DashboardContent() {
       if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
         
-        // 🔥 SALVA NO LOCALSTORAGE PARA A LIVE PUXAR 🔥
         localStorage.setItem("labz_model_id", resModel[0].id);
         localStorage.setItem("labz_model_slug", resModel[0].slug);
       }
@@ -167,10 +170,54 @@ function DashboardContent() {
 
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
       setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
+      
+      // 🔥 CHAMA A BUSCA DA CENTRAL DE NOTIFICAÇÕES 🔥
+      loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], Array.isArray(resFollowers) ? resFollowers : []);
+
     } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
+
+  // 🔥 MOTOR DA CENTRAL DE NOTIFICAÇÕES (FÃS, LIKES E COMMENTS) 🔥
+  const loadActivityFeed = async (medias: any[], followers: any[]) => {
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+          const mediaIds = medias.map(m => m.id);
+          
+          let likesList: any[] = [];
+          let commentsList: any[] = [];
+
+          if (mediaIds.length > 0) {
+              const mediaIdsStr = mediaIds.join(',');
+              const [likesRes, commentsRes] = await Promise.all([
+                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()),
+                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
+              ]);
+              
+              // Mapeia as curtidas e anexa a foto
+              likesList = (likesRes || []).map((l: any) => ({ 
+                  ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url 
+              }));
+              
+              // Mapeia os comentários e anexa a foto
+              commentsList = (commentsRes || []).map((c: any) => ({ 
+                  ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url 
+              }));
+          }
+
+          // Mapeia os seguidores
+          const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
+
+          // Junta tudo e ordena pela data mais recente
+          const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .slice(0, 40); // Pega as ultimas 40 atividades
+
+          setActivityFeed(combinedFeed);
+      } catch (e) {}
+  };
+
 
   const loadMediaStats = async (mediaItem: any) => {
       setShowMediaStats(mediaItem);
@@ -492,7 +539,6 @@ function DashboardContent() {
       else { alert("O link é: " + text); }
   };
 
-  // 🔥 HANDLER DA ROTA DE LIVE DA MODELO 🔥
   const handleStartLiveStudio = () => {
     router.push(`/admin/studio`);
   };
@@ -500,7 +546,53 @@ function DashboardContent() {
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative overflow-x-hidden">
+      
+      {/* 🔥 CENTRAL DE NOTIFICAÇÕES (DRAWER/MODAL) 🔥 */}
+      {showNotificationsPanel && (
+          <>
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowNotificationsPanel(false)}></div>
+              <div className="fixed top-0 right-0 h-full w-full sm:w-96 bg-[#0a0a0a] border-l border-white/10 z-[210] shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+                  <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/50 shrink-0">
+                      <h2 className="text-lg font-black uppercase italic text-[#D946EF] flex items-center gap-2"><Bell size={20}/> Atividades Recentes</h2>
+                      <button onClick={() => setShowNotificationsPanel(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                      {activityFeed.length === 0 ? (
+                          <div className="text-center text-white/30 text-xs italic font-bold uppercase tracking-widest py-10">Nenhuma atividade recente.</div>
+                      ) : (
+                          activityFeed.map((n, i) => (
+                              <div key={i} className="flex items-center gap-4 bg-white/5 border border-white/5 p-4 rounded-2xl hover:border-white/10 transition-colors">
+                                  {/* ÍCONES BASEADOS NO TIPO */}
+                                  {n.type === 'follower' && <div className="w-10 h-10 rounded-full bg-[#FF1493]/20 text-[#FF1493] flex items-center justify-center shrink-0"><Heart size={16} fill="currentColor"/></div>}
+                                  {n.type === 'like' && <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0"><Star size={16} fill="currentColor"/></div>}
+                                  {n.type === 'comment' && <div className="w-10 h-10 rounded-full bg-[#00f0ff]/20 text-[#00f0ff] flex items-center justify-center shrink-0"><MessageCircle size={16} fill="currentColor"/></div>}
+
+                                  {/* CONTEÚDO */}
+                                  <div className="flex-1 overflow-hidden">
+                                      {n.type === 'follower' && <><p className="text-[10px] font-black uppercase text-[#FF1493]">Novo Fã VIP</p><p className="text-xs text-white truncate">{n.name || n.nickname || "Fã VIP"} começou a te seguir!</p></>}
+                                      {n.type === 'like' && <><p className="text-[10px] font-black uppercase text-emerald-500">Nova Curtida</p><p className="text-xs text-white truncate">Alguém curtiu sua foto na Galeria.</p></>}
+                                      {n.type === 'comment' && <><p className="text-[10px] font-black uppercase text-[#00f0ff]">Novo Comentário</p><p className="text-xs text-white truncate">{n.player_name || 'Fã'} comentou: "{n.content}"</p></>}
+                                      
+                                      <p className="text-[8px] text-white/30 uppercase font-bold mt-1 tracking-widest">
+                                          {new Date(n.created_at).toLocaleDateString()} às {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                      </p>
+                                  </div>
+
+                                  {/* MINIATURA DA MÍDIA (SE HOUVER) */}
+                                  {(n.type === 'like' || n.type === 'comment') && n.media_url && (
+                                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0">
+                                          <img src={n.media_url} className="w-full h-full object-cover" />
+                                      </div>
+                                  )}
+                              </div>
+                          ))
+                      )}
+                  </div>
+              </div>
+          </>
+      )}
+
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <button onClick={() => isSuper ? router.push('/admin/super') : (localStorage.clear(), router.push('/admin'))} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 hover:text-white bg-white/5 px-4 py-2 rounded-xl transition-all"> {isSuper ? "Voltar Master" : "Sair"} </button>
@@ -517,10 +609,20 @@ function DashboardContent() {
                    <span className="text-[10px] font-black uppercase tracking-widest text-[#00f0ff] group-hover:text-black">Ficar Ao Vivo</span>
                 </button>
 
-                {/* CONTADOR DE SEGUIDORES NO TOPO */}
-                <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg hidden sm:flex">
-                    <Heart size={12} className="text-[#FF1493]" fill="currentColor" />
-                    <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
+                {/* CONTADOR DE SEGUIDORES + SINO DE NOTIFICAÇÕES */}
+                <div className="flex items-center gap-3">
+                    <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg hidden sm:flex">
+                        <Heart size={12} className="text-[#FF1493]" fill="currentColor" />
+                        <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
+                    </div>
+                    
+                    {/* BOTÃO DA CENTRAL DE NOTIFICAÇÕES */}
+                    <button onClick={() => setShowNotificationsPanel(true)} className="relative w-8 h-8 rounded-full bg-[#D946EF]/20 border border-[#D946EF]/50 flex items-center justify-center text-[#D946EF] hover:bg-[#D946EF] hover:text-white transition-all shadow-[0_0_10px_rgba(217,70,239,0.3)]">
+                        <Bell size={14} className="animate-ring" />
+                        {activityFeed.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#00f0ff] rounded-full border-2 border-black animate-pulse"></span>
+                        )}
+                    </button>
                 </div>
             </div>
             
@@ -574,10 +676,10 @@ function DashboardContent() {
 
         <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-black uppercase text-white/40 tracking-widest">Menu da Musa</h2>
-            {/* SINO DE NOTIFICAÇÕES DA MUSA */}
+            {/* AVISOS DO CHAT VIP */}
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest cursor-pointer text-[#D946EF]" onClick={() => { setActiveTab("chat"); }}>
-                <Bell size={16} className={unreadChatCounts > 0 ? "animate-pulse" : ""} /> 
-                {unreadChatCounts > 0 ? `${unreadChatCounts} Novas` : "Avisos"}
+                <MessageCircle size={16} className={unreadChatCounts > 0 ? "animate-pulse" : ""} /> 
+                {unreadChatCounts > 0 ? `${unreadChatCounts} Chats` : "Mensagens"}
             </div>
         </div>
 
