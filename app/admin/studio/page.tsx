@@ -2,8 +2,8 @@
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, useTracks, ParticipantTile, useChat, useRoomContext, useParticipants, useLocalParticipant } from "@livekit/components-react";
-import { Track, RoomEvent } from "livekit-client";
+import { LiveKitRoom, RoomAudioRenderer, PreJoin, LocalUserChoices, useTracks, ParticipantTile, useChat, useRoomContext, useParticipants, useLocalParticipant, VideoTrack } from "@livekit/components-react";
+import { Track, RoomEvent, VideoPresets, TrackPublishDefaults } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, Send, Users, Lock, X, Check, Mic, MicOff, Ban, ChevronDown, ChevronUp, DollarSign, Video, Sparkles } from "lucide-react";
 
@@ -39,8 +39,14 @@ function MyVideoStage() {
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const localTrack = tracks.find(t => t.participant.isLocal);
   return (
-    <div className="absolute inset-0 w-full h-full bg-[#050505] z-0">
-      {localTrack ? <ParticipantTile trackRef={localTrack} className="w-full h-full [&>video]:object-cover" /> : <div className="flex flex-col items-center justify-center h-full gap-3 text-[#D946EF]/50"><Video size={48} className="animate-pulse" /></div>}
+    // 🔥 CORREÇÃO DE LAYOUT: Container preto centralizado 🔥
+    <div className="absolute inset-0 w-full h-full bg-black z-0 flex items-center justify-center overflow-hidden">
+      {localTrack ? (
+          // 🔥 object-contain garante que a imagem não estica e aparece inteira 🔥
+          <VideoTrack trackRef={localTrack} className="w-full h-full object-contain max-w-full max-h-full" />
+      ) : (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-[#D946EF]/50"><Video size={48} className="animate-pulse" /></div>
+      )}
     </div>
   );
 }
@@ -205,7 +211,7 @@ function StudioContent() {
             method: 'PATCH',
             headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ live_status: status }),
-            keepalive: true // 🔥 GARANTE QUE VAI AVISAR O BANCO MESMO SE FECHAR A ABA RÁPIDO 🔥
+            keepalive: true
         });
     } catch(e) {}
   };
@@ -213,7 +219,7 @@ function StudioContent() {
   useEffect(() => {
     const handleUnload = () => { setModelStatus('offline'); };
     window.addEventListener('beforeunload', handleUnload);
-    window.addEventListener('pagehide', handleUnload); // 🔥 PEGA FECHAMENTO NO CELULAR (iOS/Android) 🔥
+    window.addEventListener('pagehide', handleUnload); 
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
       window.removeEventListener('pagehide', handleUnload);
@@ -224,7 +230,6 @@ function StudioContent() {
   useEffect(() => {
     if (!currentModelId || !currentModelSlug) return;
     
-    // 🔥 AUTO-LIMPEZA: Se entrou na tela de preparação, garante que está offline até clicar em Iniciar 🔥
     setModelStatus('offline');
 
     const fetchToken = async () => {
@@ -309,7 +314,13 @@ function StudioContent() {
         <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em] mb-10 text-center">Teste sua câmera e microfone antes de entrar.</p>
         
         <div className="w-full rounded-2xl overflow-hidden border-2 border-white/10 shadow-inner bg-black">
-           <PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={startLive} className="!bg-transparent !p-0 custom-prejoin" joinLabel="🔴 INICIAR TRANSMISSÃO" />
+           {/* 🔥 TENTATIVA DE FORÇAR QUALIDADE NO PREJOIN 🔥 */}
+           <PreJoin 
+             defaults={{ videoEnabled: true, audioEnabled: true }} 
+             onSubmit={startLive} 
+             className="!bg-transparent !p-0 custom-prejoin" 
+             joinLabel="🔴 INICIAR TRANSMISSÃO" 
+           />
         </div>
         
         <button onClick={() => router.push(`/admin/dashboard?model=${currentModelId}&slug=${currentModelSlug}`)} className="mt-8 text-white/30 hover:text-white uppercase font-black text-[10px] tracking-widest flex items-center gap-2 transition-colors">
@@ -331,6 +342,13 @@ function StudioContent() {
 
   const neonBorder = isPrivateMode ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)]" : "border-black"; 
 
+  // 🔥 CONFIGURAÇÕES DE ALTA QUALIDADE PARA TRANSMISSÃO 🔥
+  const trackPublishDefaults: TrackPublishDefaults = {
+    videoEncoding: VideoPresets.h1080.encoding, // Tenta 1080p. O LiveKit ajusta se a net for ruim.
+    simulcast: true, // Importante para entregar qualidade diferente conforme a net do fã
+    screenShareEncoding: VideoPresets.h1080_fps30.encoding,
+  };
+
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
       {showBrilhe && (
@@ -342,7 +360,15 @@ function StudioContent() {
       )}
 
       {preJoinChoices && (
-        <LiveKitRoom video={preJoinChoices.videoEnabled} audio={preJoinChoices.audioEnabled} token={token} serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud"} className={`w-full h-full transition-all duration-1000 ${neonBorder} border-4 box-border`}>
+        // 🔥 APLICANDO HQ NA ROOM 🔥
+        <LiveKitRoom 
+          video={preJoinChoices.videoEnabled} 
+          audio={preJoinChoices.audioEnabled} 
+          token={token} 
+          serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://labzsexy-live-oqpryejw.livekit.cloud"} 
+          publishDefaults={trackPublishDefaults} // 🔥 Aplica HQ aqui
+          className={`w-full h-full transition-all duration-1000 ${neonBorder} border-4 box-border`}
+        >
           <MyVideoStage />
           <RoomAudioRenderer />
           <InteractiveModelRoom onPrivateRequest={setCurrentPrivateRequest} onBalanceUpdate={handleBalanceUpdate} onPrivateEnd={() => setIsPrivateMode(false)} onGiftReceived={handleGiftReceived} />
