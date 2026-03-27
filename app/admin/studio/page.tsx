@@ -153,8 +153,9 @@ function StudioContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  const [modelId, setModelId] = useState<string | null>(null);
-  const [modelSlug, setModelSlug] = useState<string | null>(null);
+  // Pega os dados da URL vindos do Dashboard
+  const modelId = searchParams.get("model");
+  const modelSlug = searchParams.get("slug");
 
   const [token, setToken] = useState("");
   const [preJoinChoices, setPreJoinChoices] = useState<LocalUserChoices | undefined>(undefined);
@@ -191,14 +192,21 @@ function StudioContent() {
         return;
     }
     
-    setModelId(finalId);
-    setModelSlug(finalSlug);
+    // Setando via estado não reflete a tempo no primeiro render do botão voltar, 
+    // então guardamos no session para uso rápido se precisar
+    sessionStorage.setItem('current_model_id', finalId);
+    sessionStorage.setItem('current_model_slug', finalSlug);
   }, [router, searchParams]);
 
+  // Usamos as variáveis locais para não depender do delay do useEffect
+  const currentModelId = searchParams.get("model") || (typeof window !== 'undefined' ? localStorage.getItem("labz_model_id") : null);
+  const currentModelSlug = searchParams.get("slug") || (typeof window !== 'undefined' ? localStorage.getItem("labz_model_slug") : null);
+
+
   const setModelStatus = async (status: string) => {
-    if (!modelId) return;
+    if (!currentModelId) return;
     try {
-        await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, {
+        await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${currentModelId}`, {
             method: 'PATCH',
             headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ live_status: status })
@@ -213,20 +221,20 @@ function StudioContent() {
       window.removeEventListener('beforeunload', handleUnload);
       setModelStatus('offline'); 
     };
-  }, [modelId]);
+  }, [currentModelId]);
 
   useEffect(() => {
-    if (!modelId || !modelSlug) return;
+    if (!currentModelId || !currentModelSlug) return;
     const fetchToken = async () => {
       try {
-        const safeRoom = `live_${modelSlug.toLowerCase()}`;
-        const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(modelSlug)}&isModel=true`);
+        const safeRoom = `live_${currentModelSlug.toLowerCase()}`;
+        const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(currentModelSlug)}&isModel=true`);
         const data = await res.json();
         if (data.token) setToken(data.token);
       } catch (err) {}
     };
     fetchToken();
-  }, [modelId, modelSlug]);
+  }, [currentModelId, currentModelSlug]);
 
   const startLive = (choices: LocalUserChoices) => {
     setCountdown(3);
@@ -272,6 +280,17 @@ function StudioContent() {
     setTimeout(() => { setActiveGifts(prev => prev.filter(g => g.id !== newGift.id)); }, 3000);
   }, []);
 
+  if (!currentModelId || !currentModelSlug) {
+      return (
+          <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 text-center">
+              <Lock size={50} className="text-red-500 mb-4" />
+              <h1 className="text-white text-xl font-black uppercase tracking-widest mb-2">Acesso Negado</h1>
+              <p className="text-white/50 text-xs uppercase mb-6">Você precisa acessar o estúdio através do seu Painel de Modelo.</p>
+              <button onClick={() => router.push('/admin')} className="bg-[#D946EF] text-white px-6 py-3 rounded-xl font-black uppercase text-[10px]">Ir para o Painel</button>
+          </div>
+      );
+  }
+
   if (!token) return <div className="h-[100dvh] bg-black flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={50} /><span className="text-[#D946EF] font-black uppercase text-[10px] tracking-widest animate-pulse">Preparando Estúdio...</span></div>;
 
   if (!preJoinChoices && countdown === null && !showBrilhe) return (
@@ -291,7 +310,8 @@ function StudioContent() {
            <PreJoin defaults={{ videoEnabled: true, audioEnabled: true }} onSubmit={startLive} className="!bg-transparent !p-0 custom-prejoin" joinLabel="🔴 INICIAR TRANSMISSÃO" />
         </div>
         
-        <button onClick={() => router.push('/admin/dashboard')} className="mt-8 text-white/30 hover:text-white uppercase font-black text-[10px] tracking-widest flex items-center gap-2 transition-colors">
+        {/* 🔥 CORREÇÃO 1: Redirecionamento completo do botão VOLTAR 🔥 */}
+        <button onClick={() => router.push(`/admin/dashboard?model=${currentModelId}&slug=${currentModelSlug}`)} className="mt-8 text-white/30 hover:text-white uppercase font-black text-[10px] tracking-widest flex items-center gap-2 transition-colors">
             <ArrowLeft size={14}/> Voltar para o Painel
         </button>
 
@@ -345,16 +365,19 @@ function StudioContent() {
                   <div className="flex flex-col gap-3 items-end pointer-events-auto">
                      <div className="flex gap-2">
                         <MicToggleButton />
+                        
+                        {/* 🔥 CORREÇÃO 2: Redirecionamento completo do botão ENCERRAR 🔥 */}
                         <button onClick={() => { 
                             if(confirm("Encerrar Live e voltar pro Painel?")) { 
                                 setModelStatus('offline'); 
                                 setPreJoinChoices(undefined); 
                                 setSessionEarnings(0); 
-                                router.push('/admin/dashboard');
+                                router.push(`/admin/dashboard?model=${currentModelId}&slug=${currentModelSlug}`);
                             } 
                         }} className="bg-black/60 hover:bg-red-600 backdrop-blur-xl border border-white/10 text-white w-12 h-12 flex items-center justify-center rounded-[1rem] transition-all shadow-xl group">
                           <X size={20} className="group-hover:scale-110 transition-transform" />
                         </button>
+
                      </div>
                      {isPrivateMode && (
                         <button onClick={() => handleEndPrivateModel(room)} className="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-xl border border-red-500/50 transition-all flex items-center gap-2">
@@ -365,7 +388,7 @@ function StudioContent() {
                </header>
 
                <ViewerList viewerBalances={viewerBalances} onBlock={(id) => handleBlockUser(room, id)} />
-               <CustomChat modelName={modelSlug || ""} />
+               <CustomChat modelName={currentModelSlug || ""} />
                
                <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden flex items-center justify-center">
                 {activeGifts.map(gift => (
