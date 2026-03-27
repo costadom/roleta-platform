@@ -6,7 +6,7 @@ import {
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -498,6 +498,12 @@ function DashboardContent() {
       return `${m}:${s}`;
   };
 
+  // 🔥 HANDLER DA ROTA DE LIVE 🔥
+  const handleStartLiveStudio = () => {
+    // Redireciona para o estúdio de live (sala de aquecimento)
+    router.push(`/live/studio`);
+  };
+
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
 
   return (
@@ -505,16 +511,27 @@ function DashboardContent() {
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <button onClick={() => isSuper ? router.push('/admin/super') : (localStorage.clear(), router.push('/admin'))} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 hover:text-white bg-white/5 px-4 py-2 rounded-xl transition-all"> {isSuper ? "Voltar Master" : "Sair"} </button>
+          
           <div className="text-right flex flex-col items-end">
-            <div className="flex items-center gap-3">
-                {/* 🔥 CONTADOR DE SEGUIDORES NO TOPO 🔥 */}
-                <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg">
+            <div className="flex items-center gap-4">
+                
+                {/* 🔥 BOTÃO GIGANTE DE INICIAR LIVE 🔥 */}
+                <button 
+                   onClick={handleStartLiveStudio}
+                   className="bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-4 py-2 rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.3)] hover:bg-[#00f0ff] hover:text-black transition-all group animate-pulse"
+                >
+                   <Play size={16} className="text-[#00f0ff] group-hover:text-black" fill="currentColor" />
+                   <span className="text-[10px] font-black uppercase tracking-widest text-[#00f0ff] group-hover:text-black">Ficar Ao Vivo</span>
+                </button>
+
+                {/* CONTADOR DE SEGUIDORES NO TOPO */}
+                <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg hidden sm:flex">
                     <Heart size={12} className="text-[#FF1493]" fill="currentColor" />
                     <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
                 </div>
-                <h1 className="text-2xl font-black uppercase text-[#FF1493] tracking-tighter">PAINEL VIP</h1>
             </div>
-            <div className="flex items-center gap-2 group cursor-pointer border-b border-transparent hover:border-[#FFD700] transition-all pb-1 mt-1">
+            
+            <div className="flex items-center gap-2 group cursor-pointer border-b border-transparent hover:border-[#FFD700] transition-all pb-1 mt-2">
                 <Edit3 size={12} className="text-[#FFD700]/50 group-hover:text-[#FFD700]"/>
                 <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} onBlur={async () => { await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName }) }); }} className="bg-transparent text-[#FFD700] text-[10px] font-bold uppercase tracking-[0.2em] text-right outline-none w-32" placeholder="SEU NICKNAME" />
             </div>
