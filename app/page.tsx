@@ -16,7 +16,6 @@ export default function LandingPage() {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   useEffect(() => {
-    // Se o fã já estiver logado, chuta pra vitrine
     const logged = localStorage.getItem("labz_player_logged") === "true";
     if (logged) {
       router.push('/vitrine');
@@ -26,7 +25,6 @@ export default function LandingPage() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
-        // Puxando da tabela Configs, onde bg_url e profile_url realmente existem
         const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=bg_url,profile_url&limit=20`, { headers });
         if (resConfigs.ok) {
             const configsData = await resConfigs.json();
@@ -44,7 +42,6 @@ export default function LandingPage() {
     fetchData();
   }, [router, supabaseUrl, supabaseKey]);
 
-  // Passador de slides do fundo
   useEffect(() => {
     if (modelsBgs.length === 0) return;
     const interval = setInterval(() => {
@@ -62,18 +59,17 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
       
-      {/* FUNDO ANIMADO TRANSLÚCIDO (GLASSMORPHISM) */}
-      <div className="fixed inset-0 z-0 bg-black pointer-events-none">
+      {/* 🔥 FUNDO ANIMADO COM SANGRIA (-inset-[10%]) PARA RESOLVER O EFEITO ELÁSTICO 🔥 */}
+      <div className="fixed -inset-[10%] z-0 bg-black pointer-events-none">
         {modelsBgs.map((bg, idx) => (
             <img 
               key={idx} 
               src={bg} 
-              // 🔥 AUMENTADA A OPACIDADE DA FOTO PARA 50% (opacity-50) 🔥
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out ${idx === bgIndex ? 'opacity-50 scale-105' : 'opacity-0 scale-100'}`} 
             />
         ))}
-        {/* 🔥 PELÍCULA DE VIDRO MAIS CLARA (DE 95% para 60% e 40%) 🔥 */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/60 via-[#050505]/40 to-[#050505]/95 backdrop-blur-sm"></div>
+        {/* Película escura de vidro por cima do fundo (também com sangria) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/60 via-[#050505]/40 to-[#050505]/95 backdrop-blur-md"></div>
       </div>
 
       {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
@@ -142,13 +138,11 @@ export default function LandingPage() {
             </div>
             
             <div className="flex flex-col w-full md:w-auto gap-4">
-                {/* ROTA PARA O CADASTRO DA MUSA */}
                 <button onClick={() => router.push('/cadastro')} className="w-full bg-[#D946EF] hover:bg-[#f062ff] text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(217,70,239,0.3)] hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer">
                     <UserPlus size={16} className="pointer-events-none" />
                     <span className="pointer-events-none">Quero ser Modelo</span>
                 </button>
                 
-                {/* ROTA PARA O LOGIN DA MUSA */}
                 <button onClick={() => router.push('/admin')} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer">
                     <ShieldCheck size={16} className="pointer-events-none" />
                     <span className="pointer-events-none">Sou Modelo (Login)</span>
