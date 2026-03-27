@@ -20,26 +20,24 @@ export default function LandingPage() {
     const logged = localStorage.getItem("labz_player_logged") === "true";
     if (logged) {
       router.push('/vitrine');
-      // O 'return' que travava o carregamento infinito foi removido daqui!
     }
 
     async function fetchData() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
-        // Puxa as fotos de fundo das modelos para o slideshow glassmorphism
-        const resMedia = await fetch(`${supabaseUrl}/rest/v1/Media?select=bg_url,profile_url&limit=20`, { headers });
-        if (resMedia.ok) {
-            const mediaData = await resMedia.json();
-            if (mediaData.length > 0) {
-                const bgs = mediaData.map((m:any) => m.bg_url || m.profile_url).filter(Boolean);
+        // 🔥 CORREÇÃO DO ERRO 400: Puxando da tabela Configs, onde bg_url e profile_url realmente existem 🔥
+        const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=bg_url,profile_url&limit=20`, { headers });
+        if (resConfigs.ok) {
+            const configsData = await resConfigs.json();
+            if (configsData.length > 0) {
+                const bgs = configsData.map((c:any) => c.bg_url || c.profile_url).filter(Boolean);
                 setModelsBgs(bgs);
             }
         }
       } catch (err) {
           console.error(err);
       } finally { 
-          // Agora ele SEMPRE desliga a tela de carregamento, mesmo se o redirecionamento demorar
           setInitialLoading(false); 
       }
     }
@@ -77,7 +75,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-black/80 to-[#050505] backdrop-blur-md"></div>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL DA PÁGINA (Puxado mais para cima com pt-16) */}
+      {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
       <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6">
         
         {/* LOGO CENTRALIZADO */}
@@ -90,7 +88,7 @@ export default function LandingPage() {
             </h1>
         </div>
 
-        {/* BOTÃO ÚNICO DE ENTRAR/CADASTRAR (Clica em qualquer milímetro e funciona) */}
+        {/* BOTÃO ÚNICO DE ENTRAR/CADASTRAR */}
         <div className="w-full max-w-sm mb-16">
             <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-95 cursor-pointer">
                 <LogIn size={18} className="pointer-events-none" /> 
@@ -98,7 +96,7 @@ export default function LandingPage() {
             </button>
         </div>
 
-        {/* SEÇÃO EXPERIÊNCIA PREMIUM (Ícones Neutros / Brancos) */}
+        {/* SEÇÃO EXPERIÊNCIA PREMIUM */}
         <div className="w-full max-w-5xl bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[3rem] p-8 sm:p-12 shadow-2xl relative overflow-hidden mb-12">
             <h2 className="text-2xl sm:text-3xl font-black uppercase italic text-white mb-10 tracking-tighter pointer-events-none">
                 <span className="text-[#D946EF]">Experiência</span> Premium
@@ -143,13 +141,13 @@ export default function LandingPage() {
             </div>
             
             <div className="flex flex-col w-full md:w-auto gap-4">
-                {/* 🔥 BOTÃO CORRIGIDO PARA A ROTA /cadastro 🔥 */}
+                {/* ROTA PARA O CADASTRO DA MUSA */}
                 <button onClick={() => router.push('/cadastro')} className="w-full bg-[#D946EF] hover:bg-[#f062ff] text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(217,70,239,0.3)] hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer">
                     <UserPlus size={16} className="pointer-events-none" />
                     <span className="pointer-events-none">Quero ser Modelo</span>
                 </button>
                 
-                {/* 🔥 BOTÃO CORRIGIDO PARA A ROTA /admin 🔥 */}
+                {/* ROTA PARA O LOGIN DA MUSA */}
                 <button onClick={() => router.push('/admin')} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer">
                     <ShieldCheck size={16} className="pointer-events-none" />
                     <span className="pointer-events-none">Sou Modelo (Login)</span>
