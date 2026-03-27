@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2 } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2, CheckCircle } from "lucide-react";
 
 const GIFTS = [
   { id: 1, name: "Rosa", icon: "🌹", price: 5.00 },
@@ -70,6 +70,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const publicSecRef = useRef(0);
   const privateSecRef = useRef(0);
 
+  // 🔥 INTEGRAÇÃO REAL DE PAGAMENTO PIX 🔥
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<any>(null);
@@ -197,6 +198,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
+  // 🔥 GERAÇÃO DO PIX REAL 🔥
   const generatePix = async (amount: number) => {
     setGeneratingPix(true);
     setPixTimeLeft(600);
@@ -234,6 +236,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     }
   };
 
+  // 🔥 POLLING DE PAGAMENTO (AGUARDANDO O PIX CAIR) 🔥
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (showPixModal && pixData && !paymentSuccess) {
@@ -347,39 +350,57 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
         ))}
       </div>
 
+      {/* 🔥 MODAL DE LOJA DE TOKENS (LIQUID GLASS) 🔥 */}
       {showShopModal && (
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
-          {/* Se ele tiver grana pra fechar o modal ou for recarregar, deixa o X. Se a tela travou pq ele tá duro no preview, não tem X */}
-          {balance > 0.35 && <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={24} /></button>}
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-2xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+          {balance > 0.35 && <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white bg-white/5 p-3 rounded-full border border-white/10 transition-all"><X size={18} /></button>}
           
-          <Coins size={40} className="text-[#00f0ff] mb-4" />
-          <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Seu Tempo Acabou</h2>
-          <p className="text-white/60 text-xs font-bold mb-8">Adicione LiveTokens para continuar assistindo!</p>
+          <div className="w-20 h-20 bg-[#00f0ff]/10 border border-[#00f0ff]/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(0,240,255,0.2)]">
+              <Coins size={36} className="text-[#00f0ff]" />
+          </div>
+          <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-2">Tokens de <span className="text-[#00f0ff]">Lives</span></h2>
+          <p className="text-white/60 text-xs font-bold mb-8 uppercase tracking-widest max-w-sm">Adicione saldo para continuar assistindo!</p>
+          
           <div className="flex flex-col gap-4 w-full max-w-sm">
             {[ {name: "Básico", p: 30}, {name: "VIP", p: 50}, {name: "Premium", p: 100} ].map(pkg => (
-              <button key={pkg.p} onClick={() => generatePix(pkg.p)} disabled={generatingPix} className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-2xl hover:border-[#00f0ff]/50 transition-all disabled:opacity-50">
-                <span className="text-white font-black uppercase text-sm">{pkg.name}</span>
-                <span className="bg-[#00f0ff] text-black px-4 py-1.5 rounded-full font-black text-xs">{generatingPix ? <Loader2 size={12} className="animate-spin inline" /> : `${pkg.p} LT (R$ ${pkg.p})`}</span>
+              <button key={pkg.p} onClick={() => generatePix(pkg.p)} disabled={generatingPix} className="flex items-center justify-between bg-[#0a0a0a] border border-white/10 p-5 rounded-[2rem] hover:border-[#00f0ff]/50 transition-all shadow-xl disabled:opacity-50 group">
+                <span className="text-white font-black uppercase text-sm tracking-widest group-hover:text-[#00f0ff] transition-colors">{pkg.name}</span>
+                <span className="bg-[#00f0ff] text-black px-5 py-2 rounded-xl font-black text-xs shadow-[0_0_15px_rgba(0,240,255,0.4)]">{generatingPix ? <Loader2 size={14} className="animate-spin inline" /> : `${pkg.p} LT (R$ ${pkg.p})`}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
+      {/* 🔥 MODAL PIX REAL (LIQUID GLASS) 🔥 */}
       {showPixModal && pixData && (
-          <div className="absolute inset-0 z-[210] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
-              <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative text-center">
-                  {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24}/></button>}
+          <div className="absolute inset-0 z-[210] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md shadow-2xl relative text-center">
+                  {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white bg-white/5 border border-white/10 p-2 rounded-full"><X size={16}/></button>}
+                  
                   {paymentSuccess ? (
-                      <div className="py-10 animate-in zoom-in duration-500"><div className="w-24 h-24 bg-[#00f0ff] rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(0,240,255,0.6)]"><CheckCircle size={50} className="text-black"/></div><h2 className="text-3xl font-black uppercase italic text-[#00f0ff] mb-2">Pago!</h2><p className="text-xs text-white/60 uppercase font-black tracking-widest">{pixData.value} LiveTokens na Carteira.</p></div>
+                      <div className="py-10 animate-in zoom-in duration-500">
+                          <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(16,185,129,0.5)]"><CheckCircle size={50} className="text-black"/></div>
+                          <h2 className="text-3xl font-black uppercase italic text-emerald-500 mb-2">Pago!</h2>
+                          <p className="text-[10px] text-white/60 uppercase font-black tracking-widest">LiveTokens Adicionados.</p>
+                      </div>
                   ) : (
                       <>
-                          <h2 className="text-2xl font-black uppercase italic mb-2 text-[#00f0ff]">Comprar Tokens</h2>
-                          <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 flex items-center justify-center"><img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full object-contain rounded-xl" /></div>
+                          <h2 className="text-2xl font-black uppercase italic mb-6 text-[#00f0ff]">Pagamento VIP</h2>
+                          <div className="bg-white p-4 rounded-[2rem] mx-auto w-48 h-48 sm:w-56 sm:h-56 mb-6 flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.1)]">
+                              <img src={pixData.qrCodeBase64.includes('data:image') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`} className="w-full h-full object-contain rounded-xl" />
+                          </div>
                           <p className="text-3xl font-black text-white mb-6">R$ {pixData.value.toFixed(2)}</p>
-                          <div className="mb-6 flex items-center justify-center gap-2 text-[#00f0ff] font-black font-mono text-xl animate-pulse">⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
-                          <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-5 rounded-2xl font-black uppercase text-xs mb-4">{copied ? <CheckCircle size={18} className="text-[#00f0ff]" /> : <Copy size={18} />} {copied ? "Copiado!" : "Copiar Chave PIX"}</button>
-                          <div className="bg-[#00f0ff]/10 border border-[#00f0ff]/30 p-4 rounded-xl flex items-center justify-center gap-3"><Loader2 size={16} className="animate-spin text-[#00f0ff]" /><span className="text-[9px] text-[#00f0ff] uppercase font-black tracking-widest">Aguardando Pagamento...</span></div>
+                          <div className="mb-6 flex items-center justify-center gap-2 text-[#00f0ff] font-black font-mono text-xl animate-pulse">
+                              ⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}
+                          </div>
+                          <button onClick={handleCopyPix} className="w-full flex items-center justify-center gap-3 bg-[#00f0ff] text-black py-5 rounded-2xl font-black uppercase text-xs mb-4 shadow-[0_0_20px_rgba(0,240,255,0.3)] transition-all active:scale-95">
+                              {copied ? <CheckCircle size={18} className="text-black" /> : <Copy size={18} />} {copied ? "Copiado!" : "Copiar Chave PIX"}
+                          </button>
+                          <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-center gap-3">
+                              <Loader2 size={16} className="animate-spin text-[#00f0ff]" />
+                              <span className="text-[9px] text-[#00f0ff] uppercase font-black tracking-widest">Aguardando Sistema...</span>
+                          </div>
                       </>
                   )}
               </div>
@@ -398,7 +419,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
          <ModelVideoFeed />
          
          <div className="absolute top-6 left-4 right-4 z-30 flex justify-between items-start pointer-events-none">
-            <button onClick={() => router.push('/explore')} className="bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl pointer-events-auto transition-all shadow-lg"><ArrowLeft size={16} /></button>
+            <button onClick={() => router.push('/vitrine')} className="bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl pointer-events-auto transition-all shadow-lg"><ArrowLeft size={16} /></button>
             
             <div className="flex flex-col items-end gap-2 pointer-events-auto">
               <button onClick={toggleAudio} className="bg-black/50 backdrop-blur-md border border-white/10 text-white w-10 h-10 flex items-center justify-center rounded-2xl shadow-lg transition-all hover:bg-white/10 mb-1">
@@ -530,19 +551,23 @@ function LiveClientContent() {
         const phone = localStorage.getItem("labz_player_phone");
         if (!phone) {
             alert("Você precisa fazer login para assistir a Live!");
-            router.push('/explore');
+            router.push('/vitrine');
             return;
         }
         
         setPlayerPhone(phone);
-        const tempName = `VIP_${Math.floor(Math.random() * 1000)}`; 
-        setClientName(tempName);
-
+        
+        // Busca o apelido real do banco de dados (Ou cria um VIP_123 se não tiver)
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=live_tokens`, { headers });
+        const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=live_tokens,nickname`, { headers });
         const pData = await pRes.json();
+        
         const startBalance = pData[0]?.live_tokens || 0;
         setRealBalance(startBalance);
+
+        // Define o nome de exibição no chat
+        const tempName = pData[0]?.nickname || `VIP_${Math.floor(Math.random() * 1000)}`; 
+        setClientName(tempName);
 
         const safeRoom = `live_${modelSlug.toLowerCase()}`;
         const res = await fetch(`/api/livekit/token?room=${safeRoom}&username=${encodeURIComponent(tempName)}&isModel=false`);
