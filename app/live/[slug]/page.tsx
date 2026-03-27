@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext } from "@livekit/components-react";
+import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
 import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2, CheckCircle, Clock } from "lucide-react";
@@ -38,15 +38,19 @@ function ModelVideoFeed() {
   const remoteTrack = tracks.find(t => !t.participant.isLocal);
   
   return (
-    <div className="absolute inset-0 w-full h-full bg-[#050505] z-0">
-      {remoteTrack ? (
-        <VideoTrack trackRef={remoteTrack as any} className="w-full h-full object-cover" /> 
-      ) : (
-        <div className="flex flex-col items-center justify-center h-full gap-4 text-[#D946EF]/50 z-20">
-          <Loader2 size={48} className="animate-spin" />
-          <span className="font-black uppercase tracking-widest text-xs animate-pulse text-center px-6">Conectando à Câmera...</span>
-        </div>
-      )}
+    // 🔥 CORREÇÃO DE LAYOUT: Container preto centralizado com proporção forçada 🔥
+    <div className="absolute inset-0 w-full h-full bg-black z-0 flex items-center justify-center overflow-hidden p-2 sm:p-0">
+      <div className="w-full h-full max-w-full max-h-full flex items-center justify-center aspect-video bg-[#050505] rounded-3xl overflow-hidden shadow-inner border border-white/5">
+        {remoteTrack ? (
+            // 🔥 object-contain garante que a imagem adaptativa apareça inteira 🔥
+            <VideoTrack trackRef={remoteTrack as any} className="w-full h-full object-contain" /> 
+        ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-[#D946EF]/50 z-20 p-6 text-center">
+              <Loader2 size={48} className="animate-spin" />
+              <span className="font-black uppercase tracking-widest text-[10px] animate-pulse">Aguardando sinal da Musa...</span>
+            </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -70,11 +74,9 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const publicSecRef = useRef(0);
   const privateSecRef = useRef(0);
 
-  // 🔥 ESTADOS DO CRONÔMETRO DE DEGUSTAÇÃO 🔥
   const [previewTimeLeft, setPreviewTimeLeft] = useState(30);
   const [isKicked, setIsKicked] = useState(false);
 
-  // 🔥 INTEGRAÇÃO REAL DE PAGAMENTO PIX 🔥
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<any>(null);
@@ -153,7 +155,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
       } catch(e) {}
   };
 
-  // 🔥 MOTOR DE COBRANÇA (COM CRONÔMETRO DE 30S E KICK) 🔥
   useEffect(() => {
     const timer = setInterval(() => {
       if (isKicked) return;
@@ -176,16 +177,13 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
         publicSecRef.current += 1;
         
         if (balanceRef.current < 0.35) {
-            // 🔥 DEGUSTAÇÃO COM KICK 🔥
             setPreviewTimeLeft(prev => {
                 const newTime = prev - 1;
                 
-                // Abre a loja automaticamente aos 10 segundos
                 if (newTime === 10 && !showShopModal && !showPixModal) {
                     setShowShopModal(true);
                 }
                 
-                // KICK IMEDIATO NO ZERO
                 if (newTime <= 0) {
                     clearInterval(timer);
                     setIsKicked(true);
@@ -196,14 +194,12 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
                 return newTime;
             });
         } else {
-            // Cliente tem grana, cobra normal
             if (publicSecRef.current === 20 || (publicSecRef.current > 20 && (publicSecRef.current - 20) % 60 === 0)) {
                 deducted = 0.35;
             }
             if (deducted > 0 && balanceRef.current >= deducted) {
                 balanceRef.current -= deducted; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, deducted); deductFromDatabase(deducted);
             }
-            // Se o saldo acabou agora na cobrança, a degustação volta pros 30s
             if (balanceRef.current < 0.35) {
                 setPreviewTimeLeft(30);
             }
@@ -219,7 +215,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  // 🔥 GERAÇÃO DO PIX REAL 🔥
   const generatePix = async (amount: number) => {
     setGeneratingPix(true);
     setPixTimeLeft(600);
@@ -257,7 +252,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     }
   };
 
-  // 🔥 POLLING DE PAGAMENTO (AGUARDANDO O PIX CAIR) 🔥
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (showPixModal && pixData && !paymentSuccess) {
@@ -291,7 +285,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
     if (showPixModal && pixTimeLeft > 0 && !paymentSuccess) pixTimer = setInterval(() => setPixTimeLeft(prev => prev - 1), 1000);
     else if (pixTimeLeft === 0) setShowPixModal(false);
     return () => clearInterval(pixTimer);
-  }, [showPixModal, pixTimeLeft, paymentSuccess]);
+  }, [showShopModal, showPixModal, pixTimeLeft, paymentSuccess]);
 
   const handleCopyPix = () => {
       if (pixData?.qrCodeCopiaCola) { navigator.clipboard.writeText(pixData.qrCodeCopiaCola); setCopied(true); setTimeout(() => setCopied(false), 2000); }
@@ -344,7 +338,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   };
 
   const neonClass = isPrivateShow ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)] border-2" : "border-none";
-  // O aviso de saldo baixo (sem ser a degustação inicial)
   const isLowBalance = (balance / (isPrivateShow ? 3.10 : 0.35)) <= 3 && balance > 0;
 
   return (
@@ -371,7 +364,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
         ))}
       </div>
 
-      {/* 🔥 MODAL DE LOJA DE TOKENS (BOTÃO X SEMPRE VISÍVEL) 🔥 */}
       {showShopModal && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-2xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white bg-white/5 p-3 rounded-full border border-white/10 transition-all"><X size={18} /></button>
@@ -393,7 +385,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
         </div>
       )}
 
-      {/* 🔥 MODAL PIX REAL (BOTÃO X SEMPRE VISÍVEL) 🔥 */}
       {showPixModal && pixData && (
           <div className="absolute inset-0 z-[210] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md shadow-2xl relative text-center">
@@ -453,7 +444,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
               </div>
               <button onClick={() => setShowShopModal(true)} className="bg-white/10 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] shadow-lg">+ Comprar</button>
               
-              {/* 🔥 CRONÔMETRO DE DEGUSTAÇÃO 🔥 */}
               {balance < 0.35 && previewTimeLeft > 0 && (
                 <div className="bg-red-600/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-xl font-black text-[12px] uppercase tracking-widest flex items-center gap-2 shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-pulse">
                    <Clock size={14} /> Degustação: {previewTimeLeft}s
@@ -506,14 +496,29 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
 function ClientChat({ clientName, modelSlug }: { clientName: string, modelSlug: string }) {
   const { send, chatMessages } = useChat();
   const [message, setMessage] = useState("");
+  // 🔥 NOVO ESTADO: Controla se a mensagem está sendo enviada 🔥
+  const [isSending, setIsSending] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
   
-  const handleSend = () => {
-     if (!message.trim()) return;
+  // 🔥 NOVA FUNÇÃO DE ENVIO COM TRATAMENTO DE ERRO 🔥
+  const handleSend = async () => {
+     if (!message.trim() || isSending) return;
+     
      const safeMessage = filterText(message);
-     send(safeMessage).then(() => setMessage(''));
+     setIsSending(true); // Bloqueia o botão
+
+     try {
+         await send(safeMessage); // Espera o LiveKit enviar
+         setMessage(''); // Limpa o input
+     } catch (error) {
+         console.error("Falha ao enviar mensagem:", error);
+         alert("Erro ao enviar mensagem. Tentando reconectar...");
+         // O LiveKit tenta reconectar sozinho, não precisamos fazer nada aqui
+     } finally {
+         setIsSending(false); // Libera o botão independente de erro ou sucesso
+     }
   }
 
   return (
@@ -529,7 +534,7 @@ function ClientChat({ clientName, modelSlug }: { clientName: string, modelSlug: 
               <span className={`text-[10px] font-black uppercase mb-0.5 ${isMe ? 'text-white' : isModel ? 'text-[#ff0055] drop-shadow-md' : 'text-[#00f0ff]'}`}>
                 {isModel && "👑 "} {displayName}
               </span>
-              <span className="text-[13px] text-white font-medium leading-tight">
+              <span className="text-[13px] text-white font-medium leading-tight bg-black/40 px-3 py-1.5 rounded-xl border border-white/5">
                 {msg.message}
               </span>
             </div>
@@ -541,14 +546,19 @@ function ClientChat({ clientName, modelSlug }: { clientName: string, modelSlug: 
         <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md border border-white/10 rounded-full p-1 pl-4 shadow-lg">
           <input 
              type="text" 
-             placeholder="Falar..." 
-             className="flex-1 bg-transparent border-none text-[16px] text-white outline-none placeholder:text-white/60 py-2" 
+             placeholder={isSending ? "Enviando..." : "Falar..."}
+             className="flex-1 bg-transparent border-none text-[16px] text-white outline-none placeholder:text-white/60 py-2 disabled:opacity-50" 
              value={message} 
              onChange={(e) => setMessage(e.target.value)} 
              onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
+             disabled={isSending} // 🔥 Desabilita o input enquanto envia
           />
-          <button onClick={handleSend} className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors shadow-md">
-             <Send size={14} className="-ml-0.5" />
+          <button 
+             onClick={handleSend} 
+             className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors shadow-md disabled:opacity-30 disabled:hover:bg-white/20"
+             disabled={!message.trim() || isSending} // 🔥 Desabilita o botão enquanto envia
+          >
+             {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} className="-ml-0.5" />}
           </button>
         </div>
       </div>
@@ -583,7 +593,6 @@ function LiveClientContent() {
         
         setPlayerPhone(phone);
         
-        // Busca o apelido real do banco de dados (Ou cria um VIP_123 se não tiver)
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=live_tokens,nickname`, { headers });
         const pData = await pRes.json();
@@ -591,7 +600,6 @@ function LiveClientContent() {
         const startBalance = pData[0]?.live_tokens || 0;
         setRealBalance(startBalance);
 
-        // Define o nome de exibição no chat
         const tempName = pData[0]?.nickname || `VIP_${Math.floor(Math.random() * 1000)}`; 
         setClientName(tempName);
 
@@ -605,7 +613,7 @@ function LiveClientContent() {
     if (modelSlug) initPage();
   }, [modelSlug, router, supabaseKey, supabaseUrl]);
 
-  if (!token || realBalance === null) return <div className="h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#00f0ff]" size={50} /></div>;
+  if (!token || realBalance === null) return <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 text-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={50} /><span className="text-[#D946EF] font-black uppercase text-[10px] tracking-widest animate-pulse">Entrando na sala da Musa...</span></div>;
 
   return (
     <div className="h-[100dvh] w-full bg-black overflow-hidden relative">
@@ -624,5 +632,5 @@ function LiveClientContent() {
 }
 
 export default function LiveClientPage() {
-  return <Suspense fallback={<div className="h-screen bg-black" />}><LiveClientContent /></Suspense>;
+  return <Suspense fallback={<div className="h-screen bg-black flex items-center justify-center p-6 text-center"><Loader2 className="animate-spin text-[#D946EF] mb-4" size={50} /></div>}><LiveClientContent /></Suspense>;
 }
