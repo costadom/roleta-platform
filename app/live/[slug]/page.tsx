@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { LiveKitRoom, RoomAudioRenderer, useTracks, VideoTrack, useChat, useRoomContext } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
-import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2, CheckCircle } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Gift, Lock, Wallet, X, AlertTriangle, QrCode, Copy, Coins, VolumeX, Volume2, CheckCircle, Clock } from "lucide-react";
 
 const GIFTS = [
   { id: 1, name: "Rosa", icon: "🌹", price: 5.00 },
@@ -70,6 +70,10 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const publicSecRef = useRef(0);
   const privateSecRef = useRef(0);
 
+  // 🔥 ESTADOS DO CRONÔMETRO DE DEGUSTAÇÃO 🔥
+  const [previewTimeLeft, setPreviewTimeLeft] = useState(30);
+  const [isKicked, setIsKicked] = useState(false);
+
   // 🔥 INTEGRAÇÃO REAL DE PAGAMENTO PIX 🔥
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
@@ -83,9 +87,6 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   const [activeGifts, setActiveGifts] = useState<{id: number, icon: string, sender: string}[]>([]);
   const [isBlurred, setIsBlurred] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-
-  // Exibe a degustação
-  const [showPreviewBadge, setShowPreviewBadge] = useState(balance < 0.35);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -152,9 +153,11 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
       } catch(e) {}
   };
 
-  // 🔥 MOTOR DE COBRANÇA (COM DEGUSTAÇÃO DE 20 SEGUNDOS) 🔥
+  // 🔥 MOTOR DE COBRANÇA (COM CRONÔMETRO DE 30S E KICK) 🔥
   useEffect(() => {
     const timer = setInterval(() => {
+      if (isKicked) return;
+
       let deducted = 0;
       
       if (isPrivateRef.current) {
@@ -172,25 +175,43 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
       } else {
         publicSecRef.current += 1;
         
-        // Esconde o badge de degustação se passar de 20s
-        if (publicSecRef.current >= 20 && showPreviewBadge) setShowPreviewBadge(false);
-
-        // Se deu 20 segundos E o cliente NÃO TEM CRÉDITOS, bloqueia a tela!
-        if (publicSecRef.current >= 20 && balanceRef.current < 0.35) {
-            if (!showShopModal && !showPixModal) setShowShopModal(true);
+        if (balanceRef.current < 0.35) {
+            // 🔥 DEGUSTAÇÃO COM KICK 🔥
+            setPreviewTimeLeft(prev => {
+                const newTime = prev - 1;
+                
+                // Abre a loja automaticamente aos 10 segundos
+                if (newTime === 10 && !showShopModal && !showPixModal) {
+                    setShowShopModal(true);
+                }
+                
+                // KICK IMEDIATO NO ZERO
+                if (newTime <= 0) {
+                    clearInterval(timer);
+                    setIsKicked(true);
+                    router.push('/vitrine');
+                    return 0;
+                }
+                
+                return newTime;
+            });
         } else {
-            // Cliente tem grana, vamos cobrar dele o minuto normal
+            // Cliente tem grana, cobra normal
             if (publicSecRef.current === 20 || (publicSecRef.current > 20 && (publicSecRef.current - 20) % 60 === 0)) {
                 deducted = 0.35;
             }
             if (deducted > 0 && balanceRef.current >= deducted) {
                 balanceRef.current -= deducted; setBalance(balanceRef.current); syncBalanceWithModel(balanceRef.current, deducted); deductFromDatabase(deducted);
             }
+            // Se o saldo acabou agora na cobrança, a degustação volta pros 30s
+            if (balanceRef.current < 0.35) {
+                setPreviewTimeLeft(30);
+            }
         }
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [syncBalanceWithModel, showShopModal, showPixModal, playerPhone, showPreviewBadge]);
+  }, [syncBalanceWithModel, showShopModal, showPixModal, playerPhone, isKicked, router]);
 
   useEffect(() => {
     const handleVisibility = () => setIsBlurred(document.hidden);
@@ -323,8 +344,8 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
   };
 
   const neonClass = isPrivateShow ? "border-[#ff0055] shadow-[inset_0_0_50px_rgba(255,0,85,0.4)] border-2" : "border-none";
-  // O aviso de saldo baixo não aparece na degustação pra não estragar o clima
-  const isLowBalance = (balance / (isPrivateShow ? 3.10 : 0.35)) <= 3 && balance > 0 && !showPreviewBadge;
+  // O aviso de saldo baixo (sem ser a degustação inicial)
+  const isLowBalance = (balance / (isPrivateShow ? 3.10 : 0.35)) <= 3 && balance > 0;
 
   return (
     <>
@@ -350,10 +371,10 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
         ))}
       </div>
 
-      {/* 🔥 MODAL DE LOJA DE TOKENS (LIQUID GLASS) 🔥 */}
+      {/* 🔥 MODAL DE LOJA DE TOKENS (BOTÃO X SEMPRE VISÍVEL) 🔥 */}
       {showShopModal && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-2xl z-[200] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-          {balance > 0.35 && <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white bg-white/5 p-3 rounded-full border border-white/10 transition-all"><X size={18} /></button>}
+          <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white bg-white/5 p-3 rounded-full border border-white/10 transition-all"><X size={18} /></button>
           
           <div className="w-20 h-20 bg-[#00f0ff]/10 border border-[#00f0ff]/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(0,240,255,0.2)]">
               <Coins size={36} className="text-[#00f0ff]" />
@@ -372,7 +393,7 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
         </div>
       )}
 
-      {/* 🔥 MODAL PIX REAL (LIQUID GLASS) 🔥 */}
+      {/* 🔥 MODAL PIX REAL (BOTÃO X SEMPRE VISÍVEL) 🔥 */}
       {showPixModal && pixData && (
           <div className="absolute inset-0 z-[210] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-[#0a0a0a] border border-[#00f0ff]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md shadow-2xl relative text-center">
@@ -380,9 +401,9 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
                   
                   {paymentSuccess ? (
                       <div className="py-10 animate-in zoom-in duration-500">
-                          <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(16,185,129,0.5)]"><CheckCircle size={50} className="text-black"/></div>
-                          <h2 className="text-3xl font-black uppercase italic text-emerald-500 mb-2">Pago!</h2>
-                          <p className="text-[10px] text-white/60 uppercase font-black tracking-widest">LiveTokens Adicionados.</p>
+                          <div className="w-24 h-24 bg-[#00f0ff] rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(0,240,255,0.6)]"><CheckCircle size={50} className="text-black"/></div>
+                          <h2 className="text-3xl font-black uppercase italic text-[#00f0ff] mb-2">Pago!</h2>
+                          <p className="text-[10px] text-white/60 uppercase font-black tracking-widest">{pixData.value} LiveTokens na Carteira.</p>
                       </div>
                   ) : (
                       <>
@@ -432,8 +453,13 @@ function InteractiveRoom({ clientName, playerPhone, initialBalance, modelSlug }:
               </div>
               <button onClick={() => setShowShopModal(true)} className="bg-white/10 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] shadow-lg">+ Comprar</button>
               
-              {/* Badge de Degustação */}
-              {showPreviewBadge && <div className="bg-emerald-500 text-black px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-1 shadow-lg"> Degustação 20s</div>}
+              {/* 🔥 CRONÔMETRO DE DEGUSTAÇÃO 🔥 */}
+              {balance < 0.35 && previewTimeLeft > 0 && (
+                <div className="bg-red-600/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-xl font-black text-[12px] uppercase tracking-widest flex items-center gap-2 shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-pulse">
+                   <Clock size={14} /> Degustação: {previewTimeLeft}s
+                </div>
+              )}
+
               {isPrivateShow && <div className="bg-[#ff0055] text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-1 animate-pulse shadow-[0_0_15px_rgba(255,0,85,0.6)]"><Lock size={10} /> Privado Ativo</div>}
             </div>
          </div>
