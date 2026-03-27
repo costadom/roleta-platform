@@ -26,7 +26,7 @@ export default function LandingPage() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
-        // 🔥 CORREÇÃO DO ERRO 400: Puxando da tabela Configs, onde bg_url e profile_url realmente existem 🔥
+        // Puxando da tabela Configs, onde bg_url e profile_url realmente existem
         const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=bg_url,profile_url&limit=20`, { headers });
         if (resConfigs.ok) {
             const configsData = await resConfigs.json();
@@ -68,11 +68,12 @@ export default function LandingPage() {
             <img 
               key={idx} 
               src={bg} 
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out ${idx === bgIndex ? 'opacity-20 scale-105' : 'opacity-0 scale-100'}`} 
+              // 🔥 AUMENTADA A OPACIDADE DA FOTO PARA 50% (opacity-50) 🔥
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out ${idx === bgIndex ? 'opacity-50 scale-105' : 'opacity-0 scale-100'}`} 
             />
         ))}
-        {/* Película escura de vidro por cima do fundo */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-black/80 to-[#050505] backdrop-blur-md"></div>
+        {/* 🔥 PELÍCULA DE VIDRO MAIS CLARA (DE 95% para 60% e 40%) 🔥 */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/60 via-[#050505]/40 to-[#050505]/95 backdrop-blur-sm"></div>
       </div>
 
       {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
