@@ -20,7 +20,7 @@ export default function LandingPage() {
     const logged = localStorage.getItem("labz_player_logged") === "true";
     if (logged) {
       router.push('/vitrine');
-      return;
+      // O 'return' que travava o carregamento infinito foi removido daqui!
     }
 
     async function fetchData() {
@@ -39,6 +39,7 @@ export default function LandingPage() {
       } catch (err) {
           console.error(err);
       } finally { 
+          // Agora ele SEMPRE desliga a tela de carregamento, mesmo se o redirecionamento demorar
           setInitialLoading(false); 
       }
     }
@@ -64,7 +65,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
       
       {/* FUNDO ANIMADO TRANSLÚCIDO (GLASSMORPHISM) */}
-      <div className="fixed inset-0 z-0 bg-black">
+      <div className="fixed inset-0 z-0 bg-black pointer-events-none">
         {modelsBgs.map((bg, idx) => (
             <img 
               key={idx} 
@@ -76,11 +77,11 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-black/80 to-[#050505] backdrop-blur-md"></div>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
-      <div className="relative z-10 flex flex-col items-center justify-center pt-32 pb-16 px-6">
+      {/* CONTEÚDO PRINCIPAL DA PÁGINA (Puxado mais para cima com pt-16) */}
+      <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6">
         
         {/* LOGO CENTRALIZADO */}
-        <div className="flex flex-col items-center justify-center mb-10">
+        <div className="flex flex-col items-center justify-center mb-8 pointer-events-none">
             <span className="text-6xl sm:text-7xl mb-2 text-[#D946EF] drop-shadow-[0_0_20px_rgba(217,70,239,0.5)]">
                 🔱
             </span>
@@ -89,22 +90,22 @@ export default function LandingPage() {
             </h1>
         </div>
 
-        {/* BOTÃO ÚNICO DE ENTRAR/CADASTRAR */}
-        <div className="w-full max-w-sm mb-20">
-            <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-95">
-                <LogIn size={18} /> Entre ou Cadastre-se
+        {/* BOTÃO ÚNICO DE ENTRAR/CADASTRAR (Clica em qualquer milímetro e funciona) */}
+        <div className="w-full max-w-sm mb-16">
+            <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-95 cursor-pointer">
+                <LogIn size={18} className="pointer-events-none" /> 
+                <span className="pointer-events-none">Entre ou Cadastre-se</span>
             </button>
         </div>
 
-        {/* SEÇÃO EXPERIÊNCIA PREMIUM */}
+        {/* SEÇÃO EXPERIÊNCIA PREMIUM (Ícones Neutros / Brancos) */}
         <div className="w-full max-w-5xl bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[3rem] p-8 sm:p-12 shadow-2xl relative overflow-hidden mb-12">
-            <h2 className="text-2xl sm:text-3xl font-black uppercase italic text-white mb-10 tracking-tighter">
+            <h2 className="text-2xl sm:text-3xl font-black uppercase italic text-white mb-10 tracking-tighter pointer-events-none">
                 <span className="text-[#D946EF]">Experiência</span> Premium
             </h2>
             
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-12">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-12 pointer-events-none">
                 <div className="flex flex-col items-start text-left">
-                    {/* ÍCONE NEUTRO/BRANCO */}
                     <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5">
                         <Radio size={20} className="text-white/80" />
                     </div>
@@ -132,7 +133,7 @@ export default function LandingPage() {
 
         {/* SEÇÃO PARA MODELOS */}
         <div className="w-full max-w-5xl bg-black/60 backdrop-blur-md border border-white/5 rounded-[3rem] p-8 sm:p-12 shadow-xl flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="flex-1 text-center md:text-left">
+            <div className="flex-1 text-center md:text-left pointer-events-none">
                 <h2 className="text-xl sm:text-2xl font-black uppercase italic text-white mb-3 tracking-tighter">
                     É Criadora de <span className="text-[#D946EF]">Conteúdo?</span>
                 </h2>
@@ -141,15 +142,17 @@ export default function LandingPage() {
                 </p>
             </div>
             
-            <div className="flex flex-col w-full md:w-auto gap-3">
+            <div className="flex flex-col w-full md:w-auto gap-4">
                 {/* 🔥 BOTÃO CORRIGIDO PARA A ROTA /cadastro 🔥 */}
-                <button onClick={() => router.push('/cadastro')} className="w-full bg-[#D946EF] hover:bg-[#f062ff] text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(217,70,239,0.3)] hover:scale-[1.02] flex items-center justify-center gap-2">
-                    <UserPlus size={16} /> Quero ser Modelo
+                <button onClick={() => router.push('/cadastro')} className="w-full bg-[#D946EF] hover:bg-[#f062ff] text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(217,70,239,0.3)] hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer">
+                    <UserPlus size={16} className="pointer-events-none" />
+                    <span className="pointer-events-none">Quero ser Modelo</span>
                 </button>
                 
                 {/* 🔥 BOTÃO CORRIGIDO PARA A ROTA /admin 🔥 */}
-                <button onClick={() => router.push('/admin')} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2">
-                    <ShieldCheck size={16} /> Sou Modelo (Login)
+                <button onClick={() => router.push('/admin')} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <ShieldCheck size={16} className="pointer-events-none" />
+                    <span className="pointer-events-none">Sou Modelo (Login)</span>
                 </button>
             </div>
         </div>
