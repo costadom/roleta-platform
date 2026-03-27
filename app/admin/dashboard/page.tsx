@@ -6,7 +6,7 @@ import {
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -56,7 +56,8 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha" | "chat">("finance");
+  // 🔥 NOVO TIPO NA ABA: followers 🔥
+  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
@@ -98,6 +99,12 @@ function DashboardContent() {
   // 🔥 ESTADOS DE NOTIFICAÇÃO DA MODELO 🔥
   const [unreadChatCounts, setUnreadChatCounts] = useState(0);
 
+  // 🔥 ESTADOS DE SEGUIDORES E INTERAÇÕES (NOVIDADE) 🔥
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [showMediaStats, setShowMediaStats] = useState<any | null>(null);
+  const [mediaComments, setMediaComments] = useState<any[]>([]);
+  const [mediaLikes, setMediaLikes] = useState<number>(0);
+
   // 🔥 ESTADOS DO CHAT DA MODELO 🔥
   const [chatList, setChatList] = useState<any[]>([]);
   const [activeChat, setActiveChat] = useState<any | null>(null);
@@ -132,7 +139,7 @@ function DashboardContent() {
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-      const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch] = await Promise.all([
+      const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch, resFollowers] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
         fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
@@ -141,7 +148,8 @@ function DashboardContent() {
         fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => [])
+        fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => []),
+        fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
       if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
@@ -155,12 +163,38 @@ function DashboardContent() {
       setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
       setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
       setMediaList(Array.isArray(resMedia) ? resMedia : []); setVideoRequests(Array.isArray(resVideos) ? resVideos : []); setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
+      
+      setFollowersList(Array.isArray(resFollowers) ? resFollowers : []); // 🔥 SALVA OS SEGUIDORES
+
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
       setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
     } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
+
+  // 🔥 CARREGAR CURTIDAS E COMENTÁRIOS DA FOTO ESPECÍFICA 🔥
+  const loadMediaStats = async (mediaItem: any) => {
+      setShowMediaStats(mediaItem);
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+          const [likesRes, commentsRes] = await Promise.all([
+              fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${mediaItem.id}&select=id`, { headers }).then(r=>r.json()),
+              fetch(`${supabaseUrl}/rest/v1/Comments?media_id=eq.${mediaItem.id}&order=created_at.desc`, { headers }).then(r=>r.json())
+          ]);
+          setMediaLikes(likesRes?.length || 0);
+          setMediaComments(commentsRes || []);
+      } catch(e){}
+  }
+
+  // 🔥 APAGAR COMENTÁRIO (MODERAÇÃO) 🔥
+  const handleDeleteComment = async (commentId: string) => {
+      if(!confirm("Apagar este comentário?")) return;
+      try {
+          await fetch(`${supabaseUrl}/rest/v1/Comments?id=eq.${commentId}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+          setMediaComments(prev => prev.filter(c => c.id !== commentId));
+      } catch(e) {}
+  }
 
   // 🔥 CHECAR NOTIFICAÇÕES (MODELO) 🔥
   const checkModelNotifications = async () => {
@@ -482,8 +516,15 @@ function DashboardContent() {
         <div className="flex justify-between items-center mb-6">
           <button onClick={() => isSuper ? router.push('/admin/super') : (localStorage.clear(), router.push('/admin'))} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 hover:text-white bg-white/5 px-4 py-2 rounded-xl transition-all"> {isSuper ? "Voltar Master" : "Sair"} </button>
           <div className="text-right flex flex-col items-end">
-            <h1 className="text-2xl font-black uppercase text-[#FF1493] tracking-tighter">PAINEL VIP</h1>
-            <div className="flex items-center gap-2 group cursor-pointer border-b border-transparent hover:border-[#FFD700] transition-all pb-1">
+            <div className="flex items-center gap-3">
+                {/* 🔥 CONTADOR DE SEGUIDORES NO TOPO 🔥 */}
+                <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg">
+                    <Heart size={12} className="text-[#FF1493]" fill="currentColor" />
+                    <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
+                </div>
+                <h1 className="text-2xl font-black uppercase text-[#FF1493] tracking-tighter">PAINEL VIP</h1>
+            </div>
+            <div className="flex items-center gap-2 group cursor-pointer border-b border-transparent hover:border-[#FFD700] transition-all pb-1 mt-1">
                 <Edit3 size={12} className="text-[#FFD700]/50 group-hover:text-[#FFD700]"/>
                 <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} onBlur={async () => { await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName }) }); }} className="bg-transparent text-[#FFD700] text-[10px] font-bold uppercase tracking-[0.2em] text-right outline-none w-32" placeholder="SEU NICKNAME" />
             </div>
@@ -552,8 +593,38 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
           <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
-          <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Fãs</button>
+          
+          {/* 🔥 NOVA ABA SEGUIDORES 🔥 */}
+          <button onClick={() => setActiveTab("followers")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "followers" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Seguidores</button>
+          
+          {/* Aba Jogadores Master (Intacta) */}
+          <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Gerir Fãs</button>
         </div>
+
+        {/* 🔥 NOVA ÁREA: SEGUIDORES DA MUSA 🔥 */}
+        {activeTab === "followers" && (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
+                    <h2 className="text-xl font-black uppercase italic mb-6 text-[#FF1493] flex items-center gap-2"><Heart size={24}/> Seus Fãs VIPs</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {followersList.length > 0 ? followersList.map((fan) => (
+                            <div key={fan.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center gap-4 shadow-lg hover:border-[#FF1493]/30 transition-all">
+                                <div className="w-12 h-12 rounded-full bg-[#111] border border-[#FF1493]/30 flex items-center justify-center shrink-0">
+                                    <User size={20} className="text-[#FF1493]"/>
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-xs font-black uppercase text-white truncate">{fan.name || fan.nickname || "Fã VIP"}</p>
+                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">{fan.whatsapp}</p>
+                                </div>
+                                <button onClick={() => setActiveTab("chat")} className="p-3 bg-white/5 rounded-xl hover:bg-[#FF1493] hover:text-white transition-all text-white/50"><MessageCircle size={16}/></button>
+                            </div>
+                        )) : (
+                            <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Ninguém está te seguindo ainda. Divulgue seu link!</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* 🔥 ABA DE CHAT DA MODELO COMO LISTA (O Modal flutuante abre ao clicar) 🔥 */}
         {activeTab === "chat" && (
@@ -906,8 +977,8 @@ function DashboardContent() {
                     {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <button onClick={async () => { if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={24}/></button>
+                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
+                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="pointer-events-auto p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={24}/></button>
                             </div>
                             <div className="absolute top-4 left-4"><Star size={16} fill="#FFD700" className="text-[#FFD700] drop-shadow-md" /></div>
                         </div>
@@ -961,12 +1032,65 @@ function DashboardContent() {
                     {mediaList.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <button onClick={async () => { if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-4 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={24}/></button>
+                            
+                            {/* 🔥 BOTÕES DA GALERIA OTIMIZADOS (VER E APAGAR) 🔥 */}
+                            <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none gap-2">
+                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="pointer-events-auto p-3 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full hover:bg-red-500 hover:text-white transition-colors shadow-lg"><Trash2 size={20}/></button>
+                                <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="pointer-events-auto p-3 bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/50 rounded-full hover:bg-[#FF1493] hover:text-white transition-colors shadow-lg"><Eye size={20}/></button>
                             </div>
+
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
                         </div>
                     ))}
+                </div>
+            </div>
+        )}
+
+        {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS) 🔥 */}
+        {showMediaStats && (
+            <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
+                <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
+                    <X size={20}/>
+                </button>
+                
+                {/* LADO DA IMAGEM */}
+                <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
+                    <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
+                </div>
+                
+                {/* LADO DOS COMENTÁRIOS E INFOS */}
+                <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
+                    
+                    {/* Cabeçalho do Modal */}
+                    <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center text-center">
+                        <div className="flex items-center gap-2 mb-3 bg-[#FF1493]/10 border border-[#FF1493]/30 px-4 py-2 rounded-full">
+                            <Heart size={16} fill="currentColor" className="text-[#FF1493]"/>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[#FF1493]">{mediaLikes} Curtidas</span>
+                        </div>
+                        {showMediaStats.caption ? (
+                            <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{showMediaStats.caption}"</p>
+                        ) : (
+                            <p className="text-xs italic text-white/40 font-medium">Sem legenda</p>
+                        )}
+                    </div>
+
+                    {/* Lista de Comentários */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
+                        <h3 className="text-[10px] font-black uppercase text-white/50 tracking-widest mb-4">Comentários dos Fãs</h3>
+                        {mediaComments.length > 0 ? mediaComments.map(c => (
+                            <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm relative group">
+                                <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
+                                <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
+                                
+                                {/* Botão de Moderação (Apagar Comentário) */}
+                                <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
+                                    <Trash2 size={14}/>
+                                </button>
+                            </div>
+                        )) : (
+                            <p className="text-center text-white/30 text-xs italic font-medium mt-10">Nenhum comentário nesta foto ainda.</p>
+                        )}
+                    </div>
                 </div>
             </div>
         )}
