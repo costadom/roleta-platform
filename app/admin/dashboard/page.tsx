@@ -6,7 +6,7 @@ import {
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play, ShieldCheck
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -24,6 +24,12 @@ const censorText = (text: string) => {
   let filteredText = text;
   forbiddenPatterns.forEach(pattern => { filteredText = filteredText.replace(pattern, " [⚠️ DADOS PROTEGIDOS] "); });
   return filteredText;
+};
+
+const formatAudioTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
 };
 
 // 🔥 ESPIÃO LABZ 🔥
@@ -48,15 +54,18 @@ class ErrorBoundary extends Component<any, any> {
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const modelId = searchParams.get("model");
-  const modelSlug = searchParams.get("slug");
+  
+  const urlModelId = searchParams.get("model");
+  const urlModelSlug = searchParams.get("slug");
+  const modelId = (urlModelId && urlModelId !== "undefined" && urlModelId !== "null") ? urlModelId : (typeof window !== "undefined" ? localStorage.getItem("labz_model_id") : null);
+  const modelSlug = (urlModelSlug && urlModelSlug !== "undefined" && urlModelSlug !== "null") ? urlModelSlug : (typeof window !== "undefined" ? localStorage.getItem("labz_model_slug") : null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [modelUrl, setModelUrl] = useState("");
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha" | "chat" | "followers">("finance");
+  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
@@ -76,7 +85,10 @@ function DashboardContent() {
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [currentProfile, setCurrentProfile] = useState<string | null>(null);
   const [showcaseVisible, setShowcaseVisible] = useState(false);
+  
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
+  const [uploadingSliceMedia, setUploadingSliceMedia] = useState(false);
+
   const [bio, setBio] = useState("");
   const [savingHub, setSavingHub] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -96,7 +108,6 @@ function DashboardContent() {
   const [showRoletaTutorial, setShowRoletaTutorial] = useState(false); 
 
   const [unreadChatCounts, setUnreadChatCounts] = useState(0);
-
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [showMediaStats, setShowMediaStats] = useState<any | null>(null);
   const [mediaComments, setMediaComments] = useState<any[]>([]);
@@ -123,9 +134,6 @@ function DashboardContent() {
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
-  // 🔥 ESTADO DE UPLOAD DIRETO NA FATIA 🔥
-  const [uploadingSliceMedia, setUploadingSliceMedia] = useState(false);
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -136,21 +144,33 @@ function DashboardContent() {
   }, [modelSlug]);
 
   const loadData = async () => {
-    if (!modelId) return;
+    if (!modelId) {
+        setDashboardLoading(false);
+        return;
+    }
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+      
+      const safeFetch = async (url: string) => {
+          try {
+              const res = await fetch(url, { headers });
+              if (!res.ok) return []; 
+              return await res.json();
+          } catch (e) { return []; }
+      };
+
       const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch, resFollowers] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => [])
+        safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
+        safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`),
+        safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`),
+        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`)
       ]);
 
       if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
@@ -160,13 +180,14 @@ function DashboardContent() {
         localStorage.setItem("labz_model_id", resModel[0].id);
         localStorage.setItem("labz_model_slug", resModel[0].slug);
       }
+      
       if (resConfig && resConfig[0]) {
         setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
       }
+
       setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
       setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
       setMediaList(Array.isArray(resMedia) ? resMedia : []); setVideoRequests(Array.isArray(resVideos) ? resVideos : []); setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
-      
       setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
 
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
@@ -179,33 +200,29 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 HANDLER DE UPLOAD DE MÍDIA NA FATIA DA ROLETA 🔥
-  const handleSliceMediaUpload = async (e: any) => {
-      const files = Array.from(e.target.files) as File[];
-      if (!files.length) return;
-      
-      const currentMedia = editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : [];
-      if (currentMedia.length + files.length > 10) return alert("Você só pode enviar no máximo 10 arquivos por fatia.");
-
-      setUploadingSliceMedia(true);
+  const generateDefaultPrizes = async () => {
+      if (!modelId) return;
+      setDashboardLoading(true);
       try {
-          const newUrls = [];
-          for (const file of files) {
-              const ext = file.name.split('.').pop();
-              const fileName = `${modelId}/slice_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-              const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, {
-                  method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file
-              });
-              if (res.ok) {
-                  newUrls.push(`${supabaseUrl}/storage/v1/object/public/assets/${fileName}`);
-              }
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+          const defaultSlices = [
+              { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60 },
+              { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50 },
+              { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40 },
+              { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30 },
+              { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20 },
+              { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10 },
+              { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01 },
+              { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01 }
+          ];
+          for (const slice of defaultSlices) {
+              await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers, body: JSON.stringify(slice) });
           }
-          const updatedUrls = [...currentMedia, ...newUrls].join(',');
-          setEditingPrize({...editingPrize, delivery_value: updatedUrls});
-      } catch(e) {
-          alert("Erro ao subir mídia para a roleta.");
-      } finally {
-          setUploadingSliceMedia(false);
+          alert("Slots gerados com sucesso!");
+          loadData(); 
+      } catch (error) {
+          alert("Erro de conexão ao gerar fatias. Atualize a página.");
+          setDashboardLoading(false);
       }
   };
 
@@ -213,30 +230,21 @@ function DashboardContent() {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           const mediaIds = medias.map(m => m.id);
-          
-          let likesList: any[] = [];
-          let commentsList: any[] = [];
-
+          let likesList: any[] = []; let commentsList: any[] = [];
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(',');
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()),
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
               ]);
-              
               likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url }));
               commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url }));
           }
-
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
-          const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
-              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-              .slice(0, 40);
-
+          const combinedFeed = [...followersMapped, ...likesList, ...commentsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 40);
           setActivityFeed(combinedFeed);
       } catch (e) {}
   };
-
 
   const loadMediaStats = async (mediaItem: any) => {
       setShowMediaStats(mediaItem);
@@ -267,7 +275,6 @@ function DashboardContent() {
           if (!cRes.ok) return;
           const chats = await cRes.json();
           const chatIds = chats.map((c: any) => c.id);
-          
           if (chatIds.length > 0) {
               const mRes = await fetch(`${supabaseUrl}/rest/v1/Messages?chat_id=in.(${chatIds.join(',')})&is_read=eq.false&sender_type=eq.player&select=id`, { headers });
               if (mRes.ok) {
@@ -317,7 +324,6 @@ function DashboardContent() {
           if (res.ok) {
               const msgs = await res.json();
               setChatMessages(msgs);
-              
               const unread = msgs.filter((m:any) => m.sender_type === 'player' && !m.is_read);
               if (unread.length > 0) {
                   setUnreadChatCounts(0);
@@ -327,35 +333,23 @@ function DashboardContent() {
               }
           }
           if (scroll) setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-      } catch (e) { console.error("Erro Mensagens", e); }
+      } catch (e) {}
   };
 
   const handleAdminSendMessage = async (contentStr = "", mediaUrl = null, isLocked = false, price = 0, mType = 'text') => {
       const textToSend = contentStr || chatInput;
       if (!textToSend.trim() && !mediaUrl) return;
-      
       const censored = censorText(textToSend);
-      const msgObj = { 
-          chat_id: activeChat.id, 
-          sender_type: 'model', 
-          content: censored, 
-          media_url: mediaUrl,
-          media_type: mType,
-          is_locked: isLocked,
-          price: price,
-          created_at: new Date().toISOString() 
-      };
-
+      const msgObj = { chat_id: activeChat.id, sender_type: 'model', content: censored, media_url: mediaUrl, media_type: mType, is_locked: isLocked, price: price, created_at: new Date().toISOString() };
       setChatMessages(prev => [...prev, msgObj]);
       if(!mediaUrl) setChatInput("");
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
           await fetch(`${supabaseUrl}/rest/v1/Messages`, { method: 'POST', headers, body: JSON.stringify(msgObj) });
           await fetch(`${supabaseUrl}/rest/v1/Chats?id=eq.${activeChat.id}`, { method: 'PATCH', headers, body: JSON.stringify({ updated_at: new Date().toISOString() }) });
           loadChatList();
-      } catch(e) { console.error("Erro envio", e) }
+      } catch(e) {}
   };
 
   const startRecording = async () => {
@@ -364,35 +358,25 @@ function DashboardContent() {
           let mimeType = 'audio/webm'; 
           if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4'; 
           else if (MediaRecorder.isTypeSupported('audio/aac')) mimeType = 'audio/aac';
-          
           const mediaRecorder = new MediaRecorder(stream, { mimeType });
           mediaRecorderRef.current = mediaRecorder;
           audioChunksRef.current = [];
-
-          mediaRecorder.ondataavailable = (event) => {
-              if (event.data.size > 0) audioChunksRef.current.push(event.data);
-          };
-
+          mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
           mediaRecorder.onstop = async () => {
               const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('aac') ? 'aac' : 'webm';
               const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
               stream.getTracks().forEach(track => track.stop());
               await uploadAudio(audioBlob, ext);
           };
-
           mediaRecorder.start();
-          setIsRecording(true);
-          setRecordingTime(0);
+          setIsRecording(true); setRecordingTime(0);
           timerRef.current = setInterval(() => setRecordingTime(prev => prev + 1), 1000);
-      } catch (err) {
-          alert("Permita o acesso ao microfone para gravar áudios.");
-      }
+      } catch (err) { alert("Permita o acesso ao microfone."); }
   };
 
   const stopRecording = () => {
       if (mediaRecorderRef.current && isRecording) {
-          mediaRecorderRef.current.stop();
-          setIsRecording(false);
+          mediaRecorderRef.current.stop(); setIsRecording(false);
           if (timerRef.current) clearInterval(timerRef.current);
       }
   };
@@ -400,9 +384,7 @@ function DashboardContent() {
   const uploadAudio = async (blob: Blob, ext: string) => {
       try {
           const fileName = `${modelId}/audio_${Date.now()}.${ext}`;
-          const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
-              method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": blob.type }, body: blob 
-          });
+          const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": blob.type }, body: blob });
           if (res.ok) {
               const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
               handleAdminSendMessage("🎙️ Mensagem de Voz", url, false, 0, 'audio');
@@ -414,9 +396,7 @@ function DashboardContent() {
       const file = e.target.files?.[0];
       if (file) { 
           if (file.size > 50 * 1024 * 1024) return alert("Máximo 50MB!"); 
-          setChatMediaFile(file); 
-          setChatMediaPreview(URL.createObjectURL(file)); 
-          setShowMediaModal(true);
+          setChatMediaFile(file); setChatMediaPreview(URL.createObjectURL(file)); setShowMediaModal(true);
       }
   };
 
@@ -424,33 +404,37 @@ function DashboardContent() {
       if (!chatMediaFile) return;
       const numericPrice = Number(chatMediaPrice.replace(/\D/g, "")) / 100;
       if (isChatMediaPaid && numericPrice < 10) return alert("Mínimo R$ 10,00 para mídias pagas.");
-      
       setUploading(true);
       try {
           const ext = chatMediaFile.name.split('.').pop();
           const typeFolder = chatMediaFile.type.startsWith('video/') ? 'video' : 'image';
           const fileName = `${modelId}/chat_${typeFolder}_${Date.now()}.${ext}`;
-          
-          const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { 
-              method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": chatMediaFile.type }, body: chatMediaFile 
-          });
-          
+          const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": chatMediaFile.type }, body: chatMediaFile });
           if (res.ok) {
               const url = `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
-              await handleAdminSendMessage(
-                  isChatMediaPaid ? `🔒 Conteúdo Exclusivo Bloqueado` : `📸 Mídia Gratuita`, 
-                  url, 
-                  isChatMediaPaid, 
-                  isChatMediaPaid ? numericPrice : 0, 
-                  typeFolder
-              );
-              setShowMediaModal(false);
-              setChatMediaFile(null);
-              setChatMediaPreview(null);
-              setIsChatMediaPaid(false);
-              setChatMediaPrice("");
+              await handleAdminSendMessage(isChatMediaPaid ? `🔒 Conteúdo Exclusivo Bloqueado` : `📸 Mídia Gratuita`, url, isChatMediaPaid, isChatMediaPaid ? numericPrice : 0, typeFolder);
+              setShowMediaModal(false); setChatMediaFile(null); setChatMediaPreview(null); setIsChatMediaPaid(false); setChatMediaPrice("");
           }
-      } catch (e) { alert("Erro ao enviar mídia."); } finally { setUploading(false); }
+      } catch (e) {} finally { setUploading(false); }
+  };
+
+  const handleSliceMediaUpload = async (e: any) => {
+      const files = Array.from(e.target.files) as File[];
+      if (!files.length) return;
+      const currentMedia = editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : [];
+      if (currentMedia.length + files.length > 10) return alert("Você só pode enviar no máximo 10 arquivos por fatia.");
+      setUploadingSliceMedia(true);
+      try {
+          const newUrls = [];
+          for (const file of files) {
+              const ext = file.name.split('.').pop();
+              const fileName = `${modelId}/slice_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+              const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file });
+              if (res.ok) newUrls.push(`${supabaseUrl}/storage/v1/object/public/assets/${fileName}`);
+          }
+          const updatedUrls = [...currentMedia, ...newUrls].join(',');
+          setEditingPrize({...editingPrize, delivery_value: updatedUrls});
+      } catch(e) { alert("Erro ao subir mídia para a roleta."); } finally { setUploadingSliceMedia(false); }
   };
 
   const handleChatPriceInput = (e: any) => { setChatMediaPrice(e.target.value); };
@@ -461,10 +445,7 @@ function DashboardContent() {
     try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
         await fetch(`${supabaseUrl}/rest/v1/VideoRequests?id=eq.${reqId}`, { method: "PATCH", headers, body: JSON.stringify({ drive_link: driveLink, status: 'entregue' }) });
-        const modelCut = price * 0.70;
-        let platformCut = price * 0.30;
-        let affiliateCut = 0;
-        let madrinhaId = modelData?.referred_by;
+        const modelCut = price * 0.70; let platformCut = price * 0.30; let affiliateCut = 0; let madrinhaId = modelData?.referred_by;
         if (madrinhaId) {
             const dataCadastro = new Date(modelData.created_at).getTime();
             const dias = (new Date().getTime() - dataCadastro) / (1000 * 3600 * 24);
@@ -477,7 +458,7 @@ function DashboardContent() {
         await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}`, { method: "PATCH", headers, body: JSON.stringify({ balance: modelBalance + modelCut }) });
         await fetch(`${supabaseUrl}/rest/v1/Transactions`, { method: "POST", headers, body: JSON.stringify({ model_id: modelId, player_phone: playerPhone, real_amount: price, model_cut: modelCut, platform_cut: platformCut, status: 'aprovado' }) });
         loadData(); alert("Vídeo entregue e saldo creditado!");
-    } catch(e) { alert("Erro ao entregar."); }
+    } catch(e) {}
   };
 
   const handlePriceInput = (e: any) => { setRawPrice(e.target.value.replace(/\D/g, "")); };
@@ -517,7 +498,7 @@ function DashboardContent() {
             await fetch(`${supabaseUrl}/rest/v1/Media`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId, url, price: isPaidMedia ? numericPrice : 0, caption: newMediaCaption }) });
             setSelectedGalleryFile(null); setGalleryPreviewUrl(null); setRawPrice(""); setNewMediaCaption(""); setIsPaidMedia(false); loadData(); alert("Publicada!");
         }
-    } catch (e) { alert("Erro ao publicar."); } finally { setUploading(false); }
+    } catch (e) {} finally { setUploading(false); }
   };
 
   const onChooseScratchFile = (e: any) => {
@@ -537,7 +518,7 @@ function DashboardContent() {
               await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId, photo_url: url, active: true }) });
               setSelectedScratchFile(null); setScratchPreviewUrl(null); loadData(); alert("Foto da Raspadinha adicionada!");
           }
-      } catch (e: any) { alert("Erro ao subir foto."); } finally { setUploadingScratch(false); }
+      } catch (e: any) {} finally { setUploadingScratch(false); }
   };
 
   const checkIsFake = (prize: any) => {
@@ -558,16 +539,11 @@ function DashboardContent() {
       else { alert("O link é: " + text); }
   };
 
-  const handleStartLiveStudio = () => {
-    router.push(`/admin/studio`);
-  };
-
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative overflow-x-hidden">
       
-      {/* 🔥 CENTRAL DE NOTIFICAÇÕES (DRAWER/MODAL) 🔥 */}
       {showNotificationsPanel && (
           <>
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowNotificationsPanel(false)}></div>
@@ -590,16 +566,10 @@ function DashboardContent() {
                                       {n.type === 'follower' && <><p className="text-[10px] font-black uppercase text-[#FF1493]">Novo Fã VIP</p><p className="text-xs text-white truncate">{n.name || n.nickname || "Fã VIP"} começou a te seguir!</p></>}
                                       {n.type === 'like' && <><p className="text-[10px] font-black uppercase text-emerald-500">Nova Curtida</p><p className="text-xs text-white truncate">Alguém curtiu sua foto na Galeria.</p></>}
                                       {n.type === 'comment' && <><p className="text-[10px] font-black uppercase text-[#00f0ff]">Novo Comentário</p><p className="text-xs text-white truncate">{n.player_name || 'Fã'} comentou: "{n.content}"</p></>}
-                                      
-                                      <p className="text-[8px] text-white/30 uppercase font-bold mt-1 tracking-widest">
-                                          {new Date(n.created_at).toLocaleDateString()} às {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                      </p>
+                                      <p className="text-[8px] text-white/30 uppercase font-bold mt-1 tracking-widest">{new Date(n.created_at).toLocaleDateString()} às {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                                   </div>
-
                                   {(n.type === 'like' || n.type === 'comment') && n.media_url && (
-                                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0">
-                                          <img src={n.media_url} className="w-full h-full object-cover" />
-                                      </div>
+                                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0"><img src={n.media_url} className="w-full h-full object-cover" /></div>
                                   )}
                               </div>
                           ))
@@ -612,35 +582,23 @@ function DashboardContent() {
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <button onClick={() => isSuper ? router.push('/admin/super') : (localStorage.clear(), router.push('/admin'))} className="flex items-center gap-2 text-[10px] font-black uppercase text-white/30 hover:text-white bg-white/5 px-4 py-2 rounded-xl transition-all"> {isSuper ? "Voltar Master" : "Sair"} </button>
-          
           <div className="text-right flex flex-col items-end">
             <div className="flex items-center gap-4">
-                
-                {/* 🔥 BOTÃO GIGANTE DE INICIAR LIVE 🔥 */}
-                <button 
-                   onClick={handleStartLiveStudio}
-                   className="bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-4 py-2 rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.3)] hover:bg-[#00f0ff] hover:text-black transition-all group animate-pulse"
-                >
+                <button onClick={() => router.push(`/admin/studio`)} className="bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-4 py-2 rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.3)] hover:bg-[#00f0ff] hover:text-black transition-all group animate-pulse">
                    <Play size={16} className="text-[#00f0ff] group-hover:text-black" fill="currentColor" />
                    <span className="text-[10px] font-black uppercase tracking-widest text-[#00f0ff] group-hover:text-black">Ficar Ao Vivo</span>
                 </button>
-
-                {/* CONTADOR DE SEGUIDORES + SINO DE NOTIFICAÇÕES */}
                 <div className="flex items-center gap-3">
                     <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg hidden sm:flex">
                         <Heart size={12} className="text-[#FF1493]" fill="currentColor" />
                         <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
                     </div>
-                    
                     <button onClick={() => setShowNotificationsPanel(true)} className="relative w-8 h-8 rounded-full bg-[#D946EF]/20 border border-[#D946EF]/50 flex items-center justify-center text-[#D946EF] hover:bg-[#D946EF] hover:text-white transition-all shadow-[0_0_10px_rgba(217,70,239,0.3)]">
                         <Bell size={14} className="animate-ring" />
-                        {activityFeed.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#00f0ff] rounded-full border-2 border-black animate-pulse"></span>
-                        )}
+                        {activityFeed.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#00f0ff] rounded-full border-2 border-black animate-pulse"></span>}
                     </button>
                 </div>
             </div>
-            
             <div className="flex items-center gap-2 group cursor-pointer border-b border-transparent hover:border-[#FFD700] transition-all pb-1 mt-2">
                 <Edit3 size={12} className="text-[#FFD700]/50 group-hover:text-[#FFD700]"/>
                 <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} onBlur={async () => { await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_name: modelName }) }); }} className="bg-transparent text-[#FFD700] text-[10px] font-bold uppercase tracking-[0.2em] text-right outline-none w-32" placeholder="SEU NICKNAME" />
@@ -672,18 +630,12 @@ function DashboardContent() {
 
         {globalAnnouncement && (
           <div className="mb-8 bg-[#FF1493]/10 border border-[#FF1493]/30 p-6 rounded-[2rem] shadow-2xl relative overflow-hidden animate-in slide-in-from-top-4 duration-500">
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <Megaphone size={40} className="text-[#FF1493] rotate-12" />
-            </div>
+            <div className="absolute top-0 right-0 p-4 opacity-10"><Megaphone size={40} className="text-[#FF1493] rotate-12" /></div>
             <div className="flex items-start gap-4 relative z-10">
-              <div className="p-3 bg-[#FF1493] rounded-2xl shadow-lg shadow-[#FF1493]/20">
-                <Bell size={20} className="text-white animate-ring" />
-              </div>
+              <div className="p-3 bg-[#FF1493] rounded-2xl shadow-lg shadow-[#FF1493]/20"><Bell size={20} className="text-white animate-ring" /></div>
               <div className="flex-1">
                 <h3 className="text-[10px] font-black text-[#FF1493] uppercase tracking-[0.2em] mb-1">Comunicado Oficial Savanah</h3>
-                <p className="text-sm font-bold text-white/90 leading-relaxed italic">
-                  "{globalAnnouncement}"
-                </p>
+                <p className="text-sm font-bold text-white/90 leading-relaxed italic">"{globalAnnouncement}"</p>
               </div>
             </div>
           </div>
@@ -713,26 +665,104 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Gerir Fãs</button>
         </div>
 
-        {activeTab === "followers" && (
-            <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
-                    <h2 className="text-xl font-black uppercase italic mb-6 text-[#FF1493] flex items-center gap-2"><Heart size={24}/> Seus Fãs VIPs</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {followersList.length > 0 ? followersList.map((fan) => (
-                            <div key={fan.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center gap-4 shadow-lg hover:border-[#FF1493]/30 transition-all">
-                                <div className="w-12 h-12 rounded-full bg-[#111] border border-[#FF1493]/30 flex items-center justify-center shrink-0">
-                                    <User size={20} className="text-[#FF1493]"/>
-                                </div>
-                                <div className="flex-1 overflow-hidden">
-                                    <p className="text-xs font-black uppercase text-white truncate">{fan.name || fan.nickname || "Fã VIP"}</p>
-                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Fã da Musa</p>
-                                </div>
-                                <button onClick={() => setActiveTab("chat")} className="p-3 bg-white/5 rounded-xl hover:bg-[#FF1493] hover:text-white transition-all text-white/50"><MessageCircle size={16}/></button>
-                            </div>
-                        )) : (
-                            <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Ninguém está te seguindo ainda. Divulgue seu link!</div>
-                        )}
+        {/* -------------------- CONTEÚDO DAS ABAS -------------------- */}
+
+        {activeTab === "finance" && (
+            <div className="space-y-6 animate-in fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden text-center">
+                        <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (70%)</h2>
+                        <div className="text-5xl font-black mb-8 tracking-tighter">{modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                        <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">Solicitar Saque (PIX)</button>
+                        <div className="mt-6 space-y-2 bg-white/5 p-4 rounded-2xl border border-white/5">
+                           <p className="text-[9px] text-white/70 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Check size={12} className="text-emerald-500"/> Mínimo R$ 20,00 por saque</p>
+                           <p className="text-[9px] text-white/70 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={12} className="text-emerald-500"/> Limite de 1 pedido de PIX por dia</p>
+                           <p className="text-[9px] text-amber-500 font-black uppercase tracking-widest flex items-center justify-center gap-2"><AlertTriangle size={12}/> Taxa de R$ 1,00 por saque (Regra Banco Central)</p>
+                        </div>
                     </div>
+                    <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col justify-center text-center">
+                        <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Total de Ganhos</h2>
+                        <div className="text-5xl font-black tracking-tighter">{accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                    </div>
+                </div>
+                <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
+                    <h2 className="text-xs font-black uppercase mb-4 text-[#FF1493] flex items-center gap-2"><DollarSign size={16}/> Chaves PIX para Recebimento</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none" placeholder="Chave PIX Principal (CPF, Telefone...)" />
+                        <input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none" placeholder="Chave PIX Secundária" />
+                    </div>
+                    <button onClick={handleSavePix} disabled={savingPix} className="bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">{savingPix ? "Salvando..." : "Salvar Chaves PIX"}</button>
+                </div>
+            </div>
+        )}
+
+        {activeTab === "hub" && (
+            <div className="max-w-3xl mx-auto bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-4">
+                <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Configurar Hub Público</h2>
+                <div className="space-y-6">
+                    <label className="text-[10px] font-black uppercase text-white/40 mb-2 block ml-2">Sua Biografia / Frase de Boas-vindas</label>
+                    <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-40 resize-none transition-all" placeholder="Escreva algo que atraia seus fãs..."/>
+                    <button onClick={handleSaveHub} disabled={savingHub} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-lg">{savingHub ? <Loader2 className="animate-spin mx-auto"/> : "Salvar Alterações do Hub"}</button>
+                </div>
+            </div>
+        )}
+
+        {activeTab === "gallery" && (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl">
+                    <div className="grid md:grid-cols-2 gap-10">
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black uppercase text-[#FF1493] ml-2">Legenda da Foto</label>
+                            <textarea value={newMediaCaption} onChange={e => setNewMediaCaption(e.target.value.slice(0, 500))} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-32 resize-none" placeholder="O que tem na foto? 🔥"/>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-[9px] text-white/40 uppercase font-black">⚠️ REGRAS: Nudez somente em PAGO (Mín R$ 10). Grátis sem nudez.</div>
+                        </div>
+                        <div className="flex flex-col justify-between">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
+                                    <input type="checkbox" checked={isPaidMedia} onChange={(e) => setIsPaidMedia(e.target.checked)} className="w-5 h-5 accent-[#FF1493]" />
+                                    <span className="text-[10px] font-black uppercase">Conteúdo Pago (Com Blur)</span>
+                                </div>
+                                {isPaidMedia && (
+                                    <div className="animate-in zoom-in duration-300">
+                                        <label className="text-[10px] font-black text-white/40 mb-2 block ml-2">Definir Valor (Mín. R$ 10,00)</label>
+                                        <input type="text" value={formattedPrice} onChange={handlePriceInput} className="w-full bg-black border border-[#FF1493] rounded-full py-5 px-8 text-white font-black text-2xl text-center outline-none" />
+                                    </div>
+                                )}
+                            </div>
+                            {!galleryPreviewUrl ? (
+                                <label className="w-full bg-white/5 text-white py-6 rounded-2xl cursor-pointer hover:bg-white/10 border border-white/10 flex items-center justify-center gap-3 font-black uppercase text-[10px] mt-6 transition-all">
+                                    <Upload size={20}/> Escolher Arquivo (Máx 10MB)
+                                    <input type="file" className="hidden" accept="image/*" onChange={onChooseGalleryFile} />
+                                </label>
+                            ) : (
+                                <div className="mt-6 space-y-3">
+                                    <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-[#FF1493] shadow-lg">
+                                        <img src={galleryPreviewUrl} className="w-full h-full object-cover" />
+                                        <button onClick={() => { setSelectedGalleryFile(null); setGalleryPreviewUrl(null); }} className="absolute top-2 right-2 bg-red-500 p-1 rounded-full"><X size={16}/></button>
+                                    </div>
+                                    <button onClick={onPublishPhoto} disabled={uploading} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+                                        {uploading ? <div className="flex flex-col items-center gap-1"><Loader2 className="animate-spin"/><span className="text-[8px] uppercase font-black mt-1">Carregando...</span></div> : <><Camera size={20}/> Publicar Agora na Galeria</>}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    {mediaList.map((item) => (
+                        <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
+                            <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
+                            <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
+                            <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between gap-2 border-t border-white/10">
+                                <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#FF1493]/20 text-[#FF1493] rounded-xl hover:bg-[#FF1493] hover:text-white transition-colors text-[10px] font-black uppercase">
+                                    <Eye size={14}/> Ver Infos
+                                </button>
+                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
+                                    <Trash2 size={16}/>
+                                </button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         )}
@@ -743,11 +773,7 @@ function DashboardContent() {
                     <h2 className="text-lg font-black uppercase text-[#D946EF] mb-6 flex items-center gap-3 tracking-widest"><MessageCircle size={18}/> Conversas com Fãs</h2>
                     <div className="grid gap-4">
                         {chatList.length > 0 ? chatList.map(chat => (
-                            <div 
-                                key={chat.id} 
-                                onClick={() => openAdminChat(chat)}
-                                className="bg-black border border-white/10 p-5 rounded-3xl cursor-pointer transition-all hover:border-[#D946EF]/50 flex items-center gap-4 group shadow-lg"
-                            >
+                            <div key={chat.id} onClick={() => openAdminChat(chat)} className="bg-black border border-white/10 p-5 rounded-3xl cursor-pointer transition-all hover:border-[#D946EF]/50 flex items-center gap-4 group shadow-lg">
                                 <div className="w-12 h-12 rounded-full bg-[#111] border border-[#D946EF]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-all">
                                     <User size={24} className="text-[#D946EF]"/>
                                 </div>
@@ -757,196 +783,8 @@ function DashboardContent() {
                                 </div>
                                 <button className="bg-white/5 text-white/50 p-3 rounded-xl group-hover:bg-[#D946EF] group-hover:text-white transition-all"><MessageCircle size={16}/></button>
                             </div>
-                        )) : (
-                            <div className="p-12 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Nenhum cliente iniciou chat.</div>
-                        )}
+                        )) : <div className="p-12 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Nenhum cliente iniciou chat.</div>}
                     </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "chat" && activeChat && (
-            <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
-                <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
-                
-                <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
-                    
-                    <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-10 shadow-md">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
-                                <User size={16} className="text-[#D946EF]"/>
-                            </div>
-                            <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.nickname || "Fã VIP"}</h3>
-                        </div>
-                        <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-[#0a0a0a] to-black">
-                        <div className="text-center py-2"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa</span></div>
-                        
-                        {chatMessages.map((msg, i) => (
-                            <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
-                                
-                                {msg.is_gift ? (
-                                    <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
-                                        <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
-                                        <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest">Você recebeu um presente!</p>
-                                        <p className="text-2xl font-black text-white mt-1">R$ {msg.price?.toFixed(2)}</p>
-                                        {msg.content && <p className="text-xs italic text-white/70 mt-2">"{msg.content}"</p>}
-                                    </div>
-                                ) : (
-                                    <div className={`max-w-[75%] p-3 text-sm rounded-2xl ${msg.sender_type === 'model' ? 'bg-[#D946EF] text-white rounded-tr-sm shadow-md' : 'bg-white/10 text-white rounded-tl-sm border border-white/5'}`}>
-                                        
-                                        {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
-                                        
-                                        {msg.media_type === 'audio' && msg.media_url && (
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Mensagem de Voz</span>
-                                                <audio controls src={msg.media_url} className="h-10 w-48 mt-1 outline-none" />
-                                            </div>
-                                        )}
-
-                                        {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
-                                            <div className="flex flex-col mt-1">
-                                                <div className="relative rounded-xl overflow-hidden border border-white/20">
-                                                    {msg.media_type === 'video' ? (
-                                                        <video src={msg.media_url} controls className="max-h-60 w-full object-cover" />
-                                                    ) : (
-                                                        <img src={msg.media_url} className="max-h-60 w-full object-cover" />
-                                                    )}
-                                                    
-                                                    {msg.is_locked && (
-                                                        <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1">
-                                                            <Lock size={10} className="text-[#FFD700]"/> R$ {msg.price?.toFixed(2)} 
-                                                            <span className={msg.is_unlocked ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
-                                                                ({msg.is_unlocked ? 'PAGO' : 'AGUARDANDO'})
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {msg.content && <p className="mt-2 text-xs">{msg.content}</p>}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                <span className="text-[8px] text-white/20 mt-1 px-1">
-                                    {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </span>
-                            </div>
-                        ))}
-                        <div ref={chatEndRef} />
-                    </div>
-
-                    <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative shadow-md z-20">
-                        <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
-                            
-                            <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
-                                <ImagePlus size={20} />
-                                <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
-                            </button>
-
-                            {isRecording ? (
-                                <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
-                                    <Mic size={16}/> Gravando... {formatAudioTime(recordingTime)}
-                                </div>
-                            ) : (
-                                <input 
-                                    type="text" 
-                                    placeholder="Digite sua resposta..."
-                                    className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 px-2 py-1"
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleAdminSendMessage()}
-                                />
-                            )}
-
-                            <button 
-                                onMouseDown={isRecording ? stopRecording : startRecording}
-                                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                            >
-                                {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
-                            </button>
-
-                            {!isRecording && (
-                                <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
-                                    <Send size={16} className="-ml-0.5" />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {showMediaModal && chatMediaPreview && (
-            <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
-                    <button onClick={() => { setShowMediaModal(false); setChatMediaFile(null); setChatMediaPreview(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={20}/></button>
-                    <h2 className="text-lg font-black uppercase text-[#D946EF] mb-6 italic text-center">Enviar Mídia Privada</h2>
-                    
-                    <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10 mb-6 bg-black flex items-center justify-center">
-                        {chatMediaFile?.type.startsWith('video/') ? (
-                            <video src={chatMediaPreview} className="w-full h-full object-cover" controls />
-                        ) : (
-                            <img src={chatMediaPreview} className="w-full h-full object-cover" />
-                        )}
-                    </div>
-
-                    <div className="space-y-6">
-                        <div className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 cursor-pointer" onClick={() => setIsChatMediaPaid(!isChatMediaPaid)}>
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-white">Cobrar por essa mídia?</p>
-                                <p className="text-[8px] text-white/50 uppercase font-bold mt-1">Se ativado, envia com cadeado (PPV).</p>
-                            </div>
-                            <input type="checkbox" checked={isChatMediaPaid} readOnly className="w-5 h-5 accent-[#D946EF]" />
-                        </div>
-
-                        {isChatMediaPaid && (
-                            <div className="animate-in zoom-in">
-                                <label className="text-[10px] font-black uppercase text-white/40 block ml-2 mb-2">Definir Valor (Mínimo R$ 10,00)</label>
-                                <input 
-                                    type="text" 
-                                    value={formattedChatPrice} 
-                                    onChange={handleChatPriceInput} 
-                                    className="w-full bg-black border border-[#D946EF] rounded-full py-4 px-6 text-white font-black text-xl text-center outline-none" 
-                                />
-                            </div>
-                        )}
-
-                        <button onClick={handleSendChatMedia} disabled={uploading} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
-                            {uploading ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>}
-                            {uploading ? "Enviando..." : "Enviar para o Cliente"}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* --- DEMAIS ABAS --- */}
-        {activeTab === "sales" && (
-            <div className="animate-in fade-in">
-                <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
-                    <Receipt size={24} className="text-amber-400 shrink-0"/>
-                    <p className="text-[10px] font-black uppercase text-amber-400 leading-relaxed">Aqui você acompanha todas as fotos que foram compradas (desbloqueadas) pelos seus clientes através do Hub.</p>
-                </div>
-                <div className="grid gap-4">
-                    {salesHistory.length > 0 ? salesHistory.map((sale) => (
-                        <div key={sale.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center justify-between shadow-xl">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
-                                <div>
-                                    <p className="text-xs font-black text-white uppercase">Fã VIP</p>
-                                    <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
-                                    <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[8px] font-black text-white/30 uppercase mb-1">Valor</p>
-                                <p className="text-lg font-black text-white">R$ {Number(sale.Media?.price || 0).toFixed(2)}</p>
-                            </div>
-                        </div>
-                    )) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum conteúdo vendido ainda.</div>}
                 </div>
             </div>
         )}
@@ -1000,11 +838,37 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 ABA: CONFIGURAÇÃO DA VITRINE E ROLETA 🔥 */}
+        {activeTab === "sales" && (
+            <div className="animate-in fade-in">
+                <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
+                    <Receipt size={24} className="text-amber-400 shrink-0"/>
+                    <p className="text-[10px] font-black uppercase text-amber-400 leading-relaxed">Aqui você acompanha todas as fotos que foram compradas (desbloqueadas) pelos seus clientes através do Hub.</p>
+                </div>
+                <div className="grid gap-4">
+                    {salesHistory.length > 0 ? salesHistory.map((sale) => (
+                        <div key={sale.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center justify-between shadow-xl">
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
+                                <div>
+                                    <p className="text-xs font-black text-white uppercase">Fã VIP</p>
+                                    <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
+                                    <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[8px] font-black text-white/30 uppercase mb-1">Valor</p>
+                                <p className="text-lg font-black text-white">R$ {Number(sale.Media?.price || 0).toFixed(2)}</p>
+                            </div>
+                        </div>
+                    )) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum conteúdo vendido ainda.</div>}
+                </div>
+            </div>
+        )}
+
         {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
                 
-                {/* AVISO SE A ROLETA ESTIVER VAZIA (O BOTÃO DE GERAR AS FATIAS PADRÃO) */}
+                {/* 🔥 BOTÃO DE EMERGÊNCIA (SE AS FATIAS NÃO EXISTIREM) 🔥 */}
                 {prizes.length === 0 && (
                     <div className="bg-red-500/10 border border-red-500/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center animate-pulse">
                         <AlertTriangle size={40} className="text-red-500 mb-4" />
@@ -1039,7 +903,7 @@ function DashboardContent() {
                     </div>
                 </div>
                 
-                {/* SÓ MOSTRA SE TIVER FATIAS */}
+                {/* 🔥 OS SLOTS SÓ APARECEM SE TIVEREM SIDO CRIADOS NO BANCO 🔥 */}
                 {prizes.length > 0 && (
                 <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl relative">
                     <div className="flex items-center justify-between mb-6">
@@ -1066,10 +930,177 @@ function DashboardContent() {
             </div>
         )}
 
+        {activeTab === "raspadinha" && (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
+                    <div className="flex items-center gap-3 mb-6">
+                        <Sparkles className="text-[#FFD700]" size={24} />
+                        <h2 className="text-2xl font-black uppercase italic text-[#FF1493]">Fotos Raspadinha VIP</h2>
+                    </div>
+                    <div className="flex flex-col md:flex-row gap-8">
+                        <div className="flex-1 flex flex-col justify-center">
+                            {!scratchPreviewUrl ? (
+                                <label className={`w-full bg-white/5 text-white py-8 rounded-3xl cursor-pointer hover:bg-white/10 border border-white/10 flex flex-col items-center justify-center gap-3 font-black uppercase text-[10px] transition-all ${scratchPhotos.length >= 10 ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <Upload size={32} className="text-[#FF1493]"/> 
+                                    {scratchPhotos.length >= 10 ? "Lote Máximo Atingido (10/10)" : "Escolher Foto (Máx 10MB)"}
+                                    <input type="file" hidden accept="image/*" onChange={onChooseScratchFile} disabled={scratchPhotos.length >= 10} />
+                                </label>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="relative aspect-[3/4] max-w-xs mx-auto rounded-3xl overflow-hidden border-2 border-[#FFD700] shadow-xl">
+                                        <img src={scratchPreviewUrl} className="w-full h-full object-cover" />
+                                        <button onClick={() => { setSelectedScratchFile(null); setScratchPreviewUrl(null); }} className="absolute top-4 right-4 bg-black/60 backdrop-blur-md p-2 rounded-full border border-white/10 hover:bg-red-500 transition-colors"><X size={20}/></button>
+                                    </div>
+                                    <button onClick={onPublishScratch} disabled={uploadingScratch} className="w-full bg-gradient-to-r from-[#FF1493] to-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all max-w-xs mx-auto">
+                                        {uploadingScratch ? <div className="flex items-center gap-2"><Loader2 className="animate-spin"/> Subindo...</div> : "Salvar Foto na Coleção"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex-1 bg-white/5 rounded-3xl p-6 border border-white/5 flex flex-col items-center justify-center text-center">
+                            <h3 className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-2">Progresso do Lote</h3>
+                            <div className="text-5xl font-black italic tracking-tighter mb-4">{scratchPhotos.length}<span className="text-xl text-white/30">/10</span></div>
+                            <div className="w-full h-2 bg-black rounded-full overflow-hidden border border-white/5">
+                                <div className="h-full bg-gradient-to-r from-[#FF1493] to-[#FFD700]" style={{ width: `${(scratchPhotos.length / 10) * 100}%` }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
+                        <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
+                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
+                            <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between border-t border-white/10">
+                                <div className="flex items-center gap-2 text-[#FFD700] text-[10px] font-black uppercase"><Star size={12}/> Ativa</div>
+                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
+                                    <Trash2 size={16}/>
+                                </button>
+                            </div>
+                        </div>
+                    )) : <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem]">Vazio.</div>}
+                </div>
+            </div>
+        )}
+
+        {activeTab === "followers" && (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
+                    <h2 className="text-xl font-black uppercase italic mb-6 text-[#FF1493] flex items-center gap-2"><Heart size={24}/> Seus Fãs VIPs</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {followersList.length > 0 ? followersList.map((fan) => (
+                            <div key={fan.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center gap-4 shadow-lg hover:border-[#FF1493]/30 transition-all">
+                                <div className="w-12 h-12 rounded-full bg-[#111] border border-[#FF1493]/30 flex items-center justify-center shrink-0">
+                                    <User size={20} className="text-[#FF1493]"/>
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-xs font-black uppercase text-white truncate">{fan.name || fan.nickname || "Fã VIP"}</p>
+                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Fã da Musa</p>
+                                </div>
+                                <button onClick={() => setActiveTab("chat")} className="p-3 bg-white/5 rounded-xl hover:bg-[#FF1493] hover:text-white transition-all text-white/50"><MessageCircle size={16}/></button>
+                            </div>
+                        )) : (
+                            <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Ninguém está te seguindo ainda. Divulgue seu link!</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
+
+        {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
+        {activeTab === "chat" && activeChat && (
+            <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
+                <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
+                <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
+                    <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-10 shadow-md">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
+                                <User size={16} className="text-[#D946EF]"/>
+                            </div>
+                            <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.nickname || "Fã VIP"}</h3>
+                        </div>
+                        <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-[#0a0a0a] to-black">
+                        <div className="text-center py-2"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa</span></div>
+                        {chatMessages.map((msg, i) => (
+                            <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
+                                {msg.is_gift ? (
+                                    <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
+                                        <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
+                                        <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest">Você recebeu um presente!</p>
+                                        <p className="text-2xl font-black text-white mt-1">R$ {msg.price?.toFixed(2)}</p>
+                                        {msg.content && <p className="text-xs italic text-white/70 mt-2">"{msg.content}"</p>}
+                                    </div>
+                                ) : (
+                                    <div className={`max-w-[75%] p-3 text-sm rounded-2xl ${msg.sender_type === 'model' ? 'bg-[#D946EF] text-white rounded-tr-sm shadow-md' : 'bg-white/10 text-white rounded-tl-sm border border-white/5'}`}>
+                                        {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
+                                        {msg.media_type === 'audio' && msg.media_url && (
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Mensagem de Voz</span>
+                                                <audio controls src={msg.media_url} className="h-10 w-48 mt-1 outline-none" />
+                                            </div>
+                                        )}
+                                        {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
+                                            <div className="flex flex-col mt-1">
+                                                <div className="relative rounded-xl overflow-hidden border border-white/20">
+                                                    {msg.media_type === 'video' ? (
+                                                        <video src={msg.media_url} controls className="max-h-60 w-full object-cover" />
+                                                    ) : (
+                                                        <img src={msg.media_url} className="max-h-60 w-full object-cover" />
+                                                    )}
+                                                    {msg.is_locked && (
+                                                        <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1">
+                                                            <Lock size={10} className="text-[#FFD700]"/> R$ {msg.price?.toFixed(2)} 
+                                                            <span className={msg.is_unlocked ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
+                                                                ({msg.is_unlocked ? 'PAGO' : 'AGUARDANDO'})
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {msg.content && <p className="mt-2 text-xs">{msg.content}</p>}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                <span className="text-[8px] text-white/20 mt-1 px-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative shadow-md z-20">
+                        <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
+                            <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
+                                <ImagePlus size={20} />
+                                <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
+                            </button>
+                            {isRecording ? (
+                                <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
+                                    <Mic size={16}/> Gravando... {formatAudioTime(recordingTime)}
+                                </div>
+                            ) : (
+                                <input type="text" placeholder="Digite sua resposta..." className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 px-2 py-1" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdminSendMessage()} />
+                            )}
+                            <button onMouseDown={isRecording ? stopRecording : startRecording} className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                                {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
+                            </button>
+                            {!isRecording && (
+                                <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
+                                    <Send size={16} className="-ml-0.5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
       </div>
 
-      {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS 🔥 */}
+      {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS (VITRINE/ROLETA) 🔥 */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
