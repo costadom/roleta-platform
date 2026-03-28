@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import PlayersManager from "./players";
 
+// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -25,6 +26,7 @@ const censorText = (text: string) => {
   return filteredText;
 };
 
+// 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) { super(props); this.state = { hasError: false, error: null, errorInfo: null }; }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
@@ -163,26 +165,34 @@ function DashboardContent() {
         setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
       }
 
-      // 🔥 SISTEMA DE AUTO-CURA DA ROLETA (GERA AS FATIAS SE ESTIVER VAZIO) 🔥
+      // 🔥 NOVO SISTEMA BLINDADO DE AUTO-CURA DA ROLETA 🔥
       let fetchedPrizes = Array.isArray(resPrizes) ? resPrizes : [];
       if (fetchedPrizes.length === 0 && modelId) {
-          const defaultSlices = [
-              { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60, delivery_type: "credit", delivery_value: "1" },
-              { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20, delivery_type: "credit", delivery_value: "3" },
-              { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01, delivery_type: "whatsapp", delivery_value: "PIX" },
-              { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01, delivery_type: "whatsapp", delivery_value: "Presencial" }
-          ];
-          
-          await fetch(`${supabaseUrl}/rest/v1/Prize`, { 
-              method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(defaultSlices) 
-          });
-          
-          const reloadPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json());
-          fetchedPrizes = reloadPrizes || [];
+          try {
+              const defaultSlices = [
+                  { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60, delivery_type: "credit", delivery_value: "1" },
+                  { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50, delivery_type: "media", delivery_value: "" },
+                  { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40, delivery_type: "media", delivery_value: "" },
+                  { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30, delivery_type: "media", delivery_value: "" },
+                  { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20, delivery_type: "credit", delivery_value: "3" },
+                  { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10, delivery_type: "media", delivery_value: "" },
+                  { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01, delivery_type: "whatsapp", delivery_value: "PIX" },
+                  { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01, delivery_type: "whatsapp", delivery_value: "Presencial" }
+              ];
+              
+              const insertRes = await fetch(`${supabaseUrl}/rest/v1/Prize`, { 
+                  method: "POST", 
+                  headers: { ...headers, "Content-Type": "application/json", "Prefer": "return=representation" }, 
+                  body: JSON.stringify(defaultSlices) 
+              });
+
+              if (insertRes.ok) {
+                  const insertedData = await insertRes.json();
+                  fetchedPrizes = insertedData;
+              }
+          } catch(err) {
+              console.error("Erro na auto-cura das fatias:", err);
+          }
       }
 
       setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
