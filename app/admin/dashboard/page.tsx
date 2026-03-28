@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import PlayersManager from "./players";
 
-// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -26,7 +25,6 @@ const censorText = (text: string) => {
   return filteredText;
 };
 
-// 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) { super(props); this.state = { hasError: false, error: null, errorInfo: null }; }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
@@ -76,7 +74,10 @@ function DashboardContent() {
   const [currentBg, setCurrentBg] = useState<string | null>(null);
   const [currentProfile, setCurrentProfile] = useState<string | null>(null);
   const [showcaseVisible, setShowcaseVisible] = useState(false);
+  
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
+  const [uploadingSliceMedia, setUploadingSliceMedia] = useState(false);
+
   const [bio, setBio] = useState("");
   const [savingHub, setSavingHub] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -120,7 +121,6 @@ function DashboardContent() {
   const [isChatMediaPaid, setIsChatMediaPaid] = useState(false);
   const [chatMediaPrice, setChatMediaPrice] = useState("");
 
-  // 🔥 ESTADOS DO PAINEL CENTRAL DE NOTIFICAÇÕES 🔥
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
@@ -155,23 +155,44 @@ function DashboardContent() {
       
       if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
-        
         localStorage.setItem("labz_model_id", resModel[0].id);
         localStorage.setItem("labz_model_slug", resModel[0].slug);
       }
+      
       if (resConfig && resConfig[0]) {
         setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
       }
+
+      // 🔥 SISTEMA DE AUTO-CURA DA ROLETA (GERA AS FATIAS SE ESTIVER VAZIO) 🔥
+      let fetchedPrizes = Array.isArray(resPrizes) ? resPrizes : [];
+      if (fetchedPrizes.length === 0 && modelId) {
+          const defaultSlices = [
+              { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60, delivery_type: "credit", delivery_value: "1" },
+              { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20, delivery_type: "credit", delivery_value: "3" },
+              { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01, delivery_type: "whatsapp", delivery_value: "PIX" },
+              { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01, delivery_type: "whatsapp", delivery_value: "Presencial" }
+          ];
+          
+          await fetch(`${supabaseUrl}/rest/v1/Prize`, { 
+              method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(defaultSlices) 
+          });
+          
+          const reloadPrizes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json());
+          fetchedPrizes = reloadPrizes || [];
+      }
+
       setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
-      setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
+      setPrizes(fetchedPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
       setMediaList(Array.isArray(resMedia) ? resMedia : []); setVideoRequests(Array.isArray(resVideos) ? resVideos : []); setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
-      
       setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
 
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
       setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
       
-      // 🔥 CHAMA A BUSCA DA CENTRAL DE NOTIFICAÇÕES 🔥
       loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], Array.isArray(resFollowers) ? resFollowers : []);
 
     } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
@@ -179,7 +200,6 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 MOTOR DA CENTRAL DE NOTIFICAÇÕES (FÃS, LIKES E COMMENTS) 🔥
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
@@ -195,24 +215,15 @@ function DashboardContent() {
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
               ]);
               
-              // Mapeia as curtidas e anexa a foto
-              likesList = (likesRes || []).map((l: any) => ({ 
-                  ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url 
-              }));
-              
-              // Mapeia os comentários e anexa a foto
-              commentsList = (commentsRes || []).map((c: any) => ({ 
-                  ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url 
-              }));
+              likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url }));
+              commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url }));
           }
 
-          // Mapeia os seguidores
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
 
-          // Junta tudo e ordena pela data mais recente
           const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
               .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-              .slice(0, 40); // Pega as ultimas 40 atividades
+              .slice(0, 40);
 
           setActivityFeed(combinedFeed);
       } catch (e) {}
@@ -434,6 +445,36 @@ function DashboardContent() {
       } catch (e) { alert("Erro ao enviar mídia."); } finally { setUploading(false); }
   };
 
+  // 🔥 HANDLER PARA SUBIR MÍDIAS DIRETAMENTE NA FATIA DA ROLETA 🔥
+  const handleSliceMediaUpload = async (e: any) => {
+      const files = Array.from(e.target.files) as File[];
+      if (!files.length) return;
+      
+      const currentMedia = editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : [];
+      if (currentMedia.length + files.length > 10) return alert("Você só pode enviar no máximo 10 arquivos por fatia.");
+
+      setUploadingSliceMedia(true);
+      try {
+          const newUrls = [];
+          for (const file of files) {
+              const ext = file.name.split('.').pop();
+              const fileName = `${modelId}/slice_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+              const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, {
+                  method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file
+              });
+              if (res.ok) {
+                  newUrls.push(`${supabaseUrl}/storage/v1/object/public/assets/${fileName}`);
+              }
+          }
+          const updatedUrls = [...currentMedia, ...newUrls].join(',');
+          setEditingPrize({...editingPrize, delivery_value: updatedUrls});
+      } catch(e) {
+          alert("Erro ao subir mídia para a roleta.");
+      } finally {
+          setUploadingSliceMedia(false);
+      }
+  };
+
   const handleChatPriceInput = (e: any) => { setChatMediaPrice(e.target.value); };
   const formattedChatPrice = useMemo(() => { return (Number(chatMediaPrice.replace(/\D/g, "")) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }, [chatMediaPrice]);
 
@@ -548,7 +589,6 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative overflow-x-hidden">
       
-      {/* 🔥 CENTRAL DE NOTIFICAÇÕES (DRAWER/MODAL) 🔥 */}
       {showNotificationsPanel && (
           <>
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowNotificationsPanel(false)}></div>
@@ -563,12 +603,10 @@ function DashboardContent() {
                       ) : (
                           activityFeed.map((n, i) => (
                               <div key={i} className="flex items-center gap-4 bg-white/5 border border-white/5 p-4 rounded-2xl hover:border-white/10 transition-colors">
-                                  {/* ÍCONES BASEADOS NO TIPO */}
                                   {n.type === 'follower' && <div className="w-10 h-10 rounded-full bg-[#FF1493]/20 text-[#FF1493] flex items-center justify-center shrink-0"><Heart size={16} fill="currentColor"/></div>}
                                   {n.type === 'like' && <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0"><Star size={16} fill="currentColor"/></div>}
                                   {n.type === 'comment' && <div className="w-10 h-10 rounded-full bg-[#00f0ff]/20 text-[#00f0ff] flex items-center justify-center shrink-0"><MessageCircle size={16} fill="currentColor"/></div>}
 
-                                  {/* CONTEÚDO */}
                                   <div className="flex-1 overflow-hidden">
                                       {n.type === 'follower' && <><p className="text-[10px] font-black uppercase text-[#FF1493]">Novo Fã VIP</p><p className="text-xs text-white truncate">{n.name || n.nickname || "Fã VIP"} começou a te seguir!</p></>}
                                       {n.type === 'like' && <><p className="text-[10px] font-black uppercase text-emerald-500">Nova Curtida</p><p className="text-xs text-white truncate">Alguém curtiu sua foto na Galeria.</p></>}
@@ -579,7 +617,6 @@ function DashboardContent() {
                                       </p>
                                   </div>
 
-                                  {/* MINIATURA DA MÍDIA (SE HOUVER) */}
                                   {(n.type === 'like' || n.type === 'comment') && n.media_url && (
                                       <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0">
                                           <img src={n.media_url} className="w-full h-full object-cover" />
@@ -600,7 +637,6 @@ function DashboardContent() {
           <div className="text-right flex flex-col items-end">
             <div className="flex items-center gap-4">
                 
-                {/* 🔥 BOTÃO GIGANTE DE INICIAR LIVE 🔥 */}
                 <button 
                    onClick={handleStartLiveStudio}
                    className="bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-4 py-2 rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.3)] hover:bg-[#00f0ff] hover:text-black transition-all group animate-pulse"
@@ -609,14 +645,12 @@ function DashboardContent() {
                    <span className="text-[10px] font-black uppercase tracking-widest text-[#00f0ff] group-hover:text-black">Ficar Ao Vivo</span>
                 </button>
 
-                {/* CONTADOR DE SEGUIDORES + SINO DE NOTIFICAÇÕES */}
                 <div className="flex items-center gap-3">
                     <div className="bg-[#FF1493]/20 border border-[#FF1493]/50 px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg hidden sm:flex">
                         <Heart size={12} className="text-[#FF1493]" fill="currentColor" />
                         <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
                     </div>
                     
-                    {/* BOTÃO DA CENTRAL DE NOTIFICAÇÕES */}
                     <button onClick={() => setShowNotificationsPanel(true)} className="relative w-8 h-8 rounded-full bg-[#D946EF]/20 border border-[#D946EF]/50 flex items-center justify-center text-[#D946EF] hover:bg-[#D946EF] hover:text-white transition-all shadow-[0_0_10px_rgba(217,70,239,0.3)]">
                         <Bell size={14} className="animate-ring" />
                         {activityFeed.length > 0 && (
@@ -676,7 +710,6 @@ function DashboardContent() {
 
         <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-black uppercase text-white/40 tracking-widest">Menu da Musa</h2>
-            {/* AVISOS DO CHAT VIP */}
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest cursor-pointer text-[#D946EF]" onClick={() => { setActiveTab("chat"); }}>
                 <MessageCircle size={16} className={unreadChatCounts > 0 ? "animate-pulse" : ""} /> 
                 {unreadChatCounts > 0 ? `${unreadChatCounts} Chats` : "Mensagens"}
@@ -695,14 +728,10 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
           <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
-          
-          {/* 🔥 ABA SEGUIDORES 🔥 */}
           <button onClick={() => setActiveTab("followers")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "followers" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Seguidores</button>
-          
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Gerir Fãs</button>
         </div>
 
-        {/* 🔥 ÁREA: SEGUIDORES DA MUSA (PRIVACIDADE APLICADA) 🔥 */}
         {activeTab === "followers" && (
             <div className="animate-in slide-in-from-bottom-4">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
@@ -714,7 +743,6 @@ function DashboardContent() {
                                     <User size={20} className="text-[#FF1493]"/>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    {/* Escondeu WhatsApp, mostra Nome/Nickname ou "Fã VIP" */}
                                     <p className="text-xs font-black uppercase text-white truncate">{fan.name || fan.nickname || "Fã VIP"}</p>
                                     <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Fã da Musa</p>
                                 </div>
@@ -728,7 +756,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 ABA DE CHAT DA MODELO (PRIVACIDADE APLICADA) 🔥 */}
         {activeTab === "chat" && (
             <div className="animate-in slide-in-from-bottom-4">
                 <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl">
@@ -744,7 +771,6 @@ function DashboardContent() {
                                     <User size={24} className="text-[#D946EF]"/>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    {/* Nome ou "Fã VIP" - Sem WhatsApp */}
                                     <p className="text-xs font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.nickname || "Fã VIP"}</p>
                                     <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir conversa</p>
                                 </div>
@@ -758,14 +784,12 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL FLUTUANTE DA CONVERSA DA MODELO (PRIVACIDADE) 🔥 */}
         {activeTab === "chat" && activeChat && (
             <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
                 <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
                 
                 <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
                     
-                    {/* Header */}
                     <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-10 shadow-md">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
@@ -776,14 +800,12 @@ function DashboardContent() {
                         <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
                     </div>
 
-                    {/* Mensagens */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-[#0a0a0a] to-black">
                         <div className="text-center py-2"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa</span></div>
                         
                         {chatMessages.map((msg, i) => (
                             <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
                                 
-                                {/* RENDERIZAÇÃO DE PRESENTES */}
                                 {msg.is_gift ? (
                                     <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
                                         <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
@@ -835,7 +857,6 @@ function DashboardContent() {
                         <div ref={chatEndRef} />
                     </div>
 
-                    {/* Input Area */}
                     <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative shadow-md z-20">
                         <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
                             
@@ -877,7 +898,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
         {showMediaModal && chatMediaPreview && (
             <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
@@ -922,7 +942,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* --- DEMAIS ABAS --- */}
         {activeTab === "sales" && (
             <div className="animate-in fade-in">
                 <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
@@ -935,7 +954,6 @@ function DashboardContent() {
                             <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
                                 <div>
-                                    {/* Escondeu WhatsApp, exibe Fã VIP */}
                                     <p className="text-xs font-black text-white uppercase">Fã VIP</p>
                                     <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
                                     <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
@@ -1082,7 +1100,6 @@ function DashboardContent() {
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
                             
-                            {/* 🔥 BARRINHA DE BOTÕES (MÓVEL E DESKTOP AMIGÁVEL) 🔥 */}
                             <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between border-t border-white/10">
                                 <div className="flex items-center gap-2 text-[#FFD700] text-[10px] font-black uppercase"><Star size={12}/> Ativa</div>
                                 <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
@@ -1143,7 +1160,6 @@ function DashboardContent() {
                             <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
                             
-                            {/* 🔥 BARRINHA DE BOTÕES (MÓVEL E DESKTOP AMIGÁVEL) 🔥 */}
                             <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between gap-2 border-t border-white/10">
                                 <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#FF1493]/20 text-[#FF1493] rounded-xl hover:bg-[#FF1493] hover:text-white transition-colors text-[10px] font-black uppercase">
                                     <Eye size={14}/> Ver Infos
@@ -1158,22 +1174,18 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS) 🔥 */}
         {showMediaStats && (
             <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
                 <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
                     <X size={20}/>
                 </button>
                 
-                {/* LADO DA IMAGEM */}
                 <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
                     <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
                 </div>
                 
-                {/* LADO DOS COMENTÁRIOS E INFOS */}
                 <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
                     
-                    {/* Cabeçalho do Modal */}
                     <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center text-center">
                         <div className="flex items-center gap-2 mb-3 bg-[#FF1493]/10 border border-[#FF1493]/30 px-4 py-2 rounded-full">
                             <Heart size={16} fill="currentColor" className="text-[#FF1493]"/>
@@ -1186,7 +1198,6 @@ function DashboardContent() {
                         )}
                     </div>
 
-                    {/* Lista de Comentários */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
                         <h3 className="text-[10px] font-black uppercase text-white/50 tracking-widest mb-4">Comentários dos Fãs</h3>
                         {mediaComments.length > 0 ? mediaComments.map(c => (
@@ -1194,7 +1205,6 @@ function DashboardContent() {
                                 <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
                                 <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
                                 
-                                {/* Botão de Moderação (Apagar Comentário) */}
                                 <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
                                     <Trash2 size={14}/>
                                 </button>
@@ -1258,33 +1268,64 @@ function DashboardContent() {
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
       </div>
 
-      {/* MODAL EDITAR PRÊMIO */}
+      {/* 🔥 MODAL EDITAR PRÊMIO COM UPLOAD DE MÍDIA 🔥 */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
               e.preventDefault(); 
               await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value }) });
               setEditingPrize(null); loadData();
-          }} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative">
+          }} className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
             <button type="button" onClick={() => setEditingPrize(null)} className="absolute top-6 right-6 text-white/20 hover:text-white transition-colors"><X size={24}/></button>
             <h2 className="text-xl font-black uppercase mb-8 text-[#FF1493] italic text-center">Editar Slot</h2>
             <div className="space-y-4">
                 <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" />
+                
                 <div className="bg-white/5 p-4 rounded-2xl space-y-3">
                     <p className="text-[10px] font-black uppercase text-white/40">Entrega do Conteúdo</p>
                     <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none">
                         <option value="whatsapp">Chamar no WhatsApp</option>
-                        <option value="link">Link Direto (Drive)</option>
+                        <option value="link">Link Direto (Telegram/Drive)</option>
                         <option value="credit">Créditos de Giro</option>
+                        <option value="media">Pack de Fotos/Vídeos (Galeria VIP)</option>
                     </select>
                 </div>
-                <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95">Salvar</button>
+
+                {/* 🔥 UPLOAD DE MÍDIA DIRETO NA FATIA 🔥 */}
+                {editingPrize.delivery_type === 'media' && (
+                    <div className="bg-white/5 p-4 rounded-2xl space-y-3 animate-in fade-in">
+                        <p className="text-[10px] font-black uppercase text-white/40 flex justify-between">
+                            Mídias do Prêmio (Máx 10) 
+                            <span>{editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean).length : 0}/10</span>
+                        </p>
+                        
+                        <div className="flex flex-wrap gap-2 mb-2">
+                            {(editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : []).map((url: string, i: number) => (
+                                <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-white/20 shadow-md">
+                                    {url.includes('.mp4') ? <video src={url} className="w-full h-full object-cover"/> : <img src={url} className="w-full h-full object-cover"/>}
+                                    <button type="button" onClick={() => {
+                                        const newArr = editingPrize.delivery_value.split(',').filter(Boolean);
+                                        newArr.splice(i, 1);
+                                        setEditingPrize({...editingPrize, delivery_value: newArr.join(',')});
+                                    }} className="absolute top-0 right-0 bg-red-500 p-0.5 rounded-bl-md"><X size={10}/></button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <label className="w-full bg-[#D946EF]/20 text-[#D946EF] py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase cursor-pointer hover:bg-[#D946EF] hover:text-white transition-colors border border-[#D946EF]/30">
+                            {uploadingSliceMedia ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>}
+                            {uploadingSliceMedia ? "Subindo..." : "Adicionar Fotos/Vídeos"}
+                            <input type="file" multiple accept="image/*,video/*" onChange={handleSliceMediaUpload} className="hidden" disabled={uploadingSliceMedia} />
+                        </label>
+                    </div>
+                )}
+
+                <button type="submit" disabled={uploadingSliceMedia} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95 disabled:opacity-50">Salvar Modificações</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* MODAL TUTORIAL ROLETA */}
       {showRoletaTutorial && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-2xl relative">
@@ -1305,7 +1346,6 @@ function DashboardContent() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
         
-        /* 🔥 Animação do Sino 🔥 */
         @keyframes ring {
           0% { transform: rotate(0); }
           10% { transform: rotate(15deg); }
