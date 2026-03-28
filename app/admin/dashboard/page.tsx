@@ -120,9 +120,11 @@ function DashboardContent() {
   const [isChatMediaPaid, setIsChatMediaPaid] = useState(false);
   const [chatMediaPrice, setChatMediaPrice] = useState("");
 
-  // 🔥 ESTADOS DO PAINEL CENTRAL DE NOTIFICAÇÕES 🔥
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
+
+  // 🔥 ESTADO DE UPLOAD DIRETO NA FATIA 🔥
+  const [uploadingSliceMedia, setUploadingSliceMedia] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -155,7 +157,6 @@ function DashboardContent() {
       
       if (resModel && resModel[0]) {
         setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
-        
         localStorage.setItem("labz_model_id", resModel[0].id);
         localStorage.setItem("labz_model_slug", resModel[0].slug);
       }
@@ -171,7 +172,6 @@ function DashboardContent() {
       const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
       setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
       
-      // 🔥 CHAMA A BUSCA DA CENTRAL DE NOTIFICAÇÕES 🔥
       loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], Array.isArray(resFollowers) ? resFollowers : []);
 
     } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
@@ -179,7 +179,36 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 MOTOR DA CENTRAL DE NOTIFICAÇÕES (FÃS, LIKES E COMMENTS) 🔥
+  // 🔥 HANDLER DE UPLOAD DE MÍDIA NA FATIA DA ROLETA 🔥
+  const handleSliceMediaUpload = async (e: any) => {
+      const files = Array.from(e.target.files) as File[];
+      if (!files.length) return;
+      
+      const currentMedia = editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : [];
+      if (currentMedia.length + files.length > 10) return alert("Você só pode enviar no máximo 10 arquivos por fatia.");
+
+      setUploadingSliceMedia(true);
+      try {
+          const newUrls = [];
+          for (const file of files) {
+              const ext = file.name.split('.').pop();
+              const fileName = `${modelId}/slice_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+              const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, {
+                  method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file
+              });
+              if (res.ok) {
+                  newUrls.push(`${supabaseUrl}/storage/v1/object/public/assets/${fileName}`);
+              }
+          }
+          const updatedUrls = [...currentMedia, ...newUrls].join(',');
+          setEditingPrize({...editingPrize, delivery_value: updatedUrls});
+      } catch(e) {
+          alert("Erro ao subir mídia para a roleta.");
+      } finally {
+          setUploadingSliceMedia(false);
+      }
+  };
+
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
@@ -195,24 +224,14 @@ function DashboardContent() {
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
               ]);
               
-              // Mapeia as curtidas e anexa a foto
-              likesList = (likesRes || []).map((l: any) => ({ 
-                  ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url 
-              }));
-              
-              // Mapeia os comentários e anexa a foto
-              commentsList = (commentsRes || []).map((c: any) => ({ 
-                  ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url 
-              }));
+              likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url }));
+              commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url }));
           }
 
-          // Mapeia os seguidores
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
-
-          // Junta tudo e ordena pela data mais recente
           const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
               .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-              .slice(0, 40); // Pega as ultimas 40 atividades
+              .slice(0, 40);
 
           setActivityFeed(combinedFeed);
       } catch (e) {}
@@ -563,12 +582,10 @@ function DashboardContent() {
                       ) : (
                           activityFeed.map((n, i) => (
                               <div key={i} className="flex items-center gap-4 bg-white/5 border border-white/5 p-4 rounded-2xl hover:border-white/10 transition-colors">
-                                  {/* ÍCONES BASEADOS NO TIPO */}
                                   {n.type === 'follower' && <div className="w-10 h-10 rounded-full bg-[#FF1493]/20 text-[#FF1493] flex items-center justify-center shrink-0"><Heart size={16} fill="currentColor"/></div>}
                                   {n.type === 'like' && <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0"><Star size={16} fill="currentColor"/></div>}
                                   {n.type === 'comment' && <div className="w-10 h-10 rounded-full bg-[#00f0ff]/20 text-[#00f0ff] flex items-center justify-center shrink-0"><MessageCircle size={16} fill="currentColor"/></div>}
 
-                                  {/* CONTEÚDO */}
                                   <div className="flex-1 overflow-hidden">
                                       {n.type === 'follower' && <><p className="text-[10px] font-black uppercase text-[#FF1493]">Novo Fã VIP</p><p className="text-xs text-white truncate">{n.name || n.nickname || "Fã VIP"} começou a te seguir!</p></>}
                                       {n.type === 'like' && <><p className="text-[10px] font-black uppercase text-emerald-500">Nova Curtida</p><p className="text-xs text-white truncate">Alguém curtiu sua foto na Galeria.</p></>}
@@ -579,7 +596,6 @@ function DashboardContent() {
                                       </p>
                                   </div>
 
-                                  {/* MINIATURA DA MÍDIA (SE HOUVER) */}
                                   {(n.type === 'like' || n.type === 'comment') && n.media_url && (
                                       <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0">
                                           <img src={n.media_url} className="w-full h-full object-cover" />
@@ -616,7 +632,6 @@ function DashboardContent() {
                         <span className="text-[10px] font-black text-[#FF1493] uppercase tracking-widest">{followersList.length} Fãs</span>
                     </div>
                     
-                    {/* BOTÃO DA CENTRAL DE NOTIFICAÇÕES */}
                     <button onClick={() => setShowNotificationsPanel(true)} className="relative w-8 h-8 rounded-full bg-[#D946EF]/20 border border-[#D946EF]/50 flex items-center justify-center text-[#D946EF] hover:bg-[#D946EF] hover:text-white transition-all shadow-[0_0_10px_rgba(217,70,239,0.3)]">
                         <Bell size={14} className="animate-ring" />
                         {activityFeed.length > 0 && (
@@ -676,7 +691,6 @@ function DashboardContent() {
 
         <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-black uppercase text-white/40 tracking-widest">Menu da Musa</h2>
-            {/* AVISOS DO CHAT VIP */}
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest cursor-pointer text-[#D946EF]" onClick={() => { setActiveTab("chat"); }}>
                 <MessageCircle size={16} className={unreadChatCounts > 0 ? "animate-pulse" : ""} /> 
                 {unreadChatCounts > 0 ? `${unreadChatCounts} Chats` : "Mensagens"}
@@ -693,16 +707,12 @@ function DashboardContent() {
           </button>
           <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vídeos</button>
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
-          <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
+          <button onClick={() => setActiveTab("vitrine")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "vitrine" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Config. Vitrine</button>
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
-          
-          {/* 🔥 ABA SEGUIDORES 🔥 */}
           <button onClick={() => setActiveTab("followers")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "followers" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Seguidores</button>
-          
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Gerir Fãs</button>
         </div>
 
-        {/* 🔥 ÁREA: SEGUIDORES DA MUSA (PRIVACIDADE APLICADA) 🔥 */}
         {activeTab === "followers" && (
             <div className="animate-in slide-in-from-bottom-4">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
@@ -714,7 +724,6 @@ function DashboardContent() {
                                     <User size={20} className="text-[#FF1493]"/>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    {/* Escondeu WhatsApp, mostra Nome/Nickname ou "Fã VIP" */}
                                     <p className="text-xs font-black uppercase text-white truncate">{fan.name || fan.nickname || "Fã VIP"}</p>
                                     <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Fã da Musa</p>
                                 </div>
@@ -728,7 +737,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 ABA DE CHAT DA MODELO (PRIVACIDADE APLICADA) 🔥 */}
         {activeTab === "chat" && (
             <div className="animate-in slide-in-from-bottom-4">
                 <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl">
@@ -744,7 +752,6 @@ function DashboardContent() {
                                     <User size={24} className="text-[#D946EF]"/>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    {/* Nome ou "Fã VIP" - Sem WhatsApp */}
                                     <p className="text-xs font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.nickname || "Fã VIP"}</p>
                                     <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir conversa</p>
                                 </div>
@@ -758,14 +765,12 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL FLUTUANTE DA CONVERSA DA MODELO (PRIVACIDADE) 🔥 */}
         {activeTab === "chat" && activeChat && (
             <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
                 <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
                 
                 <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
                     
-                    {/* Header */}
                     <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-10 shadow-md">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
@@ -776,14 +781,12 @@ function DashboardContent() {
                         <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
                     </div>
 
-                    {/* Mensagens */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-[#0a0a0a] to-black">
                         <div className="text-center py-2"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa</span></div>
                         
                         {chatMessages.map((msg, i) => (
                             <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
                                 
-                                {/* RENDERIZAÇÃO DE PRESENTES */}
                                 {msg.is_gift ? (
                                     <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
                                         <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
@@ -835,7 +838,6 @@ function DashboardContent() {
                         <div ref={chatEndRef} />
                     </div>
 
-                    {/* Input Area */}
                     <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative shadow-md z-20">
                         <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
                             
@@ -877,7 +879,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
         {showMediaModal && chatMediaPreview && (
             <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
@@ -935,7 +936,6 @@ function DashboardContent() {
                             <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
                                 <div>
-                                    {/* Escondeu WhatsApp, exibe Fã VIP */}
                                     <p className="text-xs font-black text-white uppercase">Fã VIP</p>
                                     <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
                                     <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
@@ -1000,215 +1000,22 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "finance" && (
+        {/* 🔥 ABA: CONFIGURAÇÃO DA VITRINE E ROLETA 🔥 */}
+        {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-black border border-emerald-500/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden text-center">
-                        <h2 className="text-xs font-black uppercase mb-2 text-emerald-500 tracking-widest">Saldo Disponível (70%)</h2>
-                        <div className="text-5xl font-black mb-8 tracking-tighter">{modelBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                        <button onClick={handleWithdraw} disabled={isWithdrawing || modelBalance < 20} className="w-full bg-emerald-500 text-black py-5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50">Solicitar Saque (PIX)</button>
-                        
-                        <div className="mt-6 space-y-2 bg-white/5 p-4 rounded-2xl border border-white/5">
-                           <p className="text-[9px] text-white/70 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Check size={12} className="text-emerald-500"/> Mínimo R$ 20,00 por saque</p>
-                           <p className="text-[9px] text-white/70 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={12} className="text-emerald-500"/> Limite de 1 pedido de PIX por dia</p>
-                           <p className="text-[9px] text-amber-500 font-black uppercase tracking-widest flex items-center justify-center gap-2"><AlertTriangle size={12}/> Taxa de R$ 1,00 por saque (Regra Banco Central)</p>
-                        </div>
-                    </div>
-                    <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col justify-center text-center">
-                        <h2 className="text-xs font-black uppercase mb-2 text-[#FFD700] tracking-widest">Total de Ganhos</h2>
-                        <div className="text-5xl font-black tracking-tighter">{accumulatedEarnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                    </div>
-                </div>
-                <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
-                    <h2 className="text-xs font-black uppercase mb-4 text-[#FF1493] flex items-center gap-2"><DollarSign size={16}/> Chaves PIX para Recebimento</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <input type="text" value={pixKey1} onChange={e => setPixKey1(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none" placeholder="Chave PIX Principal (CPF, Telefone...)" />
-                        <input type="text" value={pixKey2} onChange={e => setPixKey2(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-xs text-white outline-none" placeholder="Chave PIX Secundária" />
-                    </div>
-                    <button onClick={handleSavePix} disabled={savingPix} className="bg-[#FF1493] text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">{savingPix ? "Salvando..." : "Salvar Chaves PIX"}</button>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "hub" && (
-            <div className="max-w-3xl mx-auto bg-black border border-white/10 p-10 rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-4">
-                <h2 className="text-xl font-black uppercase italic mb-8 text-[#FF1493]">Configurar Hub Público</h2>
-                <div className="space-y-6">
-                    <label className="text-[10px] font-black uppercase text-white/40 mb-2 block ml-2">Sua Biografia / Frase de Boas-vindas</label>
-                    <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-40 resize-none transition-all" placeholder="Escreva algo que atraia seus fãs..."/>
-                    <button onClick={handleSaveHub} disabled={savingHub} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-lg">{savingHub ? <Loader2 className="animate-spin mx-auto"/> : "Salvar Alterações do Hub"}</button>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "raspadinha" && (
-            <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl relative overflow-hidden">
-                    <div className="flex items-center gap-3 mb-6">
-                        <Sparkles className="text-[#FFD700]" size={24} />
-                        <h2 className="text-2xl font-black uppercase italic text-[#FF1493]">Fotos Raspadinha VIP</h2>
-                    </div>
-                    <div className="flex flex-col md:flex-row gap-8">
-                        <div className="flex-1 flex flex-col justify-center">
-                            {!scratchPreviewUrl ? (
-                                <label className={`w-full bg-white/5 text-white py-8 rounded-3xl cursor-pointer hover:bg-white/10 border border-white/10 flex flex-col items-center justify-center gap-3 font-black uppercase text-[10px] transition-all ${scratchPhotos.length >= 10 ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <Upload size={32} className="text-[#FF1493]"/> 
-                                    {scratchPhotos.length >= 10 ? "Lote Máximo Atingido (10/10)" : "Escolher Foto (Máx 10MB)"}
-                                    <input type="file" hidden accept="image/*" onChange={onChooseScratchFile} disabled={scratchPhotos.length >= 10} />
-                                </label>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="relative aspect-[3/4] max-w-xs mx-auto rounded-3xl overflow-hidden border-2 border-[#FFD700] shadow-xl">
-                                        <img src={scratchPreviewUrl} className="w-full h-full object-cover" />
-                                        <button onClick={() => { setSelectedScratchFile(null); setScratchPreviewUrl(null); }} className="absolute top-4 right-4 bg-black/60 backdrop-blur-md p-2 rounded-full border border-white/10 hover:bg-red-500 transition-colors"><X size={20}/></button>
-                                    </div>
-                                    <button onClick={onPublishScratch} disabled={uploadingScratch} className="w-full bg-gradient-to-r from-[#FF1493] to-[#D946EF] text-white py-6 rounded-2xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all max-w-xs mx-auto">
-                                        {uploadingScratch ? <div className="flex items-center gap-2"><Loader2 className="animate-spin"/> Subindo...</div> : "Salvar Foto na Coleção"}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex-1 bg-white/5 rounded-3xl p-6 border border-white/5 flex flex-col items-center justify-center text-center">
-                            <h3 className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-2">Progresso do Lote</h3>
-                            <div className="text-5xl font-black italic tracking-tighter mb-4">{scratchPhotos.length}<span className="text-xl text-white/30">/10</span></div>
-                            <div className="w-full h-2 bg-black rounded-full overflow-hidden border border-white/5">
-                                <div className="h-full bg-gradient-to-r from-[#FF1493] to-[#FFD700]" style={{ width: `${(scratchPhotos.length / 10) * 100}%` }} />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
-                        <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            
-                            {/* 🔥 BARRINHA DE BOTÕES (MÓVEL E DESKTOP AMIGÁVEL) 🔥 */}
-                            <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between border-t border-white/10">
-                                <div className="flex items-center gap-2 text-[#FFD700] text-[10px] font-black uppercase"><Star size={12}/> Ativa</div>
-                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
-                                    <Trash2 size={16}/>
-                                </button>
-                            </div>
-                            
-                        </div>
-                    )) : <div className="col-span-full py-20 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem]">Vazio.</div>}
-                </div>
-            </div>
-        )}
-
-        {activeTab === "gallery" && (
-            <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-black border border-white/10 p-8 rounded-[3rem] mb-12 shadow-2xl">
-                    <div className="grid md:grid-cols-2 gap-10">
-                        <div className="space-y-4">
-                            <label className="text-[10px] font-black uppercase text-[#FF1493] ml-2">Legenda da Foto</label>
-                            <textarea value={newMediaCaption} onChange={e => setNewMediaCaption(e.target.value.slice(0, 500))} className="w-full bg-black border border-white/10 rounded-[2rem] p-6 text-sm text-white outline-none h-32 resize-none" placeholder="O que tem na foto? 🔥"/>
-                            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-[9px] text-white/40 uppercase font-black">⚠️ REGRAS: Nudez somente em PAGO (Mín R$ 10). Grátis sem nudez.</div>
-                        </div>
-                        <div className="flex flex-col justify-between">
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
-                                    <input type="checkbox" checked={isPaidMedia} onChange={(e) => setIsPaidMedia(e.target.checked)} className="w-5 h-5 accent-[#FF1493]" />
-                                    <span className="text-[10px] font-black uppercase">Conteúdo Pago (Com Blur)</span>
-                                </div>
-                                {isPaidMedia && (
-                                    <div className="animate-in zoom-in duration-300">
-                                        <label className="text-[10px] font-black text-white/40 mb-2 block ml-2">Definir Valor (Mín. R$ 10,00)</label>
-                                        <input type="text" value={formattedPrice} onChange={handlePriceInput} className="w-full bg-black border border-[#FF1493] rounded-full py-5 px-8 text-white font-black text-2xl text-center outline-none" />
-                                    </div>
-                                )}
-                            </div>
-                            {!galleryPreviewUrl ? (
-                                <label className="w-full bg-white/5 text-white py-6 rounded-2xl cursor-pointer hover:bg-white/10 border border-white/10 flex items-center justify-center gap-3 font-black uppercase text-[10px] mt-6 transition-all">
-                                    <Upload size={20}/> Escolher Arquivo (Máx 10MB)
-                                    <input type="file" className="hidden" accept="image/*" onChange={onChooseGalleryFile} />
-                                </label>
-                            ) : (
-                                <div className="mt-6 space-y-3">
-                                    <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-[#FF1493] shadow-lg">
-                                        <img src={galleryPreviewUrl} className="w-full h-full object-cover" />
-                                        <button onClick={() => { setSelectedGalleryFile(null); setGalleryPreviewUrl(null); }} className="absolute top-2 right-2 bg-red-500 p-1 rounded-full"><X size={16}/></button>
-                                    </div>
-                                    <button onClick={onPublishPhoto} disabled={uploading} className="w-full bg-[#FF1493] text-white py-6 rounded-2xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                                        {uploading ? <div className="flex flex-col items-center gap-1"><Loader2 className="animate-spin"/><span className="text-[8px] uppercase font-black mt-1">Carregando...</span></div> : <><Camera size={20}/> Publicar Agora na Galeria</>}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {mediaList.map((item) => (
-                        <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
-                            <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
-                            
-                            {/* 🔥 BARRINHA DE BOTÕES (MÓVEL E DESKTOP AMIGÁVEL) 🔥 */}
-                            <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between gap-2 border-t border-white/10">
-                                <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#FF1493]/20 text-[#FF1493] rounded-xl hover:bg-[#FF1493] hover:text-white transition-colors text-[10px] font-black uppercase">
-                                    <Eye size={14}/> Ver Infos
-                                </button>
-                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
-                                    <Trash2 size={16}/>
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS) 🔥 */}
-        {showMediaStats && (
-            <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
-                <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
-                    <X size={20}/>
-                </button>
                 
-                {/* LADO DA IMAGEM */}
-                <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
-                    <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
-                </div>
-                
-                {/* LADO DOS COMENTÁRIOS E INFOS */}
-                <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
-                    
-                    {/* Cabeçalho do Modal */}
-                    <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center text-center">
-                        <div className="flex items-center gap-2 mb-3 bg-[#FF1493]/10 border border-[#FF1493]/30 px-4 py-2 rounded-full">
-                            <Heart size={16} fill="currentColor" className="text-[#FF1493]"/>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-[#FF1493]">{mediaLikes} Curtidas</span>
-                        </div>
-                        {showMediaStats.caption ? (
-                            <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{showMediaStats.caption}"</p>
-                        ) : (
-                            <p className="text-xs italic text-white/40 font-medium">Sem legenda</p>
-                        )}
+                {/* AVISO SE A ROLETA ESTIVER VAZIA (O BOTÃO DE GERAR AS FATIAS PADRÃO) */}
+                {prizes.length === 0 && (
+                    <div className="bg-red-500/10 border border-red-500/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center animate-pulse">
+                        <AlertTriangle size={40} className="text-red-500 mb-4" />
+                        <h3 className="text-xl font-black uppercase text-red-500 mb-2">A Roleta está vazia!</h3>
+                        <p className="text-sm font-bold text-white/60 mb-6 max-w-lg">Ocorreu um erro no primeiro carregamento ou você apagou as fatias. A roleta não vai funcionar sem fatias cadastradas. Clique no botão abaixo para restaurar o padrão.</p>
+                        <button onClick={generateDefaultPrizes} className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-[0_0_20px_rgba(239,68,68,0.4)] transition-all">
+                            Gerar Fatias Padrão Agora
+                        </button>
                     </div>
+                )}
 
-                    {/* Lista de Comentários */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
-                        <h3 className="text-[10px] font-black uppercase text-white/50 tracking-widest mb-4">Comentários dos Fãs</h3>
-                        {mediaComments.length > 0 ? mediaComments.map(c => (
-                            <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm relative group">
-                                <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
-                                <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
-                                
-                                {/* Botão de Moderação (Apagar Comentário) */}
-                                <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
-                                    <Trash2 size={14}/>
-                                </button>
-                            </div>
-                        )) : (
-                            <p className="text-center text-white/30 text-xs italic font-medium mt-10">Nenhum comentário nesta foto ainda.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "roleta" && (
-            <div className="space-y-6 animate-in fade-in">
                 <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex items-center justify-between">
                     <div><h3 className="text-[11px] font-black uppercase text-[#FFD700]">Visibilidade na Vitrine</h3></div>
                     <button onClick={async () => { const n = !showcaseVisible; setShowcaseVisible(n); await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ showcase_visible: n }) }); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${showcaseVisible ? 'bg-[#FF1493]' : 'bg-white/20'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showcaseVisible ? 'translate-x-7' : 'translate-x-1'}`} /></button>
@@ -1231,6 +1038,9 @@ function DashboardContent() {
                         {selectedBgFile && <button onClick={async () => { setUploading(true); const fn=`bg_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedBgFile.type}, body:selectedBgFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: url }) }); setCurrentBg(url); setSelectedBgFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FF1493] text-white py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Fundo Roleta</button>}
                     </div>
                 </div>
+                
+                {/* SÓ MOSTRA SE TIVER FATIAS */}
+                {prizes.length > 0 && (
                 <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl relative">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2>
@@ -1252,33 +1062,94 @@ function DashboardContent() {
                         })}
                     </div>
                 </div>
+                )}
             </div>
         )}
 
         {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
       </div>
 
-      {/* MODAL EDITAR PRÊMIO */}
+      {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS 🔥 */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
               e.preventDefault(); 
               await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value }) });
               setEditingPrize(null); loadData();
-          }} className="bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative">
+          }} className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
             <button type="button" onClick={() => setEditingPrize(null)} className="absolute top-6 right-6 text-white/20 hover:text-white transition-colors"><X size={24}/></button>
             <h2 className="text-xl font-black uppercase mb-8 text-[#FF1493] italic text-center">Editar Slot</h2>
             <div className="space-y-4">
+                
                 <input type="text" value={editingPrize.name} onChange={e => setEditingPrize({...editingPrize, name: e.target.value})} className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" />
+                
                 <div className="bg-white/5 p-4 rounded-2xl space-y-3">
-                    <p className="text-[10px] font-black uppercase text-white/40">Entrega do Conteúdo</p>
-                    <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none">
-                        <option value="whatsapp">Chamar no WhatsApp</option>
-                        <option value="link">Link Direto (Drive)</option>
+                    <p className="text-[10px] font-black uppercase text-white/40">Tipo de Entrega</p>
+                    <select value={editingPrize.delivery_type || 'whatsapp'} onChange={e => setEditingPrize({...editingPrize, delivery_type: e.target.value, delivery_value: ''})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none cursor-pointer">
+                        <option value="whatsapp">Suporte (WhatsApp Labz)</option>
+                        <option value="link">Link Direto (Telegram/Drive)</option>
                         <option value="credit">Créditos de Giro</option>
+                        <option value="media">Pack de Fotos/Vídeos (Galeria VIP)</option>
                     </select>
                 </div>
-                <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95">Salvar</button>
+
+                {/* 1. SE ELA ESCOLHER "LINK" */}
+                {editingPrize.delivery_type === 'link' && (
+                    <div className="bg-white/5 p-4 rounded-2xl animate-in fade-in space-y-2">
+                        <p className="text-[10px] font-black uppercase text-white/40">URL do Prêmio (Obrigatório)</p>
+                        <input type="text" placeholder="https://t.me/..." value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" required />
+                    </div>
+                )}
+
+                {/* 2. SE ELA ESCOLHER "CREDIT" */}
+                {editingPrize.delivery_type === 'credit' && (
+                    <div className="bg-white/5 p-4 rounded-2xl animate-in fade-in space-y-2">
+                        <p className="text-[10px] font-black uppercase text-white/40">Quantidade de Giros Extras</p>
+                        <input type="number" min="1" max="3" placeholder="Ex: 2" value={editingPrize.delivery_value || ''} onChange={e => setEditingPrize({...editingPrize, delivery_value: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-xs text-white outline-none focus:border-[#FF1493]" required />
+                        <p className="text-[8px] uppercase text-amber-500 font-bold mt-1 text-center">Máximo permitido: 3 créditos.</p>
+                    </div>
+                )}
+
+                {/* 3. SE ELA ESCOLHER "WHATSAPP" (SUPORTE) */}
+                {editingPrize.delivery_type === 'whatsapp' && (
+                    <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 animate-in fade-in text-center">
+                        <MessageCircle size={20} className="text-emerald-500 mx-auto mb-2" />
+                        <p className="text-[9px] text-emerald-400 font-black uppercase tracking-widest">O cliente será redirecionado para o WhatsApp da LabzSexy para resgatar este prêmio com o suporte.</p>
+                    </div>
+                )}
+
+                {/* 4. SE ELA ESCOLHER "MEDIA" (UPLOAD) */}
+                {editingPrize.delivery_type === 'media' && (
+                    <div className="bg-white/5 p-4 rounded-2xl space-y-3 animate-in fade-in">
+                        <p className="text-[10px] font-black uppercase text-white/40 flex justify-between">
+                            Mídias do Prêmio (Máx 10) 
+                            <span>{editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean).length : 0}/10</span>
+                        </p>
+                        
+                        <div className="flex flex-wrap gap-2 mb-2">
+                            {(editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : []).map((url: string, i: number) => (
+                                <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-white/20 shadow-md">
+                                    {url.includes('.mp4') ? <video src={url} className="w-full h-full object-cover"/> : <img src={url} className="w-full h-full object-cover"/>}
+                                    <button type="button" onClick={() => {
+                                        const newArr = editingPrize.delivery_value.split(',').filter(Boolean);
+                                        newArr.splice(i, 1);
+                                        setEditingPrize({...editingPrize, delivery_value: newArr.join(',')});
+                                    }} className="absolute top-0 right-0 bg-red-500 p-0.5 rounded-bl-md"><X size={10}/></button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <label className="w-full bg-[#D946EF]/20 text-[#D946EF] py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase cursor-pointer hover:bg-[#D946EF] hover:text-white transition-colors border border-[#D946EF]/30">
+                            {uploadingSliceMedia ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>}
+                            {uploadingSliceMedia ? "Subindo..." : "Adicionar Fotos/Vídeos"}
+                            <input type="file" multiple accept="image/*,video/*" onChange={handleSliceMediaUpload} className="hidden" disabled={uploadingSliceMedia} />
+                        </label>
+                    </div>
+                )}
+
+                <button type="submit" disabled={uploadingSliceMedia} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95 disabled:opacity-50 mt-4">
+                    Salvar Modificações
+                </button>
             </div>
           </form>
         </div>
@@ -1305,7 +1176,6 @@ function DashboardContent() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
         
-        /* 🔥 Animação do Sino 🔥 */
         @keyframes ring {
           0% { transform: rotate(0); }
           10% { transform: rotate(15deg); }
