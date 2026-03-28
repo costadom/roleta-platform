@@ -46,15 +46,17 @@ class ErrorBoundary extends Component<any, any> {
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const modelId = searchParams.get("model");
-  const modelSlug = searchParams.get("slug");
+  
+  const urlModelId = searchParams.get("model");
+  const urlModelSlug = searchParams.get("slug");
+  const modelId = (urlModelId && urlModelId !== "undefined" && urlModelId !== "null") ? urlModelId : (typeof window !== "undefined" ? localStorage.getItem("labz_model_id") : null);
+  const modelSlug = (urlModelSlug && urlModelSlug !== "undefined" && urlModelSlug !== "null") ? urlModelSlug : (typeof window !== "undefined" ? localStorage.getItem("labz_model_slug") : null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [modelUrl, setModelUrl] = useState("");
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  // 🔥 MUDANÇA: Aba "roleta" agora se chama "vitrine" internamente e visualmente 🔥
   const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
@@ -134,21 +136,33 @@ function DashboardContent() {
   }, [modelSlug]);
 
   const loadData = async () => {
-    if (!modelId) return;
+    if (!modelId) {
+        setDashboardLoading(false);
+        return;
+    }
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+      
+      const safeFetch = async (url: string) => {
+          try {
+              const res = await fetch(url, { headers });
+              if (!res.ok) return []; 
+              return await res.json();
+          } catch (e) { return []; }
+      };
+
       const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch, resFollowers] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`, { headers }).then(r => r.json()),
-        fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`, { headers }).then(r => r.json()).catch(() => []),
-        fetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`, { headers }).then(r => r.json()).catch(() => [])
+        safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
+        safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`),
+        safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`),
+        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`)
       ]);
 
       if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
@@ -178,31 +192,34 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 FUNÇÃO DE EMERGÊNCIA: GERAR FATIAS MANUALMENTE SE A ROLETA ESTIVER VAZIA 🔥
+  // 🔥 GERADOR DE FATIAS BLINDADO CONTRA ERRO 400 🔥
   const generateDefaultPrizes = async () => {
       if (!modelId) return;
       setDashboardLoading(true);
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+          
+          // REMOVIDO: delivery_type e delivery_value para não causar Erro 400 caso a coluna não exista.
+          // Inserindo o mais puro e básico para os slots aparecerem.
           const defaultSlices = [
-              { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60, delivery_type: "credit", delivery_value: "1" },
-              { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20, delivery_type: "credit", delivery_value: "3" },
-              { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10, delivery_type: "media", delivery_value: "" },
-              { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01, delivery_type: "whatsapp", delivery_value: "PIX" },
-              { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01, delivery_type: "whatsapp", delivery_value: "Presencial" }
+              { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60 },
+              { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50 },
+              { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40 },
+              { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30 },
+              { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20 },
+              { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10 },
+              { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01 },
+              { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01 }
           ];
           
           for (const slice of defaultSlices) {
               await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers, body: JSON.stringify(slice) });
           }
           
-          alert("Prêmios gerados com sucesso! A roleta já está pronta para uso.");
-          loadData(); // Recarrega os dados para mostrar as fatias
+          alert("Slots gerados com sucesso!");
+          loadData(); 
       } catch (error) {
-          alert("Erro ao gerar fatias. Tente novamente.");
+          alert("Erro de conexão ao gerar fatias. Atualize a página.");
           setDashboardLoading(false);
       }
   };
@@ -443,7 +460,6 @@ function DashboardContent() {
       } catch (e) { alert("Erro ao enviar mídia."); } finally { setUploading(false); }
   };
 
-  // 🔥 HANDLER PARA SUBIR MÍDIAS DIRETAMENTE NA FATIA DA ROLETA 🔥
   const handleSliceMediaUpload = async (e: any) => {
       const files = Array.from(e.target.files) as File[];
       if (!files.length) return;
@@ -725,7 +741,6 @@ function DashboardContent() {
           <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vídeos</button>
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
           
-          {/* 🔥 ABA RENOMEADA PARA CONFIG VITRINE 🔥 */}
           <button onClick={() => setActiveTab("vitrine")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "vitrine" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Config. Vitrine</button>
           
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
@@ -1175,11 +1190,54 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 NOVA ABA: CONFIGURAÇÃO DA VITRINE (SUBSTITUIU "ROLETA") 🔥 */}
+        {showMediaStats && (
+            <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
+                <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
+                    <X size={20}/>
+                </button>
+                
+                <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
+                    <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
+                </div>
+                
+                <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
+                    
+                    <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center text-center">
+                        <div className="flex items-center gap-2 mb-3 bg-[#FF1493]/10 border border-[#FF1493]/30 px-4 py-2 rounded-full">
+                            <Heart size={16} fill="currentColor" className="text-[#FF1493]"/>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[#FF1493]">{mediaLikes} Curtidas</span>
+                        </div>
+                        {showMediaStats.caption ? (
+                            <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{showMediaStats.caption}"</p>
+                        ) : (
+                            <p className="text-xs italic text-white/40 font-medium">Sem legenda</p>
+                        )}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
+                        <h3 className="text-[10px] font-black uppercase text-white/50 tracking-widest mb-4">Comentários dos Fãs</h3>
+                        {mediaComments.length > 0 ? mediaComments.map(c => (
+                            <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm relative group">
+                                <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
+                                <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
+                                
+                                <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
+                                    <Trash2 size={14}/>
+                                </button>
+                            </div>
+                        )) : (
+                            <p className="text-center text-white/30 text-xs italic font-medium mt-10">Nenhum comentário nesta foto ainda.</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* 🔥 ABA: CONFIGURAÇÃO DA VITRINE E ROLETA 🔥 */}
         {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
                 
-                {/* AVISO DE EMERGÊNCIA SE A ROLETA ESTIVER VAZIA */}
+                {/* AVISO SE A ROLETA ESTIVER VAZIA (O BOTÃO DE GERAR AS FATIAS PADRÃO) */}
                 {prizes.length === 0 && (
                     <div className="bg-red-500/10 border border-red-500/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center animate-pulse">
                         <AlertTriangle size={40} className="text-red-500 mb-4" />
@@ -1213,6 +1271,9 @@ function DashboardContent() {
                         {selectedBgFile && <button onClick={async () => { setUploading(true); const fn=`bg_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedBgFile.type}, body:selectedBgFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: url }) }); setCurrentBg(url); setSelectedBgFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FF1493] text-white py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Fundo Roleta</button>}
                     </div>
                 </div>
+                
+                {/* SÓ MOSTRA SE TIVER FATIAS */}
+                {prizes.length > 0 && (
                 <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl relative">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xs font-black uppercase text-white/50 tracking-widest">Slots da Roleta</h2>
@@ -1234,6 +1295,7 @@ function DashboardContent() {
                         })}
                     </div>
                 </div>
+                )}
             </div>
         )}
 
