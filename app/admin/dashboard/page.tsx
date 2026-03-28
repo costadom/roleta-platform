@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import PlayersManager from "./players";
 
-// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -26,7 +25,6 @@ const censorText = (text: string) => {
   return filteredText;
 };
 
-// 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) { super(props); this.state = { hasError: false, error: null, errorInfo: null }; }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
@@ -56,7 +54,8 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "roleta" | "players" | "raspadinha" | "chat" | "followers">("finance");
+  // 🔥 MUDANÇA: Aba "roleta" agora se chama "vitrine" internamente e visualmente 🔥
+  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
@@ -99,7 +98,6 @@ function DashboardContent() {
   const [showRoletaTutorial, setShowRoletaTutorial] = useState(false); 
 
   const [unreadChatCounts, setUnreadChatCounts] = useState(0);
-
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [showMediaStats, setShowMediaStats] = useState<any | null>(null);
   const [mediaComments, setMediaComments] = useState<any[]>([]);
@@ -165,38 +163,8 @@ function DashboardContent() {
         setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
       }
 
-      // 🔥 NOVO SISTEMA BLINDADO DE AUTO-CURA DA ROLETA 🔥
-      let fetchedPrizes = Array.isArray(resPrizes) ? resPrizes : [];
-      if (fetchedPrizes.length === 0 && modelId) {
-          try {
-              const defaultSlices = [
-                  { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60, delivery_type: "credit", delivery_value: "1" },
-                  { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50, delivery_type: "media", delivery_value: "" },
-                  { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40, delivery_type: "media", delivery_value: "" },
-                  { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30, delivery_type: "media", delivery_value: "" },
-                  { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20, delivery_type: "credit", delivery_value: "3" },
-                  { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10, delivery_type: "media", delivery_value: "" },
-                  { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01, delivery_type: "whatsapp", delivery_value: "PIX" },
-                  { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01, delivery_type: "whatsapp", delivery_value: "Presencial" }
-              ];
-              
-              const insertRes = await fetch(`${supabaseUrl}/rest/v1/Prize`, { 
-                  method: "POST", 
-                  headers: { ...headers, "Content-Type": "application/json", "Prefer": "return=representation" }, 
-                  body: JSON.stringify(defaultSlices) 
-              });
-
-              if (insertRes.ok) {
-                  const insertedData = await insertRes.json();
-                  fetchedPrizes = insertedData;
-              }
-          } catch(err) {
-              console.error("Erro na auto-cura das fatias:", err);
-          }
-      }
-
       setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
-      setPrizes(fetchedPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
+      setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
       setMediaList(Array.isArray(resMedia) ? resMedia : []); setVideoRequests(Array.isArray(resVideos) ? resVideos : []); setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
       setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
 
@@ -210,31 +178,51 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
+  // 🔥 FUNÇÃO DE EMERGÊNCIA: GERAR FATIAS MANUALMENTE SE A ROLETA ESTIVER VAZIA 🔥
+  const generateDefaultPrizes = async () => {
+      if (!modelId) return;
+      setDashboardLoading(true);
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+          const defaultSlices = [
+              { model_id: modelId, name: "1 Giro Extra", color: "#FF1493", weight: 60, delivery_type: "credit", delivery_value: "1" },
+              { model_id: modelId, name: "Foto Exclusiva", color: "#00f0ff", weight: 50, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "Vídeo Curtinho", color: "#FFD700", weight: 40, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "Pack 3 Fotos", color: "#D946EF", weight: 30, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "3 Giros Extras", color: "#10B981", weight: 20, delivery_type: "credit", delivery_value: "3" },
+              { model_id: modelId, name: "Pack Premium", color: "#3B82F6", weight: 10, delivery_type: "media", delivery_value: "" },
+              { model_id: modelId, name: "R$ 100 PIX", color: "#4F46E5", weight: 0.01, delivery_type: "whatsapp", delivery_value: "PIX" },
+              { model_id: modelId, name: "Encontro VIP", color: "#E11D48", weight: 0.01, delivery_type: "whatsapp", delivery_value: "Presencial" }
+          ];
+          
+          for (const slice of defaultSlices) {
+              await fetch(`${supabaseUrl}/rest/v1/Prize`, { method: "POST", headers, body: JSON.stringify(slice) });
+          }
+          
+          alert("Prêmios gerados com sucesso! A roleta já está pronta para uso.");
+          loadData(); // Recarrega os dados para mostrar as fatias
+      } catch (error) {
+          alert("Erro ao gerar fatias. Tente novamente.");
+          setDashboardLoading(false);
+      }
+  };
+
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           const mediaIds = medias.map(m => m.id);
-          
-          let likesList: any[] = [];
-          let commentsList: any[] = [];
-
+          let likesList: any[] = []; let commentsList: any[] = [];
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(',');
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()),
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
               ]);
-              
               likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url }));
               commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url }));
           }
-
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
-
-          const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
-              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-              .slice(0, 40);
-
+          const combinedFeed = [...followersMapped, ...likesList, ...commentsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 40);
           setActivityFeed(combinedFeed);
       } catch (e) {}
   };
@@ -736,7 +724,10 @@ function DashboardContent() {
           </button>
           <button onClick={() => setActiveTab("video_requests")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "video_requests" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vídeos</button>
           <button onClick={() => setActiveTab("sales")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "sales" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Vendas</button>
-          <button onClick={() => setActiveTab("roleta")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "roleta" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Roleta</button>
+          
+          {/* 🔥 ABA RENOMEADA PARA CONFIG VITRINE 🔥 */}
+          <button onClick={() => setActiveTab("vitrine")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "vitrine" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Config. Vitrine</button>
+          
           <button onClick={() => setActiveTab("raspadinha")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "raspadinha" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Raspadinha</button>
           <button onClick={() => setActiveTab("followers")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "followers" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Seguidores</button>
           <button onClick={() => setActiveTab("players")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "players" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Gerir Fãs</button>
@@ -1184,51 +1175,22 @@ function DashboardContent() {
             </div>
         )}
 
-        {showMediaStats && (
-            <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
-                <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
-                    <X size={20}/>
-                </button>
-                
-                <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
-                    <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
-                </div>
-                
-                <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
-                    
-                    <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center text-center">
-                        <div className="flex items-center gap-2 mb-3 bg-[#FF1493]/10 border border-[#FF1493]/30 px-4 py-2 rounded-full">
-                            <Heart size={16} fill="currentColor" className="text-[#FF1493]"/>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-[#FF1493]">{mediaLikes} Curtidas</span>
-                        </div>
-                        {showMediaStats.caption ? (
-                            <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{showMediaStats.caption}"</p>
-                        ) : (
-                            <p className="text-xs italic text-white/40 font-medium">Sem legenda</p>
-                        )}
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
-                        <h3 className="text-[10px] font-black uppercase text-white/50 tracking-widest mb-4">Comentários dos Fãs</h3>
-                        {mediaComments.length > 0 ? mediaComments.map(c => (
-                            <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm relative group">
-                                <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
-                                <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
-                                
-                                <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
-                                    <Trash2 size={14}/>
-                                </button>
-                            </div>
-                        )) : (
-                            <p className="text-center text-white/30 text-xs italic font-medium mt-10">Nenhum comentário nesta foto ainda.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === "roleta" && (
+        {/* 🔥 NOVA ABA: CONFIGURAÇÃO DA VITRINE (SUBSTITUIU "ROLETA") 🔥 */}
+        {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
+                
+                {/* AVISO DE EMERGÊNCIA SE A ROLETA ESTIVER VAZIA */}
+                {prizes.length === 0 && (
+                    <div className="bg-red-500/10 border border-red-500/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center animate-pulse">
+                        <AlertTriangle size={40} className="text-red-500 mb-4" />
+                        <h3 className="text-xl font-black uppercase text-red-500 mb-2">A Roleta está vazia!</h3>
+                        <p className="text-sm font-bold text-white/60 mb-6 max-w-lg">Ocorreu um erro no primeiro carregamento ou você apagou as fatias. A roleta não vai funcionar sem fatias cadastradas. Clique no botão abaixo para restaurar o padrão.</p>
+                        <button onClick={generateDefaultPrizes} className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase shadow-[0_0_20px_rgba(239,68,68,0.4)] transition-all">
+                            Gerar Fatias Padrão Agora
+                        </button>
+                    </div>
+                )}
+
                 <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex items-center justify-between">
                     <div><h3 className="text-[11px] font-black uppercase text-[#FFD700]">Visibilidade na Vitrine</h3></div>
                     <button onClick={async () => { const n = !showcaseVisible; setShowcaseVisible(n); await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ showcase_visible: n }) }); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${showcaseVisible ? 'bg-[#FF1493]' : 'bg-white/20'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showcaseVisible ? 'translate-x-7' : 'translate-x-1'}`} /></button>
@@ -1336,6 +1298,7 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* MODAL TUTORIAL ROLETA */}
       {showRoletaTutorial && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-2xl relative">
