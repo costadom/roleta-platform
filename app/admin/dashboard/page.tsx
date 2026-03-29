@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import PlayersManager from "./players";
 
-// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -32,7 +31,6 @@ const formatAudioTime = (seconds: number) => {
     return `${m}:${s}`;
 };
 
-// 🔥 COMPRESSOR DE IMAGENS NATIVO (DEIXA O SITE RÁPIDO) 🔥
 const compressImage = async (file: File): Promise<File> => {
     if (!file.type.startsWith('image/')) return file; 
     return new Promise((resolve) => {
@@ -68,7 +66,6 @@ const compressImage = async (file: File): Promise<File> => {
     });
 };
 
-// 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) { super(props); this.state = { hasError: false, error: null, errorInfo: null }; }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
@@ -171,7 +168,6 @@ function DashboardContent() {
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
-  // 🔥 ESTADOS DO DISPARADOR TELEGRAM 🔥
   const [tgGroupId, setTgGroupId] = useState("");
   const [tgMessage, setTgMessage] = useState("");
   const [tgToken, setTgToken] = useState("");
@@ -188,7 +184,6 @@ function DashboardContent() {
     if (modelSlug && typeof window !== 'undefined') setModelUrl(window.location.origin);
   }, [modelSlug]);
 
-  // 🔥 CARREGAMENTO OTIMIZADO 🔥
   const loadData = async () => {
     if (!modelId) {
         setDashboardLoading(false);
@@ -205,7 +200,6 @@ function DashboardContent() {
           } catch (e) { return []; }
       };
 
-      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
       const [resGlob, resModel, resConfig] = await Promise.all([
         safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
         safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`),
@@ -225,13 +219,11 @@ function DashboardContent() {
         setCurrentProfile(resConfig[0].profile_url || null); 
         setModelName(resConfig[0].model_name || ""); 
         setShowcaseVisible(resConfig[0].showcase_visible === true);
-        setTgToken(resConfig[0].tg_bot_token || ""); // Puxa o Token do Banco
+        setTgToken(resConfig[0].tg_bot_token || ""); 
       }
 
-      // TELA LIBERADA
       setDashboardLoading(false);
 
-      // 2. CARREGA OS DADOS PESADOS NO FUNDO
       Promise.all([
         safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
         safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
@@ -259,7 +251,6 @@ function DashboardContent() {
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 SALVAR TOKEN EXCLUSIVO NO BANCO 🔥
   const handleSaveTgToken = async () => {
     setSavingToken(true);
     try {
@@ -275,10 +266,30 @@ function DashboardContent() {
     setSavingToken(false);
   };
 
-  // 🔥 FUNÇÃO DE DISPARO NO GRUPO DA MODELO 🔥
+  // 🔥 O FILTRO MÁGICO DE LINKS DO TELEGRAM 🔥
   const handleSendTelegramBroadcast = async () => {
-    if (!tgGroupId || !tgMessage) return alert("Preencha o ID do Grupo e a Mensagem.");
-    setSendingTg(true); setTgStatus("");
+    if (!tgGroupId || !tgMessage) return alert("Preencha o Link do Grupo e a Mensagem.");
+    
+    setSendingTg(true); 
+    setTgStatus("");
+
+    // Inteligência para limpar o link e extrair o @
+    let finalChatId = tgGroupId.trim();
+    
+    if (finalChatId.includes("t.me/")) {
+        const slugStr = finalChatId.split("t.me/")[1].split("/")[0].split("?")[0];
+        
+        // Bloqueia links de convite privados
+        if (slugStr.startsWith("+") || slugStr.startsWith("joinchat")) {
+             setTgStatus("❌ Erro: Não use Link de Convite (+...). Para grupos privados, use o ID Numérico (-100...).");
+             setSendingTg(false);
+             return;
+        }
+        finalChatId = "@" + slugStr;
+    } else if (!finalChatId.startsWith("-") && !finalChatId.startsWith("@")) {
+        // Se a pessoa digitou só o nome puro "savanahof"
+        finalChatId = "@" + finalChatId;
+    }
 
     const miniAppLink = `${modelUrl}/tg-game/${modelSlug}`;
 
@@ -287,7 +298,7 @@ function DashboardContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-            canal: tgGroupId, 
+            canal: finalChatId, // Manda o ID limpo
             mensagem: tgMessage, 
             linkRoleta: miniAppLink,
             modelId: modelId
@@ -296,9 +307,9 @@ function DashboardContent() {
       const data = await res.json();
       
       if (data.success) {
-        setTgStatus("✅ Disparo realizado com sucesso no grupo!");
+        setTgStatus(`✅ Disparo de sucesso para ${finalChatId}!`);
       } else {
-        setTgStatus(`❌ Erro: Verifique se o Bot é admin do seu grupo. [${data.error}]`);
+        setTgStatus(`❌ Erro: ${data.error}`);
       }
     } catch (e) {
       setTgStatus("❌ Erro de conexão ao disparar.");
@@ -342,24 +353,31 @@ function DashboardContent() {
       }
   };
 
+  // 🔥 ERRO 400 DO SUPABASE CORRIGIDO (LIMITE DE 50 FOTOS PARA BUSCA DE LIKES) 🔥
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          const mediaIds = medias.map(m => m.id);
+          // Pega no máximo as 50 mídias mais recentes para não estourar o limite de URL do Supabase
+          const recentMedias = medias.slice(0, 50); 
+          const mediaIds = recentMedias.map(m => m.id);
+          
           let likesList: any[] = []; let commentsList: any[] = [];
+          
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(',');
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()),
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
               ]);
-              likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: medias.find(m => m.id === l.media_id)?.url }));
-              commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: medias.find(m => m.id === c.media_id)?.url }));
+              likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: recentMedias.find(m => m.id === l.media_id)?.url }));
+              commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: recentMedias.find(m => m.id === c.media_id)?.url }));
           }
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
           const combinedFeed = [...followersMapped, ...likesList, ...commentsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 40);
           setActivityFeed(combinedFeed);
-      } catch (e) {}
+      } catch (e) {
+          console.error("Erro feed:", e);
+      }
   };
 
   const loadMediaStats = async (mediaItem: any) => {
@@ -786,7 +804,6 @@ function DashboardContent() {
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
           
-          {/* 🔥 BOTAO DA ABA MARKETING NO MENU 🔥 */}
           <button onClick={() => setActiveTab("marketing")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "marketing" ? "bg-[#00f0ff] text-black shadow-lg shadow-[#00f0ff]/30" : "text-white/30 hover:bg-white/5"}`}>
               <Rocket size={14}/> TG Ads
           </button>
@@ -837,7 +854,7 @@ function DashboardContent() {
                     </div>
                 </div>
 
-                {/* CAIXA DO DISPARADOR NO GRUPO */}
+                {/* CAIXA DO DISPARADOR NO GRUPO COM FILTRO MÁGICO */}
                 <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-[#00f0ff]/30 p-8 rounded-[3rem] shadow-[0_0_30px_rgba(0,240,255,0.1)] relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-[#00f0ff]/5 rounded-full blur-[50px] pointer-events-none"></div>
                     
@@ -847,14 +864,14 @@ function DashboardContent() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-6">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-[#00f0ff] ml-2 flex items-center gap-1"><Users size={12}/> ID do seu Grupo</label>
+                                <label className="text-[10px] font-black uppercase text-[#00f0ff] ml-2 flex items-center gap-1"><Users size={12}/> Link do Grupo</label>
                                 <input 
                                     type="text" 
-                                    placeholder="Ex: @clubinhodasavanah ou -1001234567" 
+                                    placeholder="Ex: https://t.me/savanahof" 
                                     value={tgGroupId} onChange={(e) => setTgGroupId(e.target.value)}
                                     className="w-full bg-black/50 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#00f0ff] mt-2 transition-all" 
                                 />
-                                <p className="text-[8px] text-white/30 uppercase font-black mt-2 ml-2">⚠️ Seu Bot precisa ser Administrador do grupo para poder postar a mensagem.</p>
+                                <p className="text-[8px] text-white/30 uppercase font-black mt-2 ml-2">⚠️ Você pode colar o link inteiro. Nós arrumamos pra você.</p>
                             </div>
 
                             <div>
@@ -1238,6 +1255,7 @@ function DashboardContent() {
 
       {/* -------------------- MODAIS E CAMADAS FLUTUANTES (Z-INDEX SUPERIOR) -------------------- */}
 
+      {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
       {activeTab === "chat" && activeChat && (
           <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
               <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
@@ -1327,6 +1345,7 @@ function DashboardContent() {
           </div>
       )}
 
+      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS DA GALERIA) - LIVRE DE ABAS 🔥 */}
       {showMediaStats && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
               <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
@@ -1367,6 +1386,7 @@ function DashboardContent() {
           </div>
       )}
 
+      {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
       {showMediaModal && chatMediaPreview && (
           <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
@@ -1411,6 +1431,7 @@ function DashboardContent() {
           </div>
       )}
 
+      {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS (VITRINE/ROLETA) 🔥 */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
@@ -1434,6 +1455,7 @@ function DashboardContent() {
                     </select>
                 </div>
 
+                {/* 1. SE ELA ESCOLHER "LINK" */}
                 {editingPrize.delivery_type === 'link' && (
                     <div className="bg-white/5 p-4 rounded-2xl animate-in fade-in space-y-2">
                         <p className="text-[10px] font-black uppercase text-white/40">URL do Prêmio (Obrigatório)</p>
@@ -1441,6 +1463,7 @@ function DashboardContent() {
                     </div>
                 )}
 
+                {/* 2. SE ELA ESCOLHER "CREDIT" */}
                 {editingPrize.delivery_type === 'credit' && (
                     <div className="bg-white/5 p-4 rounded-2xl animate-in fade-in space-y-2">
                         <p className="text-[10px] font-black uppercase text-white/40">Quantidade de Giros Extras</p>
@@ -1449,6 +1472,7 @@ function DashboardContent() {
                     </div>
                 )}
 
+                {/* 3. SE ELA ESCOLHER "WHATSAPP" (SUPORTE) */}
                 {editingPrize.delivery_type === 'whatsapp' && (
                     <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 animate-in fade-in text-center">
                         <MessageCircle size={20} className="text-emerald-500 mx-auto mb-2" />
@@ -1456,6 +1480,7 @@ function DashboardContent() {
                     </div>
                 )}
 
+                {/* 4. SE ELA ESCOLHER "MEDIA" (UPLOAD) */}
                 {editingPrize.delivery_type === 'media' && (
                     <div className="bg-white/5 p-4 rounded-2xl space-y-3 animate-in fade-in">
                         <p className="text-[10px] font-black uppercase text-white/40 flex justify-between">
@@ -1492,6 +1517,7 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* MODAL TUTORIAL ROLETA */}
       {showRoletaTutorial && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-2xl relative">
