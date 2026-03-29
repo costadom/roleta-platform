@@ -4,10 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Loader2, Play, ArrowLeft, Camera, Gamepad2, X, Video, 
-  Wallet, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, Radio, Coins
+  Wallet, User, Image as ImageIcon, MessageCircle, Send, Lock, Gift, Mic, Copy, CheckCircle, Bell, Radio, Coins, Heart, ShieldCheck
 } from "lucide-react";
 
-// 🔥 FUNÇÃO DE CENSURA ANTI-FUGA 🔥
 const censorText = (text: string) => {
   if (!text) return text;
   const forbiddenPatterns = [
@@ -28,10 +27,8 @@ const censorText = (text: string) => {
 
 export default function PlayerPersonalHub() {
   const router = useRouter();
-  const [initialLoading, setInitialLoading] = useState(true);
   const [playerPhone, setPlayerPhone] = useState<string | null>(null);
   
-  // Saldos e Associações
   const [associations, setAssociations] = useState<any[]>([]); 
   const [liveTokens, setLiveTokens] = useState<number>(0);
   const [initialTokensCheck, setInitialTokensCheck] = useState<number>(0);
@@ -41,18 +38,15 @@ export default function PlayerPersonalHub() {
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   const [liked, setLiked] = useState(false);
 
-  // Notificações
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
-  // Chat
   const [chatOpen, setChatOpen] = useState(false);
   const [currentChatModel, setCurrentChatModel] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Sistema PIX Global (Chat, Mídia, Presentes e LiveTokens)
   const [showShopModal, setShowShopModal] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeCopiaCola: string; txId: string; value: number; type: string; msgId?: string; giftMsg?: string } | null>(null);
@@ -102,20 +96,22 @@ export default function PlayerPersonalHub() {
       } catch (e) {}
   };
 
+  // 🔥 BUSCA OTIMIZADA E ASSÍNCRONA 🔥
   useEffect(() => {
+    const logged = localStorage.getItem("labz_player_logged") === "true";
+    const phone = localStorage.getItem("labz_player_phone");
+    if (!logged || !phone) { router.push('/'); return; }
+    setPlayerPhone(phone);
+
     async function loadData() {
       try {
-        const logged = localStorage.getItem("labz_player_logged") === "true";
-        const phone = localStorage.getItem("labz_player_phone");
-        if (!logged || !phone) { router.push('/'); return; }
-        setPlayerPhone(phone);
-
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
+        // 1. Busca os dados essenciais primeiro (Saldos e Info das Modelos)
         const [pRes, mRes, cRes] = await Promise.all([
             fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=*`, { headers }),
-            fetch(`${supabaseUrl}/rest/v1/Models?select=*`, { headers }),
-            fetch(`${supabaseUrl}/rest/v1/Configs?select=*`, { headers })
+            fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,live_status`, { headers }),
+            fetch(`${supabaseUrl}/rest/v1/Configs?select=model_id,model_name,profile_url`, { headers })
         ]);
 
         if (!pRes.ok) return;
@@ -123,10 +119,7 @@ export default function PlayerPersonalHub() {
         const mData = await mRes.json();
         const cData = await cRes.json();
 
-        // Pega o saldo global de lives (Basta pegar da primeira linha do player)
-        if (pData.length > 0) {
-            setLiveTokens(pData[0].live_tokens || 0);
-        }
+        if (pData.length > 0) setLiveTokens(pData[0].live_tokens || 0);
 
         const getInfo = (mId: string) => {
             const m = mData.find((x:any) => x.id === mId);
@@ -134,37 +127,40 @@ export default function PlayerPersonalHub() {
             return { slug: m?.slug, model_name: c?.model_name, profile_url: c?.profile_url, model_id: mId, live_status: m?.live_status };
         };
 
-        // Associações Reais (Apenas onde ele tem conta)
         const assocData = pData.map((p:any) => ({ ...p, modelInfo: getInfo(p.model_id) })).filter((p:any) => p.modelInfo.model_name);
         setAssociations(assocData);
 
         const ids = pData.map((p:any) => p.id).filter((id:any) => id && id.length > 20);
 
+        // 2. Busca os dados "pesados" (Vídeos e Galeria) depois, sem travar a tela
         if (ids.length > 0) {
             checkNotifications(ids); 
             setInterval(() => checkNotifications(ids), 10000); 
 
-            const [vRes, uRes] = await Promise.all([
-                fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${ids.join(',')})&select=*`, { headers }),
-                fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${ids.join(',')})&select=*`, { headers })
-            ]);
+            // Deixa rodando solto
+            fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${ids.join(',')})&select=*`, { headers })
+              .then(res => res.json())
+              .then(vData => {
+                 setVideoOrders(vData.map((v:any) => ({ ...v, modelInfo: getInfo(v.model_id) })).filter((v:any) => v.status !== 'pendente'));
+              })
+              .catch(() => {});
 
-            let vData = vRes.ok ? await vRes.json() : [];
-            let uData = uRes.ok ? await uRes.json() : [];
-
-            setVideoOrders(vData.map((v:any) => ({ ...v, modelInfo: getInfo(v.model_id) })).filter((v:any) => v.status !== 'pendente'));
-
-            const mIds = uData.map((u:any) => u.media_id).filter(Boolean);
-            if (mIds.length > 0) {
-                const mediaRes = await fetch(`${supabaseUrl}/rest/v1/Media?id=in.(${mIds.join(',')})&select=*`, { headers });
-                const mediaData = await mediaRes.json();
-                setUnlockedGallery(uData.map((u:any) => {
-                    const mObj = mediaData.find((mx:any) => mx.id === u.media_id);
-                    return mObj ? { ...u, Media: { ...mObj, modelInfo: getInfo(mObj.model_id) } } : null;
-                }).filter(Boolean));
-            }
+            fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${ids.join(',')})&select=*`, { headers })
+              .then(res => res.json())
+              .then(async uData => {
+                  const mIds = uData.map((u:any) => u.media_id).filter(Boolean);
+                  if (mIds.length > 0) {
+                      const mediaRes = await fetch(`${supabaseUrl}/rest/v1/Media?id=in.(${mIds.join(',')})&select=*`, { headers });
+                      const mediaData = await mediaRes.json();
+                      setUnlockedGallery(uData.map((u:any) => {
+                          const mObj = mediaData.find((mx:any) => mx.id === u.media_id);
+                          return mObj ? { ...u, Media: { ...mObj, modelInfo: getInfo(mObj.model_id) } } : null;
+                      }).filter(Boolean));
+                  }
+              })
+              .catch(() => {});
         }
-      } catch (e) { console.error("Erro Hub:", e); } finally { setInitialLoading(false); }
+      } catch (e) {} 
     }
     loadData();
   }, [router, supabaseUrl, supabaseKey]);
@@ -183,7 +179,6 @@ export default function PlayerPersonalHub() {
       return `${m}:${s}`;
   };
 
-  // 🔥 LÓGICA DO CHAT 🔥
   const openChat = async (modelInfo: any, playerId: string) => {
       setCurrentChatModel({ ...modelInfo, player_id: playerId });
       setChatOpen(true);
@@ -203,7 +198,6 @@ export default function PlayerPersonalHub() {
             if (msgRes.ok) {
                 const msgs = await msgRes.json();
                 setMessages(msgs);
-                
                 const unread = msgs.filter((m:any) => m.sender_type === 'model' && !m.is_read);
                 if (unread.length > 0) {
                     setUnreadCounts(prev => ({ ...prev, [modelId]: 0 }));
@@ -220,7 +214,6 @@ export default function PlayerPersonalHub() {
             const newChatData = await newChatRes.json();
             if(newChatData[0]) chatId = newChatData[0].id;
         }
-
         setCurrentChatModel((prev: any) => ({ ...prev, chat_id: chatId }));
         if(isFirstLoad) setTimeout(scrollToBottom, 100);
       } catch (e) {}
@@ -247,7 +240,6 @@ export default function PlayerPersonalHub() {
       } catch(e) {}
   };
 
-  // 🔥 GERADOR UNIVERSAL DE PIX (LIVETOKENS, PRESENTES E MÍDIA) 🔥
   const generatePix = async (value: number, type: 'live_tokens' | 'gift' | 'chat_media', msgId?: string, giftMsg = "") => {
       setGeneratingPix(true);
       setPixTimeLeft(600); 
@@ -255,7 +247,6 @@ export default function PlayerPersonalHub() {
           const headersAuth = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
           let playerIdToUse = null;
 
-          // Se for LiveTokens, pega qualquer ID do jogador. Se for chat, tem que ser o ID daquela sala.
           if (type === 'live_tokens') {
               const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone!)}&select=id`, { headers: headersAuth });
               playerIdToUse = (await pRes.json())[0]?.id;
@@ -276,7 +267,7 @@ export default function PlayerPersonalHub() {
                   amount: value, 
                   userId: playerIdToUse,
                   type: type,
-                  modelId: currentChatModel?.model_id, // Pode ser null pra LiveTokens globais
+                  modelId: currentChatModel?.model_id,
                   mediaId: msgId 
               }),
           });
@@ -301,7 +292,6 @@ export default function PlayerPersonalHub() {
       } catch (error: any) { alert(`Falha: ${error.message}`); } finally { setGeneratingPix(false); }
   };
 
-  // 🔥 POLLING DE PIX (Múltiplas Frentes) 🔥
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (pixData && !paymentSuccess && playerPhone) {
@@ -309,7 +299,6 @@ export default function PlayerPersonalHub() {
               try {
                   const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
                   
-                  // Verifica Mídia do Chat
                   if (pixData.type === 'chat_media' && pixData.msgId) {
                       const res = await fetch(`${supabaseUrl}/rest/v1/Messages?id=eq.${pixData.msgId}&select=is_unlocked`, { headers });
                       const data = await res.json();
@@ -318,7 +307,6 @@ export default function PlayerPersonalHub() {
                           setTimeout(() => { setShowPixModal(false); setPixData(null); setPaymentSuccess(false); fetchChatMessages(currentChatModel.model_id, currentChatModel.player_id, true); }, 2500);
                       }
                   } 
-                  // Verifica Presente VIP
                   else if (pixData.type === 'gift') {
                       const res = await fetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${currentChatModel?.model_id}&player_phone=eq.${encodeURIComponent(playerPhone)}&real_amount=eq.${pixData.value}&order=created_at.desc&limit=1`, { headers });
                       const data = await res.json();
@@ -327,7 +315,6 @@ export default function PlayerPersonalHub() {
                           setTimeout(() => { setShowPixModal(false); setPixData(null); setPaymentSuccess(false); fetchChatMessages(currentChatModel.model_id, currentChatModel.player_id, true); }, 2500);
                       }
                   }
-                  // Verifica Compra de LiveTokens
                   else if (pixData.type === 'live_tokens') {
                       const res = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(playerPhone)}&select=live_tokens`, { headers });
                       const data = await res.json();
@@ -348,12 +335,9 @@ export default function PlayerPersonalHub() {
       if (pixData?.qrCodeCopiaCola) { navigator.clipboard.writeText(pixData.qrCodeCopiaCola); setCopied(true); setTimeout(() => setCopied(false), 2000); }
   };
 
-  if (initialLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Acessando Universo Privado...</h2></div>;
-
   return (
     <div className="min-h-[100dvh] bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden">
       
-      {/* HEADER LIQUID GLASS DA LABZSEXY */}
       <header className="fixed top-0 left-0 w-full h-20 bg-[#0a0a0a]/80 backdrop-blur-2xl border-b border-white/5 z-[100] px-4 sm:px-6 flex items-center justify-between shadow-2xl">
           <div className="flex items-center gap-2">
              <button onClick={() => router.push('/vitrine')} className="p-2 sm:p-3 bg-white/5 rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all mr-2"><ArrowLeft size={18}/></button>
@@ -364,8 +348,6 @@ export default function PlayerPersonalHub() {
           </div>
           
           <div className="flex items-center gap-3 sm:gap-6">
-              
-              {/* 🔥 BOTÃO DE COMPRAR LIVETOKENS GLOBAL 🔥 */}
               <button onClick={() => setShowShopModal(true)} className="flex items-center gap-2 bg-[#00f0ff]/10 border border-[#00f0ff]/30 px-3 sm:px-4 py-2 rounded-full shadow-[0_0_15px_rgba(0,240,255,0.2)] hover:bg-[#00f0ff] hover:text-black transition-all group">
                  <Radio size={14} className="text-[#00f0ff] group-hover:text-black animate-pulse" />
                  <div className="flex flex-col items-start">
@@ -378,15 +360,15 @@ export default function PlayerPersonalHub() {
                   <Bell size={18} className={totalUnread > 0 ? "text-[#D946EF] animate-pulse" : "text-white/50"} />
                   {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-black">{totalUnread}</span>}
               </div>
-              
-              <button onClick={() => { localStorage.clear(); window.location.replace('/'); }} className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-full text-[9px] font-black uppercase shadow-xl hover:bg-red-500 hover:text-white transition-all">Sair</button>
+              <button onClick={() => { localStorage.clear(); window.location.replace('/'); }} className="p-2 sm:px-4 sm:py-2 bg-white/5 border border-white/10 text-white/50 hover:text-white rounded-full text-[9px] font-black uppercase transition-all">Sair</button>
           </div>
       </header>
 
       <main className={`max-w-7xl mx-auto p-4 sm:p-8 mt-28 transition-all ${chatOpen ? 'blur-sm brightness-50' : ''}`}>
         
+        {/* MUSAS */}
         <section className="mb-16">
-            <h2 className="text-sm font-black uppercase text-white/50 mb-6 flex items-center gap-3 tracking-widest pl-2"><Wallet size={18} className="text-[#D946EF]"/> Minhas Musas & Saldos</h2>
+            <h2 className="text-sm font-black uppercase text-white/50 mb-6 flex items-center gap-3 tracking-widest pl-2"><MessageCircle size={18} className="text-[#D946EF]"/> Musas & Conversas</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {associations.length > 0 ? associations.map((assoc: any) => {
                     const unread = unreadCounts[assoc.modelInfo?.model_id] || 0;
@@ -394,15 +376,12 @@ export default function PlayerPersonalHub() {
 
                     return (
                     <div key={assoc.id} className="bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 p-6 rounded-[2.5rem] shadow-2xl flex flex-col justify-between gap-5 relative overflow-hidden group hover:border-[#D946EF]/40 transition-all min-h-[160px]">
-                        
-                        {/* 🔥 BOLINHA DE STATUS AO VIVO 🔥 */}
                         {isOnline && (
                            <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 shadow-lg">
                                <span className={`w-2 h-2 rounded-full animate-pulse ${assoc.modelInfo.live_status === 'vip' ? 'bg-[#ff0055] shadow-[0_0_10px_rgba(255,0,85,0.8)]' : 'bg-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.8)]'}`}></span>
                                <span className={`text-[8px] font-black uppercase tracking-widest ${assoc.modelInfo.live_status === 'vip' ? 'text-[#ff0055]' : 'text-[#00f0ff]'}`}>{assoc.modelInfo.live_status === 'vip' ? 'VIP' : 'Ao Vivo'}</span>
                            </div>
                         )}
-
                         <div className="flex items-center gap-4 relative z-10">
                             <div className="w-16 h-16 rounded-full bg-black border-2 border-[#D946EF] overflow-hidden shrink-0 flex items-center justify-center bg-black/50 shadow-[0_0_15px_rgba(217,70,239,0.3)]">
                                 {assoc.modelInfo?.profile_url ? <img src={assoc.modelInfo.profile_url} className="w-full h-full object-cover"/> : <User className="w-8 h-8 text-[#D946EF]"/>}
@@ -412,17 +391,21 @@ export default function PlayerPersonalHub() {
                                 <h3 className="text-3xl font-black text-white tracking-tighter truncate drop-shadow-md">{assoc.credits} CR</h3>
                             </div>
                         </div>
-                        
                         <div className="grid grid-cols-2 gap-2 relative z-10 pt-4 border-t border-white/10">
                             <button onClick={() => router.push(`/game/${assoc.modelInfo?.slug}`)} className="col-span-2 bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white border-none py-4 rounded-xl text-[10px] font-black uppercase shadow-[0_0_20px_rgba(217,70,239,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Gamepad2 size={16}/> Jogar Roleta</button>
                             <button onClick={() => openChat(assoc.modelInfo, assoc.id)} className="relative bg-white/5 hover:bg-white/10 border border-white/10 text-white py-4 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5"><MessageCircle size={14}/> Chat {unread > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#0a0a0a] animate-bounce">{unread}</span>}</button>
                             <button onClick={() => router.push(`/profile/${assoc.modelInfo?.slug}`)} className="bg-white/5 hover:bg-white/10 border border-white/10 text-white py-4 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5"><User size={14}/> Hub Vip</button>
                         </div>
                     </div>
-                ) }) : <div className="py-24 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem] col-span-full">Nenhuma musa associada ainda.</div>}
+                ) }) : (
+                    <div className="col-span-full py-16 text-center text-white/30 text-xs italic font-medium uppercase tracking-widest border border-dashed border-white/10 rounded-3xl animate-pulse">
+                       Aguardando os dados das suas musas...
+                    </div>
+                )}
             </div>
         </section>
 
+        {/* VÍDEOS */}
         <section className="mb-16">
             <h2 className="text-sm font-black uppercase text-white/50 mb-6 flex items-center gap-3 tracking-widest pl-2"><Video size={18} className="text-[#D946EF]"/> Vídeos Encomendados</h2>
             <div className="grid gap-6">
@@ -450,13 +433,14 @@ export default function PlayerPersonalHub() {
             </div>
         </section>
 
+        {/* GALERIA */}
         <section className="mb-12">
             <h2 className="text-sm font-black uppercase text-white/50 mb-6 flex items-center gap-3 tracking-widest pl-2"><Camera size={18} className="text-[#D946EF]"/> Coleção VIP</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
                 {unlockedGallery.length > 0 ? unlockedGallery.map((item: any) => (
-                    <div key={item.id} onClick={() => { setViewingMedia(item.Media); setLiked(false); }} className="flex flex-col gap-3 group cursor-pointer">
+                    <div key={item.id} onClick={() => { setViewingMedia(item.Media); setLiked(false); }} className="flex flex-col gap-3 group cursor-pointer animate-in fade-in">
                         <div className="relative aspect-[3/4] rounded-[2rem] overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-2xl group-hover:border-[#D946EF]/50 transition-all">
-                            <img src={item.Media?.url} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110 opacity-80 group-hover:opacity-100" />
+                            <img src={item.Media?.url} loading="lazy" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110 opacity-80 group-hover:opacity-100" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1.5 border border-white/10 shadow-lg"><User size={10} className="text-[#D946EF]"/> {item.Media?.modelInfo?.model_name}</div>
                         </div>
@@ -466,18 +450,15 @@ export default function PlayerPersonalHub() {
         </section>
       </main>
 
-      {/* LOJA DE LIVETOKENS (MODAL) */}
+      {/* LOJA DE LIVETOKENS */}
       {showShopModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-[500] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
           <button onClick={() => setShowShopModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white bg-white/5 border border-white/10 p-3 rounded-full"><X size={18} /></button>
-          
           <div className="w-20 h-20 bg-[#00f0ff]/10 border border-[#00f0ff]/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(0,240,255,0.2)]">
               <Coins size={36} className="text-[#00f0ff]" />
           </div>
-          
           <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-2">Tokens de <span className="text-[#00f0ff]">Lives</span></h2>
           <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-10 leading-relaxed max-w-sm">Adicione saldo para assistir shows privados e enviar presentes ao vivo.</p>
-          
           <div className="flex flex-col gap-4 w-full max-w-sm">
             {[ {name: "Básico", p: 30}, {name: "VIP", p: 50}, {name: "Premium", p: 100} ].map(pkg => (
               <button key={pkg.p} onClick={() => generatePix(pkg.p, 'live_tokens')} disabled={generatingPix} className="flex items-center justify-between bg-[#0a0a0a] border border-white/10 p-5 rounded-[2rem] hover:border-[#00f0ff]/50 transition-all shadow-xl disabled:opacity-50 group">
@@ -489,12 +470,11 @@ export default function PlayerPersonalHub() {
         </div>
       )}
 
-      {/* MODAL PIX BLINDADO (Serve para tudo) */}
+      {/* MODAL PIX */}
       {showPixModal && pixData && (
           <div className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md shadow-2xl relative text-center">
                   {!paymentSuccess && <button onClick={() => { setShowPixModal(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white bg-white/5 border border-white/10 p-2 rounded-full"><X size={16}/></button>}
-                  
                   {paymentSuccess ? (
                       <div className="py-10 animate-in zoom-in duration-500">
                           <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(16,185,129,0.5)]"><CheckCircle size={50} className="text-black"/></div>
@@ -522,7 +502,7 @@ export default function PlayerPersonalHub() {
           </div>
       )}
 
-      {/* MODAL DE CHAT VIP */}
+      {/* CHAT VIP */}
       {chatOpen && currentChatModel && (
           <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4">
               <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setChatOpen(false)}></div>
