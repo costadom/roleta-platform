@@ -32,6 +32,42 @@ const formatAudioTime = (seconds: number) => {
     return `${m}:${s}`;
 };
 
+// 🔥 COMPRESSOR DE IMAGENS NATIVO (DEIXA O SITE RÁPIDO) 🔥
+const compressImage = async (file: File): Promise<File> => {
+    if (!file.type.startsWith('image/')) return file; // Se for vídeo, deixa passar
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event: any) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const MAX_WIDTH = 1280; // Resolução perfeita para celular, tamanho minúsculo
+                const MAX_HEIGHT = 1280;
+                
+                if (width > height) {
+                    if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                } else {
+                    if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) ctx.drawImage(img, 0, 0, width, height);
+                
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                    else resolve(file);
+                }, 'image/jpeg', 0.6); // 60% de compressão (derruba fotos de 5MB pra ~150KB)
+            };
+        };
+    });
+};
+
 // 🔥 ESPIÃO LABZ 🔥
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) { super(props); this.state = { hasError: false, error: null, errorInfo: null }; }
@@ -110,7 +146,6 @@ function DashboardContent() {
   const [unreadChatCounts, setUnreadChatCounts] = useState(0);
   const [followersList, setFollowersList] = useState<any[]>([]);
   
-  // 🔥 ESTADOS DO MODAL "VER INFOS" 🔥
   const [showMediaStats, setShowMediaStats] = useState<any | null>(null);
   const [mediaComments, setMediaComments] = useState<any[]>([]);
   const [mediaLikes, setMediaLikes] = useState<number>(0);
@@ -153,7 +188,6 @@ function DashboardContent() {
     setDashboardLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-      
       const safeFetch = async (url: string) => {
           try {
               const res = await fetch(url, { headers });
@@ -248,9 +282,8 @@ function DashboardContent() {
       } catch (e) {}
   };
 
-  // 🔥 FUNÇÃO DE VER INFOS DA GALERIA CORRIGIDA 🔥
   const loadMediaStats = async (mediaItem: any) => {
-      setShowMediaStats(mediaItem); // Abre o modal imediatamente
+      setShowMediaStats(mediaItem); 
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           const [likesRes, commentsRes] = await Promise.all([
@@ -398,11 +431,14 @@ function DashboardContent() {
       } catch (e) { alert("Erro ao enviar áudio."); }
   };
 
-  const onChooseChatMedia = (e: any) => {
+  const onChooseChatMedia = async (e: any) => {
       const file = e.target.files?.[0];
       if (file) { 
           if (file.size > 50 * 1024 * 1024) return alert("Máximo 50MB!"); 
-          setChatMediaFile(file); setChatMediaPreview(URL.createObjectURL(file)); setShowMediaModal(true);
+          const compressed = await compressImage(file);
+          setChatMediaFile(compressed); 
+          setChatMediaPreview(URL.createObjectURL(compressed)); 
+          setShowMediaModal(true);
       }
   };
 
@@ -432,7 +468,8 @@ function DashboardContent() {
       setUploadingSliceMedia(true);
       try {
           const newUrls = [];
-          for (const file of files) {
+          for (const rawFile of files) {
+              const file = await compressImage(rawFile);
               const ext = file.name.split('.').pop();
               const fileName = `${modelId}/slice_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
               const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type }, body: file });
@@ -486,9 +523,14 @@ function DashboardContent() {
     setModelBalance(0); setIsWithdrawing(false); alert("Saque solicitado!");
   };
 
-  const onChooseGalleryFile = (e: any) => {
+  const onChooseGalleryFile = async (e: any) => {
     const file = e.target.files?.[0];
-    if (file) { if (file.size > 10 * 1024 * 1024) return alert("Máximo 10MB!"); setSelectedGalleryFile(file); setGalleryPreviewUrl(URL.createObjectURL(file)); }
+    if (file) { 
+        if (file.size > 10 * 1024 * 1024) return alert("Máximo 10MB!"); 
+        const comp = await compressImage(file);
+        setSelectedGalleryFile(comp); 
+        setGalleryPreviewUrl(URL.createObjectURL(comp)); 
+    }
   };
 
   const onPublishPhoto = async () => {
@@ -507,9 +549,14 @@ function DashboardContent() {
     } catch (e) {} finally { setUploading(false); }
   };
 
-  const onChooseScratchFile = (e: any) => {
+  const onChooseScratchFile = async (e: any) => {
       const file = e.target.files?.[0];
-      if (file) { if (file.size > 10 * 1024 * 1024) return alert("Máximo 10MB!"); setSelectedScratchFile(file); setScratchPreviewUrl(URL.createObjectURL(file)); }
+      if (file) { 
+          if (file.size > 10 * 1024 * 1024) return alert("Máximo 10MB!"); 
+          const comp = await compressImage(file);
+          setSelectedScratchFile(comp); 
+          setScratchPreviewUrl(URL.createObjectURL(comp)); 
+      }
   };
 
   const onPublishScratch = async () => {
@@ -543,6 +590,10 @@ function DashboardContent() {
   const copyToClipboard = (text: string, type: string) => {
       if(navigator.clipboard) { navigator.clipboard.writeText(text); alert(`Link de ${type} copiado!`); }
       else { alert("O link é: " + text); }
+  };
+
+  const handleStartLiveStudio = () => {
+    router.push(`/admin/studio`);
   };
 
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
@@ -739,7 +790,7 @@ function DashboardContent() {
                             {!galleryPreviewUrl ? (
                                 <label className="w-full bg-white/5 text-white py-6 rounded-2xl cursor-pointer hover:bg-white/10 border border-white/10 flex items-center justify-center gap-3 font-black uppercase text-[10px] mt-6 transition-all">
                                     <Upload size={20}/> Escolher Arquivo (Máx 10MB)
-                                    <input type="file" className="hidden" accept="image/*" onChange={onChooseGalleryFile} />
+                                    <input type="file" className="hidden" accept="image/*" onChange={async (e) => await onChooseGalleryFile(e)} />
                                 </label>
                             ) : (
                                 <div className="mt-6 space-y-3">
@@ -877,7 +928,7 @@ function DashboardContent() {
                             {(profilePreviewUrl || currentProfile) ? <img src={(profilePreviewUrl || currentProfile) as string} className="w-full h-full object-cover" /> : <User className="text-white/10" size={40} />}
                             {uploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="animate-spin"/></div>}
                         </div>
-                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Foto Vitrine<input type="file" accept="image/*" onChange={(e:any) => { const f=e.target.files?.[0]; if(f) { setSelectedProfileFile(f); setProfilePreviewUrl(URL.createObjectURL(f)); } }} className="hidden" /></label>
+                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Foto Vitrine<input type="file" accept="image/*" onChange={async (e:any) => { const f=e.target.files?.[0]; if(f) { const comp = await compressImage(f); setSelectedProfileFile(comp); setProfilePreviewUrl(URL.createObjectURL(comp)); } }} className="hidden" /></label>
                         {selectedProfileFile && <button onClick={async () => { setUploading(true); const fn=`profile_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedProfileFile.type}, body:selectedProfileFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ profile_url: url }) }); setCurrentProfile(url); setSelectedProfileFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FFD700] text-black py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Foto Vitrine</button>}
                     </div>
                     <div className="bg-black border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center text-center">
@@ -885,7 +936,7 @@ function DashboardContent() {
                             {(bgPreviewUrl || currentBg) ? <img src={(bgPreviewUrl || currentBg) as string} className="w-full h-full object-cover" /> : <ImageIcon className="text-white/10" size={32} />}
                             {uploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="animate-spin"/></div>}
                         </div>
-                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Fundo Roleta<input type="file" accept="image/*" onChange={(e:any) => { const f=e.target.files?.[0]; if(f) { setSelectedBgFile(f); setBgPreviewUrl(URL.createObjectURL(f)); } }} className="hidden" /></label>
+                        <label className="w-full bg-white/5 border border-white/20 px-5 py-3 rounded-xl text-[10px] font-black uppercase cursor-pointer mb-2 hover:bg-white/10 transition-all">Escolher Fundo Roleta<input type="file" accept="image/*" onChange={async (e:any) => { const f=e.target.files?.[0]; if(f) { const comp = await compressImage(f); setSelectedBgFile(comp); setBgPreviewUrl(URL.createObjectURL(comp)); } }} className="hidden" /></label>
                         {selectedBgFile && <button onClick={async () => { setUploading(true); const fn=`bg_${modelId}_${Date.now()}.jpg`; await fetch(`${supabaseUrl}/storage/v1/object/assets/${fn}`, { method:"POST", headers:{apikey:supabaseKey!, Authorization:`Bearer ${supabaseKey}`, "Content-Type":selectedBgFile.type}, body:selectedBgFile }); const url=`${supabaseUrl}/storage/v1/object/public/assets/${fn}`; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ bg_url: url }) }); setCurrentBg(url); setSelectedBgFile(null); setUploading(false); alert("Atualizado!"); }} className="w-full bg-[#FF1493] text-white py-3 rounded-xl text-[10px] font-black uppercase shadow-lg">Salvar Fundo Roleta</button>}
                     </div>
                 </div>
@@ -930,7 +981,7 @@ function DashboardContent() {
                                 <label className={`w-full bg-white/5 text-white py-8 rounded-3xl cursor-pointer hover:bg-white/10 border border-white/10 flex flex-col items-center justify-center gap-3 font-black uppercase text-[10px] transition-all ${scratchPhotos.length >= 10 ? 'opacity-50 pointer-events-none' : ''}`}>
                                     <Upload size={32} className="text-[#FF1493]"/> 
                                     {scratchPhotos.length >= 10 ? "Lote Máximo Atingido (10/10)" : "Escolher Foto (Máx 10MB)"}
-                                    <input type="file" hidden accept="image/*" onChange={onChooseScratchFile} disabled={scratchPhotos.length >= 10} />
+                                    <input type="file" hidden accept="image/*" onChange={async (e) => await onChooseScratchFile(e)} disabled={scratchPhotos.length >= 10} />
                                 </label>
                             ) : (
                                 <div className="space-y-4">
@@ -1019,7 +1070,7 @@ function DashboardContent() {
 
       </div>
 
-      {/* -------------------- TODOS OS MODAIS E CAMADAS FLUTUANTES -------------------- */}
+      {/* -------------------- TODOS OS MODAIS E CAMADAS FLUTUANTES (Z-INDEX SUPERIOR) -------------------- */}
 
       {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
       {activeTab === "chat" && activeChat && (
@@ -1088,7 +1139,7 @@ function DashboardContent() {
                       <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
                           <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
                               <ImagePlus size={20} />
-                              <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
+                              <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={async (e) => await onChooseChatMedia(e)} />
                           </button>
                           {isRecording ? (
                               <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
@@ -1111,7 +1162,7 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS DA GALERIA) 🔥 */}
+      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS DA GALERIA) - LIVRE DE ABAS 🔥 */}
       {showMediaStats && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
               <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
@@ -1147,6 +1198,51 @@ function DashboardContent() {
                       )) : (
                           <p className="text-center text-white/30 text-xs italic font-medium mt-10">Nenhum comentário nesta foto ainda.</p>
                       )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
+      {showMediaModal && chatMediaPreview && (
+          <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
+                  <button onClick={() => { setShowMediaModal(false); setChatMediaFile(null); setChatMediaPreview(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={20}/></button>
+                  <h2 className="text-lg font-black uppercase text-[#D946EF] mb-6 italic text-center">Enviar Mídia Privada</h2>
+                  
+                  <div className="relative aspect-square rounded-2xl overflow-hidden border border-white/10 mb-6 bg-black flex items-center justify-center">
+                      {chatMediaFile?.type.startsWith('video/') ? (
+                          <video src={chatMediaPreview} className="w-full h-full object-cover" controls />
+                      ) : (
+                          <img src={chatMediaPreview} className="w-full h-full object-cover" />
+                      )}
+                  </div>
+
+                  <div className="space-y-6">
+                      <div className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 cursor-pointer" onClick={() => setIsChatMediaPaid(!isChatMediaPaid)}>
+                          <div>
+                              <p className="text-[10px] font-black uppercase text-white">Cobrar por essa mídia?</p>
+                              <p className="text-[8px] text-white/50 uppercase font-bold mt-1">Se ativado, envia com cadeado (PPV).</p>
+                          </div>
+                          <input type="checkbox" checked={isChatMediaPaid} readOnly className="w-5 h-5 accent-[#D946EF]" />
+                      </div>
+
+                      {isChatMediaPaid && (
+                          <div className="animate-in zoom-in">
+                              <label className="text-[10px] font-black uppercase text-white/40 block ml-2 mb-2">Definir Valor (Mínimo R$ 10,00)</label>
+                              <input 
+                                  type="text" 
+                                  value={formattedChatPrice} 
+                                  onChange={handleChatPriceInput} 
+                                  className="w-full bg-black border border-[#D946EF] rounded-full py-4 px-6 text-white font-black text-xl text-center outline-none" 
+                              />
+                          </div>
+                      )}
+
+                      <button onClick={handleSendChatMedia} disabled={uploading} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
+                          {uploading ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>}
+                          {uploading ? "Enviando..." : "Enviar para o Cliente"}
+                      </button>
                   </div>
               </div>
           </div>
@@ -1208,6 +1304,7 @@ function DashboardContent() {
                             Mídias do Prêmio (Máx 10) 
                             <span>{editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean).length : 0}/10</span>
                         </p>
+                        
                         <div className="flex flex-wrap gap-2 mb-2">
                             {(editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : []).map((url: string, i: number) => (
                                 <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-white/20 shadow-md">
@@ -1220,10 +1317,11 @@ function DashboardContent() {
                                 </div>
                             ))}
                         </div>
+
                         <label className="w-full bg-[#D946EF]/20 text-[#D946EF] py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase cursor-pointer hover:bg-[#D946EF] hover:text-white transition-colors border border-[#D946EF]/30">
                             {uploadingSliceMedia ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>}
                             {uploadingSliceMedia ? "Subindo..." : "Adicionar Fotos/Vídeos"}
-                            <input type="file" multiple accept="image/*,video/*" onChange={handleSliceMediaUpload} className="hidden" disabled={uploadingSliceMedia} />
+                            <input type="file" multiple accept="image/*,video/*" onChange={async (e) => await handleSliceMediaUpload(e)} className="hidden" disabled={uploadingSliceMedia} />
                         </label>
                     </div>
                 )}
