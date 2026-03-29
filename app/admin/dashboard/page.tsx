@@ -266,20 +266,16 @@ function DashboardContent() {
     setSavingToken(false);
   };
 
-  // 🔥 O FILTRO MÁGICO DE LINKS DO TELEGRAM 🔥
   const handleSendTelegramBroadcast = async () => {
     if (!tgGroupId || !tgMessage) return alert("Preencha o Link do Grupo e a Mensagem.");
     
     setSendingTg(true); 
     setTgStatus("");
 
-    // Inteligência para limpar o link e extrair o @
     let finalChatId = tgGroupId.trim();
     
     if (finalChatId.includes("t.me/")) {
         const slugStr = finalChatId.split("t.me/")[1].split("/")[0].split("?")[0];
-        
-        // Bloqueia links de convite privados
         if (slugStr.startsWith("+") || slugStr.startsWith("joinchat")) {
              setTgStatus("❌ Erro: Não use Link de Convite (+...). Para grupos privados, use o ID Numérico (-100...).");
              setSendingTg(false);
@@ -287,7 +283,6 @@ function DashboardContent() {
         }
         finalChatId = "@" + slugStr;
     } else if (!finalChatId.startsWith("-") && !finalChatId.startsWith("@")) {
-        // Se a pessoa digitou só o nome puro "savanahof"
         finalChatId = "@" + finalChatId;
     }
 
@@ -298,7 +293,7 @@ function DashboardContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-            canal: finalChatId, // Manda o ID limpo
+            canal: finalChatId,
             mensagem: tgMessage, 
             linkRoleta: miniAppLink,
             modelId: modelId
@@ -353,12 +348,13 @@ function DashboardContent() {
       }
   };
 
-  // 🔥 ERRO 400 DO SUPABASE CORRIGIDO (LIMITE DE 50 FOTOS PARA BUSCA DE LIKES) 🔥
+  // 🔥 CORREÇÃO DE ERRO 400 (URL GIGANTE) AQUI 🔥
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          // Pega no máximo as 50 mídias mais recentes para não estourar o limite de URL do Supabase
-          const recentMedias = medias.slice(0, 50); 
+          
+          // Limite para 10 mídias para nunca estourar a URL
+          const recentMedias = medias.slice(0, 10); 
           const mediaIds = recentMedias.map(m => m.id);
           
           let likesList: any[] = []; let commentsList: any[] = [];
@@ -366,11 +362,16 @@ function DashboardContent() {
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(',');
               const [likesRes, commentsRes] = await Promise.all([
-                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()),
-                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json())
+                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()).catch(() => []),
+                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()).catch(() => [])
               ]);
-              likesList = (likesRes || []).map((l: any) => ({ ...l, type: 'like', media_url: recentMedias.find(m => m.id === l.media_id)?.url }));
-              commentsList = (commentsRes || []).map((c: any) => ({ ...c, type: 'comment', media_url: recentMedias.find(m => m.id === c.media_id)?.url }));
+              
+              // Blindagem para uso do .map apenas se for Array
+              const safeLikes = Array.isArray(likesRes) ? likesRes : [];
+              const safeComments = Array.isArray(commentsRes) ? commentsRes : [];
+
+              likesList = safeLikes.map((l: any) => ({ ...l, type: 'like', media_url: recentMedias.find(m => m.id === l.media_id)?.url }));
+              commentsList = safeComments.map((c: any) => ({ ...c, type: 'comment', media_url: recentMedias.find(m => m.id === c.media_id)?.url }));
           }
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
           const combinedFeed = [...followersMapped, ...likesList, ...commentsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 40);
