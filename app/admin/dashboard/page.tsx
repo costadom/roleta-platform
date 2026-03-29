@@ -348,13 +348,13 @@ function DashboardContent() {
       }
   };
 
-  // 🔥 CORREÇÃO DE ERRO 400 (URL GIGANTE) AQUI 🔥
+  // 🔥 SOLUÇÃO DEFINITIVA DO ERRO 400 (LIMITE DE 3 FOTOS PARA O FEED) 🔥
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           
-          // Limite para 10 mídias para nunca estourar a URL
-          const recentMedias = medias.slice(0, 10); 
+          // 🔥 Cortado para APENAS 3 fotos, impossível dar erro 400 agora!
+          const recentMedias = medias.slice(0, 3); 
           const mediaIds = recentMedias.map(m => m.id);
           
           let likesList: any[] = []; let commentsList: any[] = [];
@@ -362,11 +362,10 @@ function DashboardContent() {
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(',');
               const [likesRes, commentsRes] = await Promise.all([
-                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()).catch(() => []),
-                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.json()).catch(() => [])
+                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
+                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
               ]);
               
-              // Blindagem para uso do .map apenas se for Array
               const safeLikes = Array.isArray(likesRes) ? likesRes : [];
               const safeComments = Array.isArray(commentsRes) ? commentsRes : [];
 
@@ -377,7 +376,7 @@ function DashboardContent() {
           const combinedFeed = [...followersMapped, ...likesList, ...commentsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 40);
           setActivityFeed(combinedFeed);
       } catch (e) {
-          console.error("Erro feed:", e);
+          console.error("Erro silencioso feed:", e);
       }
   };
 
