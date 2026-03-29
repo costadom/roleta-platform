@@ -18,7 +18,7 @@ export default function SuperAdmin() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [abandoned, setAbandoned] = useState<any[]>([]); 
-  const [videoRequests, setVideoRequests] = useState<any[]>([]); // 🔥 LISTA DE VÍDEOS
+  const [videoRequests, setVideoRequests] = useState<any[]>([]); 
   const [totalPlayers, setTotalPlayers] = useState(0); 
   
   const [loading, setLoading] = useState(false);
@@ -45,45 +45,11 @@ export default function SuperAdmin() {
         "Cache-Control": "no-cache" 
       };
 
-      const [resMod, resHist, resGlob, resTrans, resWith, resApp, resPlayers, resAbandon, resVideos] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
-        Promise.resolve({ ok: true, json: async () => [] }), 
+      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
+      const [resGlob, resMod] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, json: () => [] })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers }) // 🔥 BUSCA VÍDEOS PAGOS
+        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
       ]);
-
-      const range = resPlayers.headers.get("content-range");
-      if (range) {
-        const total = range.split("/")[1];
-        setTotalPlayers(parseInt(total));
-      }
-
-      const dataHist = resHist.ok ? await resHist.json() : [];
-      if (resMod.ok) setModels(await resMod.json());
-      setHistory(dataHist);
-      if (resTrans.ok) setTransactions(await resTrans.json());
-      if (resWith.ok) setWithdrawals(await resWith.json());
-      if (resVideos.ok) setVideoRequests(await resVideos.json()); // 🔥 SETA VÍDEOS
-      
-      if (resApp.ok) {
-        const apps = await resApp.json();
-        setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
-      }
-      
-      if (resAbandon.ok) {
-        const carts = await resAbandon.json();
-        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-        setAbandoned(carts.filter((c: any) => {
-          const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-          const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
-          return isPendente && isOldEnough;
-        }));
-      }
 
       if (resGlob.ok) {
         const dataGlob = await resGlob.json();
@@ -95,10 +61,51 @@ export default function SuperAdmin() {
         }
       }
 
+      if (resMod.ok) setModels(await resMod.json());
+      
+      setInitialLoading(false); // 🔥 TELA LIBERADA 🔥
+
+      // 2. CARREGA OS DADOS PESADOS E LISTAS NO FUNDO
+      Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, headers: new Headers() })),
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers })
+      ]).then(async ([resTrans, resWith, resApp, resPlayers, resAbandon, resVideos]) => {
+          
+          if (resTrans.ok) setTransactions(await resTrans.json());
+          if (resWith.ok) setWithdrawals(await resWith.json());
+          if (resVideos.ok) setVideoRequests(await resVideos.json()); 
+          
+          if (resApp.ok) {
+            const apps = await resApp.json();
+            setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
+          }
+          
+          if (resAbandon.ok) {
+            const carts = await resAbandon.json();
+            const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
+            setAbandoned(carts.filter((c: any) => {
+              const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
+              const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
+              return isPendente && isOldEnough;
+            }));
+          }
+
+          if (resPlayers && resPlayers.headers) {
+             const range = resPlayers.headers.get("content-range");
+             if (range) {
+               const total = range.split("/")[1];
+               setTotalPlayers(parseInt(total));
+             }
+          }
+      });
+
     } catch (err) { 
       console.error("Erro no fetch", err); 
-    } finally { 
-      setInitialLoading(false); 
+      setInitialLoading(false);
     }
   };
 
@@ -246,7 +253,7 @@ export default function SuperAdmin() {
   );
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24">
+    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24 animate-in fade-in duration-500">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
           <div><h1 className="text-4xl font-black uppercase italic tracking-tighter"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1 uppercase">Sistema V.3001 Master</p></div>
@@ -495,7 +502,6 @@ export default function SuperAdmin() {
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
               
-              {/* Opcional: Linkar manual */}
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug da Madrinha (Opcional)</label><input type="text" value={newModel.referred_by} onChange={e => setNewModel({ ...newModel, referred_by: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-amber-500 text-sm outline-none focus:border-amber-500" placeholder="Ex: raphasavanah" /></div>
 
               <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
