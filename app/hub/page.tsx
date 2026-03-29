@@ -17,8 +17,11 @@ const censorText = (text: string) => {
     /telegram/gi, /tlg/gi,
     /(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}[-\s]?\d{4}/g
   ];
+
   let filteredText = text;
-  forbiddenPatterns.forEach(pattern => { filteredText = filteredText.replace(pattern, " [⚠️ DADOS PROTEGIDOS] "); });
+  forbiddenPatterns.forEach(pattern => {
+    filteredText = filteredText.replace(pattern, " [⚠️ DADOS PROTEGIDOS] ");
+  });
   return filteredText;
 };
 
@@ -103,11 +106,11 @@ export default function PlayerPersonalHub() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
-        // BUSCA TUDO JUNTO PARA NÃO DAR ERRO DE SESSÃO
+        // 🔥 CORREÇÃO DE SEGURANÇA: NUNCA BUSCAR SELECT=* NAS MODELOS
         const [pRes, mRes, cRes] = await Promise.all([
-            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=*`, { headers }),
-            fetch(`${supabaseUrl}/rest/v1/Models?select=*`, { headers }),
-            fetch(`${supabaseUrl}/rest/v1/Configs?select=*`, { headers })
+            fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&select=id,model_id,live_tokens,credits`, { headers }),
+            fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,live_status`, { headers }),
+            fetch(`${supabaseUrl}/rest/v1/Configs?select=model_id,model_name,profile_url`, { headers })
         ]);
 
         if (!pRes.ok) return;
@@ -132,27 +135,29 @@ export default function PlayerPersonalHub() {
             checkNotifications(ids); 
             setInterval(() => checkNotifications(ids), 10000); 
 
-            const [vRes, uRes] = await Promise.all([
-                fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${ids.join(',')})&select=*`, { headers }),
-                fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${ids.join(',')})&select=*`, { headers })
-            ]);
+            fetch(`${supabaseUrl}/rest/v1/VideoRequests?player_id=in.(${ids.join(',')})&select=id,model_id,status,duration,price,description,drive_link`, { headers })
+              .then(res => res.json())
+              .then(vData => {
+                 setVideoOrders(vData.map((v:any) => ({ ...v, modelInfo: getInfo(v.model_id) })).filter((v:any) => v.status !== 'pendente'));
+              })
+              .catch(() => {});
 
-            let vData = vRes.ok ? await vRes.json() : [];
-            let uData = uRes.ok ? await uRes.json() : [];
-
-            setVideoOrders(vData.map((v:any) => ({ ...v, modelInfo: getInfo(v.model_id) })).filter((v:any) => v.status !== 'pendente'));
-
-            const mIds = uData.map((u:any) => u.media_id).filter(Boolean);
-            if (mIds.length > 0) {
-                const mediaRes = await fetch(`${supabaseUrl}/rest/v1/Media?id=in.(${mIds.join(',')})&select=*`, { headers });
-                const mediaData = await mediaRes.json();
-                setUnlockedGallery(uData.map((u:any) => {
-                    const mObj = mediaData.find((mx:any) => mx.id === u.media_id);
-                    return mObj ? { ...u, Media: { ...mObj, modelInfo: getInfo(mObj.model_id) } } : null;
-                }).filter(Boolean));
-            }
+            fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=in.(${ids.join(',')})&select=media_id`, { headers })
+              .then(res => res.json())
+              .then(async uData => {
+                  const mIds = uData.map((u:any) => u.media_id).filter(Boolean);
+                  if (mIds.length > 0) {
+                      const mediaRes = await fetch(`${supabaseUrl}/rest/v1/Media?id=in.(${mIds.join(',')})&select=id,model_id,url,caption,price`, { headers });
+                      const mediaData = await mediaRes.json();
+                      setUnlockedGallery(uData.map((u:any) => {
+                          const mObj = mediaData.find((mx:any) => mx.id === u.media_id);
+                          return mObj ? { ...u, Media: { ...mObj, modelInfo: getInfo(mObj.model_id) } } : null;
+                      }).filter(Boolean));
+                  }
+              })
+              .catch(() => {});
         }
-      } catch (e) { console.error("Erro Hub:", e); }
+      } catch (e) {} 
     }
     loadData();
   }, [router, supabaseUrl, supabaseKey]);
@@ -352,7 +357,7 @@ export default function PlayerPersonalHub() {
                   <Bell size={18} className={totalUnread > 0 ? "text-[#D946EF] animate-pulse" : "text-white/50"} />
                   {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-black">{totalUnread}</span>}
               </div>
-              <button onClick={() => { localStorage.clear(); window.location.replace('/'); }} className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-full text-[9px] font-black uppercase shadow-xl hover:bg-red-500 hover:text-white transition-all">Sair</button>
+              <button onClick={() => { localStorage.clear(); window.location.replace('/'); }} className="p-2 sm:px-4 sm:py-2 bg-white/5 border border-white/10 text-white/50 hover:text-white rounded-full text-[9px] font-black uppercase transition-all">Sair</button>
           </div>
       </header>
 
@@ -360,7 +365,7 @@ export default function PlayerPersonalHub() {
         
         {/* MUSAS */}
         <section className="mb-16">
-            <h2 className="text-sm font-black uppercase text-white/50 mb-6 flex items-center gap-3 tracking-widest pl-2"><Wallet size={18} className="text-[#D946EF]"/> Minhas Musas & Saldos</h2>
+            <h2 className="text-sm font-black uppercase text-white/50 mb-6 flex items-center gap-3 tracking-widest pl-2"><MessageCircle size={18} className="text-[#D946EF]"/> Musas & Conversas</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {associations.length > 0 ? associations.map((assoc: any) => {
                     const unread = unreadCounts[assoc.modelInfo?.model_id] || 0;
@@ -389,7 +394,11 @@ export default function PlayerPersonalHub() {
                             <button onClick={() => router.push(`/profile/${assoc.modelInfo?.slug}`)} className="bg-white/5 hover:bg-white/10 border border-white/10 text-white py-4 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5"><User size={14}/> Hub Vip</button>
                         </div>
                     </div>
-                ) }) : <div className="py-24 text-center text-white/20 italic font-black uppercase tracking-widest border border-dashed border-white/10 rounded-[3rem] col-span-full animate-pulse">Buscando suas Musas...</div>}
+                ) }) : (
+                    <div className="col-span-full py-16 text-center text-white/30 text-xs italic font-medium uppercase tracking-widest border border-dashed border-white/10 rounded-3xl animate-pulse">
+                       Aguardando os dados das suas musas...
+                    </div>
+                )}
             </div>
         </section>
 
@@ -520,6 +529,7 @@ export default function PlayerPersonalHub() {
                                           <div className="mt-2">
                                               {msg.is_locked && !msg.is_unlocked ? (
                                                   <div onClick={() => generatePix(msg.price, 'chat_media', msg.id)} className="relative aspect-square w-48 sm:w-56 rounded-2xl overflow-hidden border border-[#D946EF]/50 bg-black flex flex-col items-center justify-center text-center cursor-pointer group shadow-xl hover:border-[#D946EF] transition-all">
+                                                      <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1516481157630-05bc0aeb8b19?w=400&q=80')] bg-cover opacity-20 group-hover:scale-110 transition-transform duration-700"></div>
                                                       <div className="absolute inset-0 bg-black/80 backdrop-blur-xl group-hover:backdrop-blur-lg transition-all"></div>
                                                       <Lock size={32} className="text-[#D946EF] relative z-10 mb-3 group-hover:scale-110 transition-transform drop-shadow-[0_0_10px_rgba(217,70,239,0.8)]" />
                                                       <p className="text-[10px] font-black uppercase text-white relative z-10 tracking-widest mb-3">Mídia Trancada</p>
