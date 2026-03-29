@@ -7,7 +7,7 @@ import AuthModal from "@/components/AuthModal";
 
 export default function LandingPage() {
   const router = useRouter();
-  const [initialLoading, setInitialLoading] = useState(true);
+  // Removido o initialLoading que travava a tela toda
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [modelsBgs, setModelsBgs] = useState<string[]>([]);
   const [bgIndex, setBgIndex] = useState(0);
@@ -21,11 +21,12 @@ export default function LandingPage() {
       router.push('/vitrine');
     }
 
-    async function fetchData() {
+    async function fetchBackgrounds() {
       try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
         
-        const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=bg_url,profile_url&limit=20`, { headers });
+        // Reduzido para 8 imagens. Suficiente para o carrossel, muito mais rápido para baixar.
+        const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=bg_url,profile_url&limit=8`, { headers });
         if (resConfigs.ok) {
             const configsData = await resConfigs.json();
             if (configsData.length > 0) {
@@ -35,11 +36,9 @@ export default function LandingPage() {
         }
       } catch (err) {
           console.error(err);
-      } finally { 
-          setInitialLoading(false); 
       }
     }
-    fetchData();
+    fetchBackgrounds(); // Busca as fotos por trás dos panos, sem travar a renderização
   }, [router, supabaseUrl, supabaseKey]);
 
   useEffect(() => {
@@ -50,30 +49,31 @@ export default function LandingPage() {
     return () => clearInterval(interval);
   }, [modelsBgs]);
 
-  if (initialLoading) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white p-6">
-      <Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} />
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
       
-      {/* 🔥 FUNDO ANIMADO COM SANGRIA (-inset-[10%]) PARA RESOLVER O EFEITO ELÁSTICO 🔥 */}
+      {/* 🔥 FUNDO ANIMADO (Carrega de forma suave e "preguiçosa") 🔥 */}
       <div className="fixed -inset-[10%] z-0 bg-black pointer-events-none">
-        {modelsBgs.map((bg, idx) => (
-            <img 
-              key={idx} 
-              src={bg} 
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out ${idx === bgIndex ? 'opacity-50 scale-105' : 'opacity-0 scale-100'}`} 
-            />
-        ))}
-        {/* Película escura de vidro por cima do fundo (também com sangria) */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/60 via-[#050505]/40 to-[#050505]/95 backdrop-blur-md"></div>
+        {modelsBgs.length > 0 ? (
+            modelsBgs.map((bg, idx) => (
+                <img 
+                  key={idx} 
+                  src={bg} 
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out ${idx === bgIndex ? 'opacity-40 scale-105' : 'opacity-0 scale-100'}`} 
+                  loading="lazy" // Impede que o navegador trave baixando isso
+                />
+            ))
+        ) : (
+            // Fundo preto padrão instantâneo enquanto as imagens baixam
+            <div className="absolute inset-0 bg-[#0a0a0a]"></div>
+        )}
+        
+        {/* Película escura de vidro por cima do fundo */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/70 via-[#050505]/50 to-[#050505]/95 backdrop-blur-sm"></div>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
-      <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6">
+      {/* CONTEÚDO PRINCIPAL DA PÁGINA (Aparece instantaneamente) */}
+      <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
         
         {/* LOGO CENTRALIZADO */}
         <div className="flex flex-col items-center justify-center mb-8 pointer-events-none">
