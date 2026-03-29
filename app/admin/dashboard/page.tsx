@@ -180,12 +180,13 @@ function DashboardContent() {
     if (modelSlug && typeof window !== 'undefined') setModelUrl(window.location.origin);
   }, [modelSlug]);
 
+  // 🔥 CARREGAMENTO OTIMIZADO 🔥
   const loadData = async () => {
     if (!modelId) {
         setDashboardLoading(false);
         return;
     }
-    setDashboardLoading(true);
+    
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
       const safeFetch = async (url: string) => {
@@ -196,17 +197,11 @@ function DashboardContent() {
           } catch (e) { return []; }
       };
 
-      const [resGlob, resModel, resTrans, resPrizes, resConfig, resMedia, resVideos, resSales, resScratch, resFollowers] = await Promise.all([
+      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
+      const [resGlob, resModel, resConfig] = await Promise.all([
         safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
         safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
-        safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`),
-        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`),
-        safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`),
-        safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`),
-        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`)
+        safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`)
       ]);
 
       if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
@@ -221,17 +216,33 @@ function DashboardContent() {
         setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
       }
 
-      setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
-      setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
-      setMediaList(Array.isArray(resMedia) ? resMedia : []); setVideoRequests(Array.isArray(resVideos) ? resVideos : []); setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
-      setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
+      // TELA LIBERADA
+      setDashboardLoading(false);
 
-      const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
-      setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
-      
-      loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], Array.isArray(resFollowers) ? resFollowers : []);
+      // 2. CARREGA OS DADOS PESADOS NO FUNDO
+      Promise.all([
+        safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
+        safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`),
+        safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`),
+        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`)
+      ]).then(([resTrans, resPrizes, resMedia, resVideos, resSales, resScratch, resFollowers]) => {
+          setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
+          setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
+          setMediaList(Array.isArray(resMedia) ? resMedia : []); 
+          setVideoRequests(Array.isArray(resVideos) ? resVideos : []); 
+          setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
+          setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
 
-    } catch (err) { console.error(err); } finally { setDashboardLoading(false); }
+          const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
+          setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
+          
+          loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], Array.isArray(resFollowers) ? resFollowers : []);
+      });
+
+    } catch (err) { console.error(err); setDashboardLoading(false); }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
@@ -592,10 +603,6 @@ function DashboardContent() {
       else { alert("O link é: " + text); }
   };
 
-  const handleStartLiveStudio = () => {
-    router.push(`/admin/studio`);
-  };
-
   if (dashboardLoading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white text-center"><Loader2 className="animate-spin text-[#FF1493] mb-6" size={50} /><h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">Carregando Universo...</h2></div>;
 
   return (
@@ -627,7 +634,7 @@ function DashboardContent() {
                                       <p className="text-[8px] text-white/30 uppercase font-bold mt-1 tracking-widest">{new Date(n.created_at).toLocaleDateString()} às {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                                   </div>
                                   {(n.type === 'like' || n.type === 'comment') && n.media_url && (
-                                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0"><img src={n.media_url} className="w-full h-full object-cover" /></div>
+                                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0"><img src={n.media_url} loading="lazy" className="w-full h-full object-cover" /></div>
                                   )}
                               </div>
                           ))
@@ -809,7 +816,7 @@ function DashboardContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {mediaList.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
+                            <img src={item.url} loading="lazy" className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
                             
                             <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between gap-2 border-t border-white/10">
@@ -836,7 +843,7 @@ function DashboardContent() {
                     {salesHistory.length > 0 ? salesHistory.map((sale) => (
                         <div key={sale.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center justify-between shadow-xl">
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
+                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} loading="lazy" className="w-full h-full object-cover"/></div>
                                 <div>
                                     <p className="text-xs font-black text-white uppercase">Fã VIP</p>
                                     <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
@@ -1007,7 +1014,7 @@ function DashboardContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {scratchPhotos.length > 0 ? scratchPhotos.map((item) => (
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
-                            <img src={item.photo_url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
+                            <img src={item.photo_url} loading="lazy" className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
                             <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between border-t border-white/10">
                                 <div className="flex items-center gap-2 text-[#FFD700] text-[10px] font-black uppercase"><Star size={12}/> Ativa</div>
                                 <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
