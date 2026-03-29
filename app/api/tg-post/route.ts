@@ -27,12 +27,13 @@ export async function POST(req: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: canal, // O Dashboard já vai mandar isso mastigado para cá
+        chat_id: canal,
         text: mensagem,
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [[
-            { text: "🎰 ABRIR ROLETA VIP", web_app: { url: linkRoleta } }
+            // 🔥 CORREÇÃO: Usando 'url' normal porque o Telegram não aceita 'web_app' em canais/grupos
+            { text: "🎰 ABRIR ROLETA VIP", url: linkRoleta }
           ]]
         }
       }),
@@ -40,12 +41,11 @@ export async function POST(req: Request) {
 
     const data = await response.json();
     
-    // Tradutor de Erros do Telegram para o Português
     if (!data.ok) {
        let errorBr = data.description;
        if (errorBr.includes("chat not found")) errorBr = "Grupo não encontrado. Verifique se o bot está adicionado lá.";
        if (errorBr.includes("bot is not a member")) errorBr = "O bot não está no grupo. Adicione ele primeiro!";
-       if (errorBr.includes("not enough rights") || errorBr.includes("can't write")) errorBr = "O bot está no grupo, mas precisa de permissão de Administrador.";
+       if (errorBr.includes("not enough rights") || errorBr.includes("can't write")) errorBr = "O bot precisa de permissão de Administrador.";
        if (errorBr.includes("empty")) errorBr = "A mensagem não pode estar vazia.";
        throw new Error(errorBr);
     }
