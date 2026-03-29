@@ -5,17 +5,31 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { telegramId, prizeName, deliveryValue, modelName, modelSlug } = body;
 
-    // Se faltar a ID do Telegram ou o nome do prêmio, ele barra
-    if (!telegramId || !prizeName) {
+    if (!telegramId || !prizeName || !modelSlug) {
       return NextResponse.json({ error: "Faltam dados obrigatórios" }, { status: 400 });
     }
 
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    // 1. Busca o Token exclusivo da modelo no banco
+    let token = null;
+    try {
+        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${modelSlug}&select=id,Configs(tg_bot_token)`, {
+            headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }
+        });
+        const dataMod = await resMod.json();
+        
+        // Pega o token dela. Se não existir, usa o seu global do .env como backup
+        token = dataMod[0]?.Configs?.[0]?.tg_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+    } catch (e) {
+        token = process.env.TELEGRAM_BOT_TOKEN;
+    }
+
     if (!token) {
       return NextResponse.json({ error: "Token do Telegram não configurado." }, { status: 500 });
     }
 
-    // A isca perfeita que vai chegar piscando no celular do cara
     const message = `🎰 *BINGO!* Você acabou de girar a Roleta VIP da *${modelName}*!\n\n` +
                     `🎁 *Seu Prêmio:* ${prizeName}\n\n` +
                     `🔗 *Acesse seu prêmio aqui:* ${deliveryValue}\n\n` +
@@ -23,10 +37,8 @@ export async function POST(req: Request) {
                     `Você tem outras mídias exclusivas te esperando no Hub Privado. Acesse agora e divirta-se:\n` +
                     `👉 https://labzsexyroll.vercel.app/profile/${modelSlug}`;
 
-    // URL oficial dos servidores do Telegram
     const tgUrl = `https://api.telegram.org/bot${token}/sendMessage`;
 
-    // Mandando a ordem pro Telegram
     const response = await fetch(tgUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,15 +46,14 @@ export async function POST(req: Request) {
         chat_id: telegramId,
         text: message,
         parse_mode: "Markdown",
-        disable_web_page_preview: true // Pra mensagem ficar mais limpa e focada no texto
+        disable_web_page_preview: true
       }),
     });
 
     const data = await response.json();
     
-    // Se o Telegram recusar, a gente avisa no console
     if (!data.ok) {
-      throw new Error(data.description || "Erro desconhecido na API do Telegram");
+      throw new Error(data.description || "Erro na API do Telegram");
     }
 
     return NextResponse.json({ success: true });
