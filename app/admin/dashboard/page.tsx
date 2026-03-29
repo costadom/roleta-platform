@@ -6,7 +6,7 @@ import {
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play, ShieldCheck
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -109,6 +109,8 @@ function DashboardContent() {
 
   const [unreadChatCounts, setUnreadChatCounts] = useState(0);
   const [followersList, setFollowersList] = useState<any[]>([]);
+  
+  // 🔥 ESTADOS DO MODAL "VER INFOS" 🔥
   const [showMediaStats, setShowMediaStats] = useState<any | null>(null);
   const [mediaComments, setMediaComments] = useState<any[]>([]);
   const [mediaLikes, setMediaLikes] = useState<number>(0);
@@ -246,17 +248,21 @@ function DashboardContent() {
       } catch (e) {}
   };
 
+  // 🔥 FUNÇÃO DE VER INFOS DA GALERIA CORRIGIDA 🔥
   const loadMediaStats = async (mediaItem: any) => {
-      setShowMediaStats(mediaItem);
+      setShowMediaStats(mediaItem); // Abre o modal imediatamente
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           const [likesRes, commentsRes] = await Promise.all([
-              fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${mediaItem.id}&select=id`, { headers }).then(r=>r.json()),
-              fetch(`${supabaseUrl}/rest/v1/Comments?media_id=eq.${mediaItem.id}&order=created_at.desc`, { headers }).then(r=>r.json())
+              fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${mediaItem.id}&select=id`, { headers }).then(r=>r.json()).catch(()=>[]),
+              fetch(`${supabaseUrl}/rest/v1/Comments?media_id=eq.${mediaItem.id}&order=created_at.desc`, { headers }).then(r=>r.json()).catch(()=>[])
           ]);
-          setMediaLikes(likesRes?.length || 0);
-          setMediaComments(commentsRes || []);
-      } catch(e){}
+          setMediaLikes(Array.isArray(likesRes) ? likesRes.length : 0);
+          setMediaComments(Array.isArray(commentsRes) ? commentsRes : []);
+      } catch(e) {
+          setMediaLikes(0);
+          setMediaComments([]);
+      }
   }
 
   const handleDeleteComment = async (commentId: string) => {
@@ -544,6 +550,7 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative overflow-x-hidden">
       
+      {/* 🔥 CENTRAL DE NOTIFICAÇÕES (DRAWER/MODAL) 🔥 */}
       {showNotificationsPanel && (
           <>
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowNotificationsPanel(false)}></div>
@@ -753,11 +760,12 @@ function DashboardContent() {
                         <div key={item.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-black shadow-xl">
                             <img src={item.url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-all duration-500"/>
                             <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[9px] font-black uppercase ${item.price === 0 ? 'bg-emerald-500' : 'bg-[#FF1493]'}`}>{item.price === 0 ? 'Grátis' : `R$ ${item.price.toFixed(2)}`}</div>
+                            
                             <div className="absolute bottom-0 left-0 w-full bg-black/80 backdrop-blur-md p-3 flex items-center justify-between gap-2 border-t border-white/10">
-                                <button onClick={(e) => { e.stopPropagation(); loadMediaStats(item); }} className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#FF1493]/20 text-[#FF1493] rounded-xl hover:bg-[#FF1493] hover:text-white transition-colors text-[10px] font-black uppercase">
+                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); loadMediaStats(item); }} className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#FF1493]/20 text-[#FF1493] rounded-xl hover:bg-[#FF1493] hover:text-white transition-colors text-[10px] font-black uppercase">
                                     <Eye size={14}/> Ver Infos
                                 </button>
-                                <button onClick={async (e) => { e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
+                                <button onClick={async (e) => { e.preventDefault(); e.stopPropagation(); if(confirm("Apagar foto?")) { await fetch(`${supabaseUrl}/rest/v1/Media?id=eq.${item.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } }); loadData(); } }} className="p-2 bg-red-500/20 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
                                     <Trash2 size={16}/>
                                 </button>
                             </div>
@@ -767,24 +775,29 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "chat" && (
-            <div className="animate-in slide-in-from-bottom-4">
-                <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl">
-                    <h2 className="text-lg font-black uppercase text-[#D946EF] mb-6 flex items-center gap-3 tracking-widest"><MessageCircle size={18}/> Conversas com Fãs</h2>
-                    <div className="grid gap-4">
-                        {chatList.length > 0 ? chatList.map(chat => (
-                            <div key={chat.id} onClick={() => openAdminChat(chat)} className="bg-black border border-white/10 p-5 rounded-3xl cursor-pointer transition-all hover:border-[#D946EF]/50 flex items-center gap-4 group shadow-lg">
-                                <div className="w-12 h-12 rounded-full bg-[#111] border border-[#D946EF]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-all">
-                                    <User size={24} className="text-[#D946EF]"/>
+        {activeTab === "sales" && (
+            <div className="animate-in fade-in">
+                <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
+                    <Receipt size={24} className="text-amber-400 shrink-0"/>
+                    <p className="text-[10px] font-black uppercase text-amber-400 leading-relaxed">Aqui você acompanha todas as fotos que foram compradas (desbloqueadas) pelos seus clientes através do Hub.</p>
+                </div>
+                <div className="grid gap-4">
+                    {salesHistory.length > 0 ? salesHistory.map((sale) => (
+                        <div key={sale.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center justify-between shadow-xl">
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
+                                <div>
+                                    <p className="text-xs font-black text-white uppercase">Fã VIP</p>
+                                    <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
+                                    <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
                                 </div>
-                                <div className="flex-1 overflow-hidden">
-                                    <p className="text-xs font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.nickname || "Fã VIP"}</p>
-                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir conversa</p>
-                                </div>
-                                <button className="bg-white/5 text-white/50 p-3 rounded-xl group-hover:bg-[#D946EF] group-hover:text-white transition-all"><MessageCircle size={16}/></button>
                             </div>
-                        )) : <div className="p-12 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Nenhum cliente iniciou chat.</div>}
-                    </div>
+                            <div className="text-right">
+                                <p className="text-[8px] font-black text-white/30 uppercase mb-1">Valor</p>
+                                <p className="text-lg font-black text-white">R$ {Number(sale.Media?.price || 0).toFixed(2)}</p>
+                            </div>
+                        </div>
+                    )) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum conteúdo vendido ainda.</div>}
                 </div>
             </div>
         )}
@@ -838,37 +851,11 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "sales" && (
-            <div className="animate-in fade-in">
-                <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl mb-8 flex items-start gap-4">
-                    <Receipt size={24} className="text-amber-400 shrink-0"/>
-                    <p className="text-[10px] font-black uppercase text-amber-400 leading-relaxed">Aqui você acompanha todas as fotos que foram compradas (desbloqueadas) pelos seus clientes através do Hub.</p>
-                </div>
-                <div className="grid gap-4">
-                    {salesHistory.length > 0 ? salesHistory.map((sale) => (
-                        <div key={sale.id} className="bg-black border border-white/5 p-6 rounded-3xl flex items-center justify-between shadow-xl">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5"><img src={sale.Media?.url} className="w-full h-full object-cover"/></div>
-                                <div>
-                                    <p className="text-xs font-black text-white uppercase">Fã VIP</p>
-                                    <p className="text-[9px] text-white/40 italic">{sale.Media?.caption || "Foto VIP"}</p>
-                                    <p className="text-[8px] font-bold text-emerald-500 uppercase mt-1">{new Date(sale.unlocked_at).toLocaleString()}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[8px] font-black text-white/30 uppercase mb-1">Valor</p>
-                                <p className="text-lg font-black text-white">R$ {Number(sale.Media?.price || 0).toFixed(2)}</p>
-                            </div>
-                        </div>
-                    )) : <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border border-dashed border-white/5 rounded-[3rem]">Nenhum conteúdo vendido ainda.</div>}
-                </div>
-            </div>
-        )}
-
+        {/* 🔥 ABA: CONFIGURAÇÃO DA VITRINE E ROLETA 🔥 */}
         {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
                 
-                {/* 🔥 BOTÃO DE EMERGÊNCIA (SE AS FATIAS NÃO EXISTIREM) 🔥 */}
+                {/* BOTÃO DE EMERGÊNCIA (SE AS FATIAS NÃO EXISTIREM) */}
                 {prizes.length === 0 && (
                     <div className="bg-red-500/10 border border-red-500/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center animate-pulse">
                         <AlertTriangle size={40} className="text-red-500 mb-4" />
@@ -903,7 +890,7 @@ function DashboardContent() {
                     </div>
                 </div>
                 
-                {/* 🔥 OS SLOTS SÓ APARECEM SE TIVEREM SIDO CRIADOS NO BANCO 🔥 */}
+                {/* OS SLOTS SÓ APARECEM SE TIVEREM SIDO CRIADOS NO BANCO */}
                 {prizes.length > 0 && (
                 <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl relative">
                     <div className="flex items-center justify-between mb-6">
@@ -1006,99 +993,164 @@ function DashboardContent() {
             </div>
         )}
 
-        {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
-
-        {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
-        {activeTab === "chat" && activeChat && (
-            <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
-                <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
-                <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
-                    <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-10 shadow-md">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
-                                <User size={16} className="text-[#D946EF]"/>
-                            </div>
-                            <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.nickname || "Fã VIP"}</h3>
-                        </div>
-                        <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-[#0a0a0a] to-black">
-                        <div className="text-center py-2"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa</span></div>
-                        {chatMessages.map((msg, i) => (
-                            <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
-                                {msg.is_gift ? (
-                                    <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
-                                        <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
-                                        <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest">Você recebeu um presente!</p>
-                                        <p className="text-2xl font-black text-white mt-1">R$ {msg.price?.toFixed(2)}</p>
-                                        {msg.content && <p className="text-xs italic text-white/70 mt-2">"{msg.content}"</p>}
-                                    </div>
-                                ) : (
-                                    <div className={`max-w-[75%] p-3 text-sm rounded-2xl ${msg.sender_type === 'model' ? 'bg-[#D946EF] text-white rounded-tr-sm shadow-md' : 'bg-white/10 text-white rounded-tl-sm border border-white/5'}`}>
-                                        {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
-                                        {msg.media_type === 'audio' && msg.media_url && (
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Mensagem de Voz</span>
-                                                <audio controls src={msg.media_url} className="h-10 w-48 mt-1 outline-none" />
-                                            </div>
-                                        )}
-                                        {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
-                                            <div className="flex flex-col mt-1">
-                                                <div className="relative rounded-xl overflow-hidden border border-white/20">
-                                                    {msg.media_type === 'video' ? (
-                                                        <video src={msg.media_url} controls className="max-h-60 w-full object-cover" />
-                                                    ) : (
-                                                        <img src={msg.media_url} className="max-h-60 w-full object-cover" />
-                                                    )}
-                                                    {msg.is_locked && (
-                                                        <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1">
-                                                            <Lock size={10} className="text-[#FFD700]"/> R$ {msg.price?.toFixed(2)} 
-                                                            <span className={msg.is_unlocked ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
-                                                                ({msg.is_unlocked ? 'PAGO' : 'AGUARDANDO'})
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {msg.content && <p className="mt-2 text-xs">{msg.content}</p>}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                <span className="text-[8px] text-white/20 mt-1 px-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            </div>
-                        ))}
-                        <div ref={chatEndRef} />
-                    </div>
-
-                    <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative shadow-md z-20">
-                        <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
-                            <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
-                                <ImagePlus size={20} />
-                                <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
-                            </button>
-                            {isRecording ? (
-                                <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
-                                    <Mic size={16}/> Gravando... {formatAudioTime(recordingTime)}
+        {activeTab === "chat" && (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] shadow-xl">
+                    <h2 className="text-lg font-black uppercase text-[#D946EF] mb-6 flex items-center gap-3 tracking-widest"><MessageCircle size={18}/> Conversas com Fãs</h2>
+                    <div className="grid gap-4">
+                        {chatList.length > 0 ? chatList.map(chat => (
+                            <div key={chat.id} onClick={() => openAdminChat(chat)} className="bg-black border border-white/10 p-5 rounded-3xl cursor-pointer transition-all hover:border-[#D946EF]/50 flex items-center gap-4 group shadow-lg">
+                                <div className="w-12 h-12 rounded-full bg-[#111] border border-[#D946EF]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-all">
+                                    <User size={24} className="text-[#D946EF]"/>
                                 </div>
-                            ) : (
-                                <input type="text" placeholder="Digite sua resposta..." className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 px-2 py-1" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdminSendMessage()} />
-                            )}
-                            <button onMouseDown={isRecording ? stopRecording : startRecording} className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-                                {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
-                            </button>
-                            {!isRecording && (
-                                <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
-                                    <Send size={16} className="-ml-0.5" />
-                                </button>
-                            )}
-                        </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-xs font-black uppercase text-white truncate">{chat.Players?.name || chat.Players?.nickname || "Fã VIP"}</p>
+                                    <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest">Tocar para abrir conversa</p>
+                                </div>
+                                <button className="bg-white/5 text-white/50 p-3 rounded-xl group-hover:bg-[#D946EF] group-hover:text-white transition-all"><MessageCircle size={16}/></button>
+                            </div>
+                        )) : <div className="p-12 text-center text-white/20 italic font-black uppercase border border-dashed border-white/5 rounded-3xl">Nenhum cliente iniciou chat.</div>}
                     </div>
                 </div>
             </div>
         )}
 
+        {activeTab === "players" && <PlayersManager modelId={modelId} isSuperAdmin={isSuper} />}
+
       </div>
+
+      {/* -------------------- TODOS OS MODAIS E CAMADAS FLUTUANTES -------------------- */}
+
+      {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
+      {activeTab === "chat" && activeChat && (
+          <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
+              <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
+              <div className="relative w-full max-w-lg h-[85vh] sm:h-[650px] bg-[#0a0a0a] border border-white/10 sm:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden z-10">
+                  <div className="px-6 py-4 bg-black/50 border-b border-white/5 flex items-center justify-between backdrop-blur-md z-10 shadow-md">
+                      <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#D946EF]/20 flex items-center justify-center border border-[#D946EF]/50">
+                              <User size={16} className="text-[#D946EF]"/>
+                          </div>
+                          <h3 className="text-xs font-black uppercase text-white">{activeChat.Players?.name || activeChat.Players?.nickname || "Fã VIP"}</h3>
+                      </div>
+                      <button onClick={() => setActiveChat(null)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-[#0a0a0a] to-black">
+                      <div className="text-center py-2"><span className="px-3 py-1 bg-white/5 text-white/30 text-[9px] uppercase font-black tracking-widest rounded-full">Início da Conversa</span></div>
+                      {chatMessages.map((msg, i) => (
+                          <div key={i} className={`flex flex-col ${msg.sender_type === 'model' ? 'items-end' : 'items-start'}`}>
+                              {msg.is_gift ? (
+                                  <div className="bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/50 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-[0_0_15px_rgba(245,158,11,0.2)] max-w-xs">
+                                      <Gift size={32} className="text-amber-400 mb-2 animate-bounce"/>
+                                      <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest">Você recebeu um presente!</p>
+                                      <p className="text-2xl font-black text-white mt-1">R$ {msg.price?.toFixed(2)}</p>
+                                      {msg.content && <p className="text-xs italic text-white/70 mt-2">"{msg.content}"</p>}
+                                  </div>
+                              ) : (
+                                  <div className={`max-w-[75%] p-3 text-sm rounded-2xl ${msg.sender_type === 'model' ? 'bg-[#D946EF] text-white rounded-tr-sm shadow-md' : 'bg-white/10 text-white rounded-tl-sm border border-white/5'}`}>
+                                      {msg.content && msg.media_type === 'text' && <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
+                                      {msg.media_type === 'audio' && msg.media_url && (
+                                          <div className="flex flex-col gap-1">
+                                              <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 opacity-70"><Mic size={10}/> Mensagem de Voz</span>
+                                              <audio controls src={msg.media_url} className="h-10 w-48 mt-1 outline-none" />
+                                          </div>
+                                      )}
+                                      {(msg.media_type === 'image' || msg.media_type === 'video') && msg.media_url && (
+                                          <div className="flex flex-col mt-1">
+                                              <div className="relative rounded-xl overflow-hidden border border-white/20">
+                                                  {msg.media_type === 'video' ? (
+                                                      <video src={msg.media_url} controls className="max-h-60 w-full object-cover" />
+                                                  ) : (
+                                                      <img src={msg.media_url} className="max-h-60 w-full object-cover" />
+                                                  )}
+                                                  {msg.is_locked && (
+                                                      <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1">
+                                                          <Lock size={10} className="text-[#FFD700]"/> R$ {msg.price?.toFixed(2)} 
+                                                          <span className={msg.is_unlocked ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
+                                                              ({msg.is_unlocked ? 'PAGO' : 'AGUARDANDO'})
+                                                          </span>
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              {msg.content && <p className="mt-2 text-xs">{msg.content}</p>}
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
+                              <span className="text-[8px] text-white/20 mt-1 px-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          </div>
+                      ))}
+                      <div ref={chatEndRef} />
+                  </div>
+
+                  <div className="p-4 bg-[#0a0a0a] border-t border-white/5 relative shadow-md z-20">
+                      <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-2 focus-within:border-[#D946EF]/50 transition-all">
+                          <button onClick={() => document.getElementById('chat-media-upload')?.click()} className="p-2 text-white/40 hover:text-[#D946EF] transition-colors rounded-full shrink-0">
+                              <ImagePlus size={20} />
+                              <input id="chat-media-upload" type="file" hidden accept="image/*,video/*" onChange={onChooseChatMedia} />
+                          </button>
+                          {isRecording ? (
+                              <div className="flex-1 flex items-center gap-2 text-[#FF1493] px-3 font-mono font-black animate-pulse">
+                                  <Mic size={16}/> Gravando... {formatAudioTime(recordingTime)}
+                              </div>
+                          ) : (
+                              <input type="text" placeholder="Digite sua resposta..." className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 px-2 py-1" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdminSendMessage()} />
+                          )}
+                          <button onMouseDown={isRecording ? stopRecording : startRecording} className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                              {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
+                          </button>
+                          {!isRecording && (
+                              <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
+                                  <Send size={16} className="-ml-0.5" />
+                              </button>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS DA GALERIA) 🔥 */}
+      {showMediaStats && (
+          <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
+              <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
+                  <X size={20}/>
+              </button>
+              
+              <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
+                  <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
+              </div>
+              
+              <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
+                  <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center text-center">
+                      <div className="flex items-center gap-2 mb-3 bg-[#FF1493]/10 border border-[#FF1493]/30 px-4 py-2 rounded-full">
+                          <Heart size={16} fill="currentColor" className="text-[#FF1493]"/>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-[#FF1493]">{mediaLikes} Curtidas</span>
+                      </div>
+                      {showMediaStats.caption ? (
+                          <p className="text-sm italic text-white/80 leading-relaxed font-medium">"{showMediaStats.caption}"</p>
+                      ) : (
+                          <p className="text-xs italic text-white/40 font-medium">Sem legenda</p>
+                      )}
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
+                      <h3 className="text-[10px] font-black uppercase text-white/50 tracking-widest mb-4">Comentários dos Fãs</h3>
+                      {mediaComments.length > 0 ? mediaComments.map(c => (
+                          <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm relative group">
+                              <span className="text-[10px] font-black text-[#D946EF] uppercase tracking-widest mb-1">{c.player_name || 'Fã VIP'}</span>
+                              <p className="text-xs text-white/80 leading-relaxed pr-8">{c.content}</p>
+                              <button onClick={() => handleDeleteComment(c.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 bg-red-500/10 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
+                                  <Trash2 size={14}/>
+                              </button>
+                          </div>
+                      )) : (
+                          <p className="text-center text-white/30 text-xs italic font-medium mt-10">Nenhum comentário nesta foto ainda.</p>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS (VITRINE/ROLETA) 🔥 */}
       {editingPrize && (
@@ -1156,7 +1208,6 @@ function DashboardContent() {
                             Mídias do Prêmio (Máx 10) 
                             <span>{editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean).length : 0}/10</span>
                         </p>
-                        
                         <div className="flex flex-wrap gap-2 mb-2">
                             {(editingPrize.delivery_value ? editingPrize.delivery_value.split(',').filter(Boolean) : []).map((url: string, i: number) => (
                                 <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-white/20 shadow-md">
@@ -1169,7 +1220,6 @@ function DashboardContent() {
                                 </div>
                             ))}
                         </div>
-
                         <label className="w-full bg-[#D946EF]/20 text-[#D946EF] py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase cursor-pointer hover:bg-[#D946EF] hover:text-white transition-colors border border-[#D946EF]/30">
                             {uploadingSliceMedia ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>}
                             {uploadingSliceMedia ? "Subindo..." : "Adicionar Fotos/Vídeos"}
