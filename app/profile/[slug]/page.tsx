@@ -13,7 +13,7 @@ export default function ModelProfile() {
   const [model, setModel] = useState<any>(null);
   const [media, setMedia] = useState<any[]>([]);
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -25,7 +25,6 @@ export default function ModelProfile() {
 
   const [viewingMedia, setViewingMedia] = useState<any>(null);
   
-  // 🔥 ESTADOS NOVOS: CURTIDAS, COMENTÁRIOS E SEGUIR 🔥
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [comments, setComments] = useState<any[]>([]);
@@ -46,57 +45,72 @@ export default function ModelProfile() {
   useEffect(() => {
     const logged = localStorage.getItem("labz_player_logged") === "true";
     setIsLoggedIn(logged);
-    loadProfile(logged);
-  }, [slug]);
-
-  async function loadProfile(logged: boolean) {
-    try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers }).then(r => r.json());
-      if (!resMod || !resMod[0]) return setLoading(false);
-      const modelData = resMod[0];
-      setModel(modelData);
-
-      let currentPlayerId = null;
-      const phone = localStorage.getItem("labz_player_phone");
-      if (logged && phone) {
-        const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&model_id=eq.${modelData.id}&select=id`, { headers }).then(r => r.json());
-        if (playerRes && playerRes[0]) {
-          currentPlayerId = playerRes[0].id;
-          setPlayerId(currentPlayerId);
-          setIsFollowing(true); // Se ele tem conta nessa musa, ele já segue
+    
+    async function loadBasicProfile() {
+      try {
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+        
+        // 🔥 CORREÇÃO DE SEGURANÇA: Buscando APENAS dados públicos (Sem senhas ou PIX)
+        const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id,slug,live_status,bio,Configs(model_name,bg_url,profile_url)`, { headers });
+        if (!resMod.ok) return setLoading(false);
+        const modData = await resMod.json();
+        
+        if (modData && modData[0]) {
+            setModel(modData[0]);
+            setLoading(false); 
+            loadHeavyData(modData[0].id, logged, headers);
+        } else {
+            setLoading(false);
         }
-      }
+      } catch (e) { setLoading(false); }
+    }
+    
+    loadBasicProfile();
+  }, [slug, supabaseUrl, supabaseKey]);
 
-      const resMedia = await fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelData.id}&order=created_at.desc`, { headers }).then(r => r.json());
-      setMedia(Array.isArray(resMedia) ? resMedia : []);
+  async function loadHeavyData(modelId: string, logged: boolean, headers: any) {
+      try {
+          const phone = localStorage.getItem("labz_player_phone");
+          let currentPlayerId = null;
 
-      if (logged) {
-        let unlocked = [];
-        if (currentPlayerId) {
-          const resU = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=eq.${currentPlayerId}&select=media_id`, { headers });
-          if (resU.ok) unlocked = await resU.json();
-          else {
-            const resU2 = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&select=media_id`, { headers });
-            if (resU2.ok) unlocked = await resU2.json();
+          // Busca galeria (Seguro, pois media não tem dados da modelo)
+          fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers })
+            .then(r => r.json())
+            .then(resMedia => setMedia(Array.isArray(resMedia) ? resMedia : []))
+            .catch(() => {});
+
+          if (logged && phone) {
+            // Busca apenas o ID do jogador
+            const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&model_id=eq.${modelId}&select=id`, { headers }).then(r => r.json());
+            if (playerRes && playerRes[0]) {
+              currentPlayerId = playerRes[0].id;
+              setPlayerId(currentPlayerId);
+              setIsFollowing(true); 
+            }
+
+            let unlocked = [];
+            if (currentPlayerId) {
+              const resU = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_id=eq.${currentPlayerId}&select=media_id`, { headers });
+              if (resU.ok) unlocked = await resU.json();
+              else {
+                const resU2 = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone)}&select=media_id`, { headers });
+                if (resU2.ok) unlocked = await resU2.json();
+              }
+            }
+            setUnlockedIds(unlocked.map((u: any) => u.media_id));
           }
-        }
-        setUnlockedIds(unlocked.map((u: any) => u.media_id));
-      }
-    } catch (e) { console.error("Erro", e); } finally { setLoading(false); }
+      } catch(e) {}
   }
 
-  // 🔥 FUNÇÃO DE SEGUIR A MODELO 🔥
   const handleFollow = async () => {
       if (!isLoggedIn) return setShowAuth(true);
-      if (isFollowing) return; // Já segue
+      if (isFollowing) return; 
 
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
           const phone = localStorage.getItem("labz_player_phone");
           
-          // Pega os dados básicos do jogador para clonar a conta para essa musa
-          const baseRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone || '')}&limit=1`, { headers });
+          const baseRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone || '')}&limit=1&select=whatsapp,password,email,full_name,nickname,cpf,name`, { headers });
           const baseData = await baseRes.json();
           
           if (baseData && baseData[0]) {
@@ -115,10 +129,9 @@ export default function ModelProfile() {
                   alert("Você agora está seguindo esta Musa! Ela já está no seu Hub VIP.");
               }
           }
-      } catch (e) { console.error("Erro ao seguir", e); }
+      } catch (e) {}
   };
 
-  // 🔥 LÓGICA DE CURTIDAS E COMENTÁRIOS DA MÍDIA 🔥
   useEffect(() => {
       if (!viewingMedia) return;
       
@@ -127,7 +140,6 @@ export default function ModelProfile() {
               const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
               const phone = localStorage.getItem("labz_player_phone") || "";
 
-              // Puxa Curtidas
               const likesRes = await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${viewingMedia.id}&select=player_phone`, { headers });
               if (likesRes.ok) {
                   const likesData = await likesRes.json();
@@ -135,13 +147,12 @@ export default function ModelProfile() {
                   setLiked(likesData.some((l: any) => l.player_phone === phone));
               }
 
-              // Puxa Comentários
-              const commentsRes = await fetch(`${supabaseUrl}/rest/v1/Comments?media_id=eq.${viewingMedia.id}&order=created_at.asc`, { headers });
+              const commentsRes = await fetch(`${supabaseUrl}/rest/v1/Comments?media_id=eq.${viewingMedia.id}&select=id,player_name,content,created_at&order=created_at.asc`, { headers });
               if (commentsRes.ok) {
                   const commentsData = await commentsRes.json();
                   setComments(commentsData);
               }
-          } catch (e) { console.error(e); }
+          } catch (e) {}
       }
       loadInteractions();
   }, [viewingMedia, supabaseUrl, supabaseKey]);
@@ -161,7 +172,7 @@ export default function ModelProfile() {
               setLiked(true);
               setLikesCount(prev => prev + 1);
           }
-      } catch (e) { console.error(e); }
+      } catch (e) {}
   };
 
   const handlePostComment = async () => {
@@ -173,8 +184,7 @@ export default function ModelProfile() {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
       try {
-          // Busca o nickname do jogador
-          const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone || '')}&limit=1`, { headers });
+          const pRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone || '')}&limit=1&select=nickname`, { headers });
           const pData = await pRes.json();
           const playerName = pData[0]?.nickname || 'Fã VIP';
 
@@ -186,7 +196,7 @@ export default function ModelProfile() {
               setComments(prev => [...prev, inserted[0]]);
               setNewComment("");
           }
-      } catch (e) { console.error(e); } finally { setLoadingComment(false); }
+      } catch (e) {} finally { setLoadingComment(false); }
   };
 
   useEffect(() => {
@@ -240,13 +250,14 @@ export default function ModelProfile() {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
           const phone = localStorage.getItem("labz_player_phone");
           if (checkoutData.type === 'photo') {
-            const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&media_id=eq.${checkoutData.itemInfo.id}`, { headers }).then(r => r.json());
+            const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&media_id=eq.${checkoutData.itemInfo.id}&select=id`, { headers }).then(r => r.json());
             if (res && res.length > 0) { 
                 clearInterval(interval); 
                 setPaymentSuccess(true);
                 setTimeout(() => {
                   const itemInfo = checkoutData?.itemInfo;
-                  setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
+                  setCheckoutData(null); setPaymentSuccess(false);
+                  setUnlockedIds(prev => [...prev, checkoutData.itemInfo.id]);
                   setViewingMedia(itemInfo); setLiked(false);
                 }, 2500);
             }
@@ -256,7 +267,7 @@ export default function ModelProfile() {
                 clearInterval(interval); 
                 setPaymentSuccess(true);
                 setTimeout(() => {
-                  setCheckoutData(null); setPaymentSuccess(false); loadProfile(true); 
+                  setCheckoutData(null); setPaymentSuccess(false); 
                 }, 2500);
             }
           }
@@ -277,18 +288,20 @@ export default function ModelProfile() {
   };
 
   if (loading) return <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white"><Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} /></div>;
-  if (!model) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase text-center p-8">Musa não encontrada no Labz.</div>;
+  if (!model && !loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase text-center p-8">Musa não encontrada no Labz.</div>;
 
   const modelConfig = Array.isArray(model?.Configs) ? model.Configs[0] : model?.Configs;
-  const isOnline = model.live_status === 'online' || model.live_status === 'vip';
+  const isOnline = model?.live_status === 'online' || model?.live_status === 'vip';
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden animate-in fade-in duration-300">
       
-      {/* 🔥 HEADER / HERO SECTION OTIMIZADO 🔥 */}
+      {/* 🔥 HEADER / HERO SECTION 🔥 */}
       <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end bg-black">
-        <div className="absolute inset-0 w-full h-full">
-            <img src={modelConfig?.bg_url || modelConfig?.profile_url} className="w-full h-full object-cover opacity-60" />
+        <div className="absolute inset-0 w-full h-full bg-[#0a0a0a]">
+            {modelConfig?.bg_url || modelConfig?.profile_url ? (
+                <img src={modelConfig.bg_url || modelConfig.profile_url} className="w-full h-full object-cover opacity-60" />
+            ) : null}
             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
         </div>
         
@@ -298,8 +311,8 @@ export default function ModelProfile() {
         </div>
 
         <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto pb-8">
-          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-black mx-auto md:mx-0 relative">
-            <img src={modelConfig?.profile_url} className="w-full h-full object-cover" />
+          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-[#111] mx-auto md:mx-0 relative">
+            {modelConfig?.profile_url && <img src={modelConfig.profile_url} className="w-full h-full object-cover" />}
             {isOnline && (
               <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 bg-black/60 backdrop-blur-md border border-[#00f0ff]/50 px-2 py-1 rounded-full flex items-center shadow-[0_0_10px_rgba(0,240,255,0.5)]">
                  <span className="w-2 h-2 bg-[#00f0ff] rounded-full animate-pulse"></span>
@@ -312,8 +325,6 @@ export default function ModelProfile() {
             <p className="text-white/80 text-xs sm:text-sm italic max-w-xl mb-6 leading-relaxed px-4 md:px-0 drop-shadow-md">{model?.bio || "Explore meus conteúdos privados e ganhe prêmios."}</p>
             
             <div className="flex flex-wrap justify-center md:justify-start gap-3 w-full sm:w-auto">
-                
-                {/* 🔥 BOTÃO SEGUIR 🔥 */}
                 <button 
                     onClick={handleFollow} 
                     disabled={isFollowing}
@@ -330,12 +341,12 @@ export default function ModelProfile() {
                     disabled={!isOnline}
                     className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase transition-all shadow-lg min-w-[140px] border ${
                         isOnline 
-                        ? (model.live_status === 'vip' ? 'bg-[#ff0055]/20 text-[#ff0055] border-[#ff0055] shadow-[0_0_20px_rgba(255,0,85,0.3)] animate-pulse hover:bg-[#ff0055] hover:text-white' : 'bg-[#00f0ff]/20 text-[#00f0ff] border-[#00f0ff] shadow-[0_0_20px_rgba(0,240,255,0.3)] animate-pulse hover:bg-[#00f0ff] hover:text-black')
+                        ? (model?.live_status === 'vip' ? 'bg-[#ff0055]/20 text-[#ff0055] border-[#ff0055] shadow-[0_0_20px_rgba(255,0,85,0.3)] animate-pulse hover:bg-[#ff0055] hover:text-white' : 'bg-[#00f0ff]/20 text-[#00f0ff] border-[#00f0ff] shadow-[0_0_20px_rgba(0,240,255,0.3)] animate-pulse hover:bg-[#00f0ff] hover:text-black')
                         : 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
                     }`}
                 >
                     <Radio size={16} className={isOnline ? "" : "opacity-50"}/> 
-                    {model.live_status === 'online' ? 'Assistir Ao Vivo' : model.live_status === 'vip' ? 'Show VIP Ativo' : 'Offline'}
+                    {model?.live_status === 'online' ? 'Assistir Ao Vivo' : model?.live_status === 'vip' ? 'Show VIP Ativo' : 'Offline'}
                 </button>
 
                 <button onClick={handleChatClick} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-white text-black rounded-2xl text-[9px] sm:text-[10px] font-black uppercase hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:scale-105 min-w-[140px]">
@@ -364,28 +375,32 @@ export default function ModelProfile() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-8">
-          {media.map((item) => {
+          {media.length > 0 ? media.map((item) => {
             const isUnlocked = item.price === 0 || unlockedIds.includes(item.id);
             return (
-              <div key={item.id} className="flex flex-col gap-3 sm:gap-4 group">
-                <div className="relative aspect-[3/4] rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden border border-white/5 bg-[#0a0a0a] cursor-pointer shadow-2xl"
+              <div key={item.id} className="flex flex-col gap-3 sm:gap-4 group animate-in fade-in">
+                <div className="relative aspect-[3/4] rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden border border-white/5 bg-[#111] cursor-pointer shadow-2xl"
                     onClick={() => { 
                         if(!isLoggedIn) return setShowAuth(true); 
                         if(!isUnlocked) { openCheckout('photo', item.price, item); }
-                        else { setViewingMedia({ ...item, modelInfo: modelConfig }); } // Passa info da modelo
+                        else { setViewingMedia({ ...item, modelInfo: modelConfig }); } 
                     }}>
-                    <img src={item.url} className={`w-full h-full object-cover transition-all duration-1000 ${!isUnlocked ? 'blur-2xl sm:blur-3xl brightness-50 scale-125' : 'group-hover:scale-110'}`} />
+                    <img src={item.url} loading="lazy" className={`w-full h-full object-cover transition-all duration-1000 ${!isUnlocked ? 'blur-2xl sm:blur-3xl brightness-50 scale-125' : 'group-hover:scale-110'}`} />
                     {!isUnlocked && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
                             <Lock size={20} className="text-[#D946EF] mb-2 sm:mb-3"/><div className="bg-[#D946EF] px-4 sm:px-5 py-2 rounded-full text-[8px] sm:text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-all">Liberar R$ {item.price.toFixed(2).replace('.', ',')}</div>
                         </div>
                     )}
-                    {item.price === 0 && <div className="absolute top-4 left-4 bg-emerald-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Livre</div>}
+                    {item.price === 0 && <div className="absolute top-4 left-4 bg-emerald-500 text-black text-[8px] font-black uppercase px-3 py-1.5 rounded-xl shadow-lg">Livre</div>}
                 </div>
                 {item.caption && <p className="text-[10px] sm:text-xs leading-relaxed italic px-2 sm:px-4 text-white/70 text-center sm:text-left line-clamp-2">{item.caption}</p>}
               </div>
             );
-          })}
+          }) : (
+             <div className="col-span-full py-16 text-center text-white/30 text-xs italic font-medium uppercase tracking-widest border border-dashed border-white/10 rounded-3xl">
+                 Carregando coleção VIP...
+             </div>
+          )}
         </div>
       </div>
 
@@ -403,7 +418,6 @@ export default function ModelProfile() {
         </div>
       )}
 
-      {/* CHECKOUT MODERNIZADO E BLINDADO */}
       {checkoutData && (
           <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
              <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 sm:p-10 rounded-[3.5rem] w-full max-w-md text-center relative shadow-2xl">
@@ -448,7 +462,7 @@ export default function ModelProfile() {
                         
                         <div className="bg-[#D946EF]/10 border border-[#D946EF]/30 p-4 rounded-xl flex items-center justify-center gap-3">
                             <Loader2 size={16} className="animate-spin text-[#D946EF]" /> 
-                            <span className="text-[9px] text-[#D946EF] uppercase font-black tracking-widest">Aguardando Confirmação Automática...</span>
+                            <span className="text-[9px] text-[#D946EF] uppercase font-black tracking-widest">Aguardando Confirmação...</span>
                         </div>
                     </>
                 )}
@@ -456,22 +470,18 @@ export default function ModelProfile() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE MÍDIA COM COMENTÁRIOS E CURTIDAS 🔥 */}
       {viewingMedia && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
              <button onClick={() => setViewingMedia(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
                  <X size={20}/>
              </button>
              
-             {/* LADO DA IMAGEM */}
              <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
                  <img src={viewingMedia.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
              </div>
              
-             {/* LADO DOS COMENTÁRIOS E INFOS */}
              <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
                 
-                {/* Cabeçalho do Modal */}
                 <div className="p-6 border-b border-white/5 shrink-0 flex flex-col items-center">
                     <button onClick={handleToggleLike} className={`p-4 rounded-full transition-all shadow-xl mb-3 border ${liked ? 'bg-red-500 text-white border-red-400 scale-110 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10'}`}>
                         <Heart size={20} fill={liked ? "currentColor" : "none"} />
@@ -480,7 +490,6 @@ export default function ModelProfile() {
                     {viewingMedia.caption && <p className="text-sm italic text-white/80 leading-relaxed font-medium text-center">"{viewingMedia.caption}"</p>}
                 </div>
 
-                {/* Lista de Comentários */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-black/50">
                     {comments.length > 0 ? comments.map(c => (
                         <div key={c.id} className="flex flex-col bg-white/5 p-4 rounded-2xl border border-white/5 backdrop-blur-sm">
@@ -492,7 +501,6 @@ export default function ModelProfile() {
                     )}
                 </div>
 
-                {/* Input de Comentário */}
                 <div className="p-4 border-t border-white/5 bg-black shrink-0">
                     <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full p-1 pl-4 focus-within:border-[#D946EF]/50 transition-all">
                         <input type="text" placeholder="Adicionar comentário..." value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>e.key==='Enter' && handlePostComment()} className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 py-2" />
