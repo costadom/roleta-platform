@@ -61,9 +61,6 @@ export default function TelegramMiniApp() {
         
         const user = tg.initDataUnsafe?.user;
         
-        // 🔥 PARA TESTAR NO CHROME/SAFARI NO COMPUTADOR, DESCOMENTE A LINHA ABAIXO 🔥
-        // const user = { id: 123456789, first_name: "Rafael", last_name: "Teste" };
-        
         if (user) {
           setTgUser(user);
           initializeData(user);
@@ -113,7 +110,6 @@ export default function TelegramMiniApp() {
         setModel({ id: mId, ...resConfig[0] });
       }
 
-      // 🔥 CRIAÇÃO BLINDADA DA CONTA DO JOGADOR 🔥
       const pseudoWhatsapp = user.id.toString();
       const resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${mId}&select=*`, { headers });
       let playerData = await resPlayer.json();
@@ -121,10 +117,10 @@ export default function TelegramMiniApp() {
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
           whatsapp: pseudoWhatsapp,
-          name: user.first_name || "Visitante TG", // Campo obrigatório!
+          name: user.first_name || "Visitante TG", 
           nickname: user.first_name || "VIP",
           full_name: `${user.first_name} ${user.last_name || ''}`.trim() || "Usuário Telegram",
-          email: `${user.id}@tg.labzsexy.com`, // Email fantasma obrigatório
+          email: `${user.id}@tg.labzsexy.com`, 
           password: `${user.id}TgAuth!`,
           credits: 3, 
           model_id: mId
@@ -155,7 +151,6 @@ export default function TelegramMiniApp() {
     }
   }
 
-  // Checagem de Pagamento Aprovado (Polling)
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -228,7 +223,6 @@ export default function TelegramMiniApp() {
     } catch (e) { console.error("Erro carrinho:", e); }
 
     try {
-      // Usa a rota original que estava no seu arquivo
       const res = await fetch('/api/checkout/pix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: val, userId: player.id }),
@@ -263,18 +257,16 @@ export default function TelegramMiniApp() {
       }
   };
 
-  // 🔥 O HACK DO DESENVOLVEDOR REFEITO E BLINDADO 🔥
   const handleDevHack = () => {
       setClickCount((prev) => {
           const next = prev + 1;
           if (next >= 5) {
               addDevCredits();
-              return 0; // reseta
+              return 0; 
           }
           return next;
       });
       
-      // Limpa os cliques se o cara demorar muito (2 segundos de intervalo)
       setTimeout(() => {
           setClickCount(0);
       }, 2000);
@@ -336,7 +328,6 @@ export default function TelegramMiniApp() {
       
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
 
-      // 🔥 ENTREGA SILENCIOSA NO TELEGRAM 🔥
       try {
           if(!String(won.name).toUpperCase().includes("TENTE")) {
               await fetch("/api/tg-send", {
@@ -364,18 +355,20 @@ export default function TelegramMiniApp() {
     }, SPIN_DURATION);
   };
 
-  if (loading) return <div className="min-h-[100dvh] bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-[10px] animate-pulse">Carregando Telegram App...</div>;
-  if (errorMsg) return <div className="min-h-[100dvh] bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
+  if (loading) return <div className="h-[100dvh] w-full bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-[10px] animate-pulse">Carregando Telegram App...</div>;
+  if (errorMsg) return <div className="h-[100dvh] w-full bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans">
-      <div className="relative w-full h-[100dvh] bg-black flex flex-col overflow-hidden">
-        <div className="absolute inset-0 z-0">
+    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden">
+      {/* 🔥 ALTERAÇÃO DE LAYOUT AQUI: Libera o scroll (overflow-y-auto) se a tela for pequena 🔥 */}
+      <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar pb-6">
+        
+        <div className="absolute inset-0 z-0 h-[100vh] fixed">
            <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 blur-[2px]" style={{ backgroundImage: `url(${bgUrl})`, opacity: 0.4 }} />
            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
         </div>
 
-        <div className="relative z-10 flex flex-col h-full overflow-hidden">
+        <div className="relative z-10 flex flex-col min-h-full">
           <div className="p-4 flex flex-col gap-3 shrink-0">
              <div className="flex justify-between items-center px-1">
                 <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
@@ -394,7 +387,7 @@ export default function TelegramMiniApp() {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col items-center justify-center px-4 relative mt-4">
+          <div className="flex-1 flex flex-col items-center justify-center px-4 relative mt-4 min-h-[300px]">
              {superMsg && (
                  <div className="absolute top-0 left-4 right-4 z-[60] bg-gradient-to-r from-[#FFD700]/20 via-[#D946EF]/30 to-[#FFD700]/20 border border-[#FFD700]/50 backdrop-blur-md p-4 rounded-2xl text-center animate-in slide-in-from-top-4 fade-in duration-300 shadow-[0_0_30px_rgba(217,70,239,0.5)]">
                      <p className="text-[11px] font-black text-white italic drop-shadow-md leading-relaxed">{superMsg}</p>
@@ -405,9 +398,8 @@ export default function TelegramMiniApp() {
              </div>
           </div>
 
-          <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0">
+          <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0 mt-auto">
             <div className="bg-[#111] border border-white/5 p-4 rounded-[1.5rem] flex justify-between items-center mb-4 shadow-2xl relative">
-               {/* 🔥 BOTAO DO HACK DE SALDO AQUI 🔥 */}
                <div className="flex flex-col pl-2 z-10 cursor-pointer select-none" onClick={handleDevHack}>
                   <span className="text-[9px] text-white/40 font-black uppercase tracking-widest pointer-events-none">Seu Saldo Restante</span>
                   <span className="text-xl font-black text-white italic tracking-tighter pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
@@ -423,10 +415,9 @@ export default function TelegramMiniApp() {
         </div>
       </div>
 
-      {/* 🔥 MODAL DE PIX FUNCIONAL 🔥 */}
       {showDeposit && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl">
+        <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
+          <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
             <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
             
             {pixPaid ? (
@@ -467,9 +458,16 @@ export default function TelegramMiniApp() {
         </div>
       )}
       
-      {/* O Seu Modal Bonitão Original de Prêmio Aparecendo na Tela Além do Disparo do Bot */}
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || "Fã VIP"} modelName={modelName} onClose={() => setModalOpen(false)} />
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
+      
+      <style jsx global>{` 
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } 
+        .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } 
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; } 
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }
+      `}</style>
     </div>
   );
 }
