@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, ArrowLeft, LayoutGrid, Coins, DollarSign, CheckCircle, PackageCheck, Image, Video, Award, Trophy, MessageCircle } from "lucide-react";
+import { User, Volume2, VolumeX, ShoppingCart, X, Copy, CheckCircle2, Gift, Sparkles, Loader2, Zap, LayoutGrid, Coins, DollarSign, CheckCircle, PackageCheck, Image, Video, Award, Trophy, MessageCircle, AlertCircle } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { PrizeModal } from "@/components/PrizeModal";
@@ -12,7 +12,6 @@ const SPIN_DURATION = 5000;
 
 export default function TelegramMiniApp() {
   const params = useParams();
-  const router = useRouter();
   const slug = params.slug;
 
   const [tgUser, setTgUser] = useState<any>(null);
@@ -40,7 +39,6 @@ export default function TelegramMiniApp() {
   const [superMsg, setSuperMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Hack de Teste
   const [clickCount, setClickCount] = useState(0);
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -50,7 +48,6 @@ export default function TelegramMiniApp() {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   useEffect(() => {
-    // Injeta o script do Telegram Web App
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-web-app.js";
     script.async = true;
@@ -60,11 +57,11 @@ export default function TelegramMiniApp() {
       const tg = (window as any).Telegram?.WebApp;
       if (tg) {
         tg.ready();
-        tg.expand(); // Expande tela inteira
+        tg.expand();
         
         const user = tg.initDataUnsafe?.user;
         
-        // 🔥 PARA TESTAR NO CHROME/SAFARI, DESCOMENTE A LINHA ABAIXO 🔥
+        // 🔥 PARA TESTAR NO CHROME/SAFARI NO COMPUTADOR, DESCOMENTE A LINHA ABAIXO 🔥
         // const user = { id: 123456789, first_name: "Rafael", last_name: "Teste" };
         
         if (user) {
@@ -116,23 +113,39 @@ export default function TelegramMiniApp() {
         setModel({ id: mId, ...resConfig[0] });
       }
 
-      // Cria a conta do cara invisivelmente
-      const pseudoWhatsapp = `TG_${user.id}`;
+      // 🔥 CRIAÇÃO BLINDADA DA CONTA DO JOGADOR 🔥
+      const pseudoWhatsapp = user.id.toString();
       const resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${mId}&select=*`, { headers });
       let playerData = await resPlayer.json();
 
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
           whatsapp: pseudoWhatsapp,
-          nickname: user.first_name,
-          full_name: `${user.first_name} ${user.last_name || ''}`.trim(),
+          name: user.first_name || "Visitante TG", // Campo obrigatório!
+          nickname: user.first_name || "VIP",
+          full_name: `${user.first_name} ${user.last_name || ''}`.trim() || "Usuário Telegram",
+          email: `${user.id}@tg.labzsexy.com`, // Email fantasma obrigatório
           password: `${user.id}TgAuth!`,
-          credits: 3, // Dá 3 créditos grátis de isca
+          credits: 3, 
           model_id: mId
         };
-        const createRes = await fetch(`${supabaseUrl}/rest/v1/Players`, { method: "POST", headers: { ...headers, Prefer: "return=representation" }, body: JSON.stringify(newPlayerPayload) });
-        playerData = await createRes.json();
+
+        const createRes = await fetch(`${supabaseUrl}/rest/v1/Players`, { 
+            method: "POST", 
+            headers: { ...headers, "Content-Type": "application/json", Prefer: "return=representation" }, 
+            body: JSON.stringify(newPlayerPayload) 
+        });
+        
+        const createdData = await createRes.json();
+        
+        if (createdData && Array.isArray(createdData) && createdData.length > 0) {
+            playerData = createdData;
+        } else {
+            console.error("Erro banco de dados:", createdData);
+            throw new Error("Erro Crítico: O banco rejeitou a criação do jogador. Avise o Dev.");
+        }
       }
+      
       setPlayer(playerData[0]);
 
     } catch (e: any) {
@@ -142,7 +155,7 @@ export default function TelegramMiniApp() {
     }
   }
 
-  // Checagem do pagamento aprovado (Via Polling)
+  // Checagem de Pagamento Aprovado (Polling)
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -170,7 +183,6 @@ export default function TelegramMiniApp() {
     return () => clearInterval(interval);
   }, [pixData, pixPaid, player, activeCartId]);
 
-  // Cronômetro do Pix
   useEffect(() => {
     let timer: any;
     if (pixData && !pixPaid && pixTimeLeft > 0) {
@@ -182,7 +194,15 @@ export default function TelegramMiniApp() {
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
   const handleGeneratePix = async (val: number) => {
-    if (!player) return;
+    if (!player) {
+        if ((window as any).Telegram?.WebApp) {
+            (window as any).Telegram.WebApp.showAlert("Erro: Identificação perdida. Feche a roleta e abra de novo.");
+        } else {
+            alert("Erro: Identificação perdida. Feche a roleta e abra de novo.");
+        }
+        return;
+    }
+    
     setPixLoading(true);
     setPixData(null);
     setPixPaid(false);
@@ -205,9 +225,10 @@ export default function TelegramMiniApp() {
         const cartData = await resCart.json();
         if (cartData && cartData[0]) setActiveCartId(cartData[0].id);
       }
-    } catch (e) { console.error("Erro ao salvar carrinho:", e); }
+    } catch (e) { console.error("Erro carrinho:", e); }
 
     try {
+      // Usa a rota original que estava no seu arquivo
       const res = await fetch('/api/checkout/pix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: val, userId: player.id }),
@@ -218,8 +239,45 @@ export default function TelegramMiniApp() {
           setPixData(data); 
       }
     } catch (e) {
-        alert("Falha ao gerar o PIX. Tente novamente.");
+        if ((window as any).Telegram?.WebApp) {
+            (window as any).Telegram.WebApp.showAlert("Falha de conexão com o banco. Tente novamente.");
+        } else {
+            alert("Falha ao gerar o PIX. Tente novamente.");
+        }
     } finally { setPixLoading(false); }
+  };
+
+  const addDevCredits = async () => {
+      if (!player) return;
+      const newTokens = player.credits + 50;
+      setPlayer({ ...player, credits: newTokens });
+      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, {
+         method: "PATCH", 
+         headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+         body: JSON.stringify({ credits: newTokens })
+      });
+      if ((window as any).Telegram?.WebApp) {
+          (window as any).Telegram.WebApp.showAlert("🤖 MODO DEV: 50 Giros adicionados com sucesso!");
+      } else {
+          alert("MODO DEV ATIVADO! 50 Giros adicionados.");
+      }
+  };
+
+  // 🔥 O HACK DO DESENVOLVEDOR REFEITO E BLINDADO 🔥
+  const handleDevHack = () => {
+      setClickCount((prev) => {
+          const next = prev + 1;
+          if (next >= 5) {
+              addDevCredits();
+              return 0; // reseta
+          }
+          return next;
+      });
+      
+      // Limpa os cliques se o cara demorar muito (2 segundos de intervalo)
+      setTimeout(() => {
+          setClickCount(0);
+      }, 2000);
   };
 
   const runSpin = async (cost: number = 3) => {
@@ -272,15 +330,13 @@ export default function TelegramMiniApp() {
       setModalOpen(true);
       
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
-      const resPatch = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers, body: JSON.stringify({ credits: newBal }) });
-      const patchData = await resPatch.json();
-      if (patchData?.[0]) setPlayer({ ...player, credits: patchData[0].credits });
+      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers, body: JSON.stringify({ credits: newBal }) });
 
       if (soundEnabled) winAudioRef.current?.play().catch(() => {});
       
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 9999 });
 
-      // 🔥 INTEGRAÇÃO TELEGRAM: ENVIAR MENSAGEM NO PRIVADO 🔥
+      // 🔥 ENTREGA SILENCIOSA NO TELEGRAM 🔥
       try {
           if(!String(won.name).toUpperCase().includes("TENTE")) {
               await fetch("/api/tg-send", {
@@ -296,7 +352,9 @@ export default function TelegramMiniApp() {
               });
               
               setTimeout(() => {
-                (window as any).Telegram?.WebApp?.showAlert(`🎉 O prêmio "${won.name}" foi enviado para o seu chat privado com o Bot!`);
+                if ((window as any).Telegram?.WebApp) {
+                    (window as any).Telegram.WebApp.showAlert(`🎉 O prêmio "${won.name}" foi enviado para o seu chat privado com o Bot!`);
+                }
               }, 1500);
           }
       } catch (e) {
@@ -306,27 +364,8 @@ export default function TelegramMiniApp() {
     }, SPIN_DURATION);
   };
 
-  // 🔥 O SEGREDO DO DESENVOLVEDOR (Adicionar Créditos) 🔥
-  const handleDevHack = async () => {
-      const newCount = clickCount + 1;
-      setClickCount(newCount);
-      
-      if (newCount === 5) {
-          const newTokens = player.credits + 50;
-          await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, {
-             method: "PATCH", 
-             headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
-             body: JSON.stringify({ credits: newTokens })
-          });
-          setPlayer({ ...player, credits: newTokens });
-          alert("MODO DEV ATIVADO! 50 Giros adicionados com sucesso.");
-          setClickCount(0);
-      }
-      setTimeout(() => setClickCount(0), 3000);
-  };
-
   if (loading) return <div className="min-h-[100dvh] bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-[10px] animate-pulse">Carregando Telegram App...</div>;
-  if (errorMsg) return <div className="min-h-[100dvh] bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold">{errorMsg}</p></div>;
+  if (errorMsg) return <div className="min-h-[100dvh] bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
     <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans">
@@ -339,9 +378,9 @@ export default function TelegramMiniApp() {
         <div className="relative z-10 flex flex-col h-full overflow-hidden">
           <div className="p-4 flex flex-col gap-3 shrink-0">
              <div className="flex justify-between items-center px-1">
-                <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5"><ShoppingCart size={12} /> Recarregar</button>
+                <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
                 <div className="flex gap-2">
-                   <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
+                   <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
                 </div>
              </div>
              <div className="flex flex-col items-center"><span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span><span className="text-[10px] text-[#FFD700] font-black uppercase mt-0.5 tracking-widest italic">Musa {modelName}</span></div>
@@ -362,15 +401,18 @@ export default function TelegramMiniApp() {
                  </div>
              )}
              <div className={`transition-all duration-700 w-full flex justify-center ${superMsg ? 'scale-105 drop-shadow-[0_0_40px_rgba(255,215,0,0.3)]' : ''}`}>
-                {/* 🎯 O SEU COMPONENTE DE ROLETA EXATO ESTÁ AQUI */}
                 <RouletteWheel segments={prizes.map(p => ({ label: p.name, color: p.color }))} rotation={rotation} spinning={isSpinning} onClick={() => runSpin(3)} durationMs={SPIN_DURATION} />
              </div>
           </div>
 
           <div className="p-6 bg-gradient-to-t from-black via-black/90 to-transparent pt-4 shrink-0">
             <div className="bg-[#111] border border-white/5 p-4 rounded-[1.5rem] flex justify-between items-center mb-4 shadow-2xl relative">
-               <div className="flex flex-col pl-2 z-10 cursor-pointer" onClick={handleDevHack}><span className="text-[9px] text-white/40 font-black uppercase tracking-widest select-none">Seu Saldo Restante</span><span className="text-xl font-black text-white italic tracking-tighter select-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span></div>
-               <button onClick={() => setShowDeposit(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5"><ShoppingCart size={14}/> Comprar</button>
+               {/* 🔥 BOTAO DO HACK DE SALDO AQUI 🔥 */}
+               <div className="flex flex-col pl-2 z-10 cursor-pointer select-none" onClick={handleDevHack}>
+                  <span className="text-[9px] text-white/40 font-black uppercase tracking-widest pointer-events-none">Seu Saldo Restante</span>
+                  <span className="text-xl font-black text-white italic tracking-tighter pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
+               </div>
+               <button onClick={() => setShowDeposit(true)} className="bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all hover:bg-[#D946EF] z-10 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={14}/> Comprar</button>
             </div>
             <div className="grid grid-cols-2 gap-3 mb-4">
               <button onClick={() => runSpin(3)} disabled={isSpinning} className="bg-[#D946EF] h-16 rounded-2xl flex flex-col items-center justify-center active:scale-95 disabled:opacity-50 shadow-lg transition-all"><span className="text-xs font-black uppercase italic">Giro Normal</span><span className="text-[9px] font-bold text-white/60">3 CR</span></button>
@@ -381,10 +423,12 @@ export default function TelegramMiniApp() {
         </div>
       </div>
 
+      {/* 🔥 MODAL DE PIX FUNCIONAL 🔥 */}
       {showDeposit && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl">
             <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
+            
             {pixPaid ? (
                <div className="py-10 text-center animate-in zoom-in">
                   <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle className="text-emerald-500" size={40} /></div>
@@ -414,7 +458,7 @@ export default function TelegramMiniApp() {
                   <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
                     <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+5 BÔNUS</div>
                     <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
-                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase">Comprar</div>
+                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-md">Comprar</div>
                   </button>
                 ))}
               </div>
@@ -422,6 +466,8 @@ export default function TelegramMiniApp() {
           </div>
         </div>
       )}
+      
+      {/* O Seu Modal Bonitão Original de Prêmio Aparecendo na Tela Além do Disparo do Bot */}
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || "Fã VIP"} modelName={modelName} onClose={() => setModalOpen(false)} />
       <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
