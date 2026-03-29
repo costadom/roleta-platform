@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { canal, mensagem, linkRoleta, modelId } = await req.json();
+    const { canal, mensagem, modelId } = await req.json();
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,11 +16,17 @@ export async function POST(req: Request) {
         token = dataConfig[0]?.tg_bot_token;
     }
 
-    if (!token) {
-        token = process.env.TELEGRAM_BOT_TOKEN;
-    }
-
+    if (!token) token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) throw new Error("Nenhum Token de Bot foi salvo no painel.");
+
+    // 🔥 MÁGICA: Pergunta pro Telegram qual o username do Bot
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const meData = await meRes.json();
+    if (!meData.ok) throw new Error("Token do Bot inválido.");
+    const botUsername = meData.result.username;
+
+    // Cria o link que manda o fã do grupo direto pro Privado do Bot
+    const botLink = `https://t.me/${botUsername}`;
 
     const tgUrl = `https://api.telegram.org/bot${token}/sendMessage`;
     const response = await fetch(tgUrl, {
@@ -32,8 +38,8 @@ export async function POST(req: Request) {
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [[
-            // 🔥 CORREÇÃO: Usando 'url' normal porque o Telegram não aceita 'web_app' em canais/grupos
-            { text: "🎰 ABRIR ROLETA VIP", url: linkRoleta }
+            // O botão manda o cara pro privado!
+            { text: "🎰 ABRIR ROLETA VIP", url: botLink }
           ]]
         }
       }),
@@ -45,7 +51,7 @@ export async function POST(req: Request) {
        let errorBr = data.description;
        if (errorBr.includes("chat not found")) errorBr = "Grupo não encontrado. Verifique se o bot está adicionado lá.";
        if (errorBr.includes("bot is not a member")) errorBr = "O bot não está no grupo. Adicione ele primeiro!";
-       if (errorBr.includes("not enough rights") || errorBr.includes("can't write")) errorBr = "O bot precisa de permissão de Administrador.";
+       if (errorBr.includes("not enough rights") || errorBr.includes("can't write")) errorBr = "O bot precisa de permissão de Administrador no Grupo.";
        if (errorBr.includes("empty")) errorBr = "A mensagem não pode estar vazia.";
        throw new Error(errorBr);
     }
