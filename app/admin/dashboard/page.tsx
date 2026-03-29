@@ -6,7 +6,7 @@ import {
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
   Loader2, Wallet, Calendar, CheckCircle2, Bell, FileText, Lock, 
-  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play
+  HelpCircle, ChevronUp, ChevronDown, User, Globe, Camera, Video, Send, Trash2, LayoutGrid, CheckCircle, Clock, AlertTriangle, Settings, Eye, EyeOff, X, Upload, Plus, Info, Receipt, Sparkles, Star, MessageCircle, Mic, Square, ImagePlus, Heart, Play, Rocket, Key
 } from "lucide-react";
 import PlayersManager from "./players";
 
@@ -34,7 +34,7 @@ const formatAudioTime = (seconds: number) => {
 
 // 🔥 COMPRESSOR DE IMAGENS NATIVO (DEIXA O SITE RÁPIDO) 🔥
 const compressImage = async (file: File): Promise<File> => {
-    if (!file.type.startsWith('image/')) return file; // Se for vídeo, deixa passar
+    if (!file.type.startsWith('image/')) return file; 
     return new Promise((resolve) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -45,7 +45,7 @@ const compressImage = async (file: File): Promise<File> => {
                 const canvas = document.createElement('canvas');
                 let width = img.width;
                 let height = img.height;
-                const MAX_WIDTH = 1280; // Resolução perfeita para celular, tamanho minúsculo
+                const MAX_WIDTH = 1280; 
                 const MAX_HEIGHT = 1280;
                 
                 if (width > height) {
@@ -62,7 +62,7 @@ const compressImage = async (file: File): Promise<File> => {
                 canvas.toBlob((blob) => {
                     if (blob) resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
                     else resolve(file);
-                }, 'image/jpeg', 0.6); // 60% de compressão (derruba fotos de 5MB pra ~150KB)
+                }, 'image/jpeg', 0.6); 
             };
         };
     });
@@ -101,7 +101,7 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"finance" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
+  const [activeTab, setActiveTab] = useState<"finance" | "marketing" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
@@ -171,6 +171,14 @@ function DashboardContent() {
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
+  // 🔥 ESTADOS DO DISPARADOR TELEGRAM 🔥
+  const [tgGroupId, setTgGroupId] = useState("");
+  const [tgMessage, setTgMessage] = useState("");
+  const [tgToken, setTgToken] = useState("");
+  const [savingToken, setSavingToken] = useState(false);
+  const [sendingTg, setSendingTg] = useState(false);
+  const [tgStatus, setTgStatus] = useState("");
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -213,7 +221,11 @@ function DashboardContent() {
       }
       
       if (resConfig && resConfig[0]) {
-        setCurrentBg(resConfig[0].bg_url || null); setCurrentProfile(resConfig[0].profile_url || null); setModelName(resConfig[0].model_name || ""); setShowcaseVisible(resConfig[0].showcase_visible === true);
+        setCurrentBg(resConfig[0].bg_url || null); 
+        setCurrentProfile(resConfig[0].profile_url || null); 
+        setModelName(resConfig[0].model_name || ""); 
+        setShowcaseVisible(resConfig[0].showcase_visible === true);
+        setTgToken(resConfig[0].tg_bot_token || ""); // Puxa o Token do Banco
       }
 
       // TELA LIBERADA
@@ -246,6 +258,63 @@ function DashboardContent() {
   };
 
   useEffect(() => { loadData(); }, [modelId]);
+
+  // 🔥 SALVAR TOKEN EXCLUSIVO NO BANCO 🔥
+  const handleSaveTgToken = async () => {
+    setSavingToken(true);
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}`, { 
+          method: "PATCH", 
+          headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, 
+          body: JSON.stringify({ tg_bot_token: tgToken }) 
+      });
+      alert("Token do Bot atualizado com sucesso!");
+    } catch (error) {
+      alert("Erro ao salvar o Token.");
+    }
+    setSavingToken(false);
+  };
+
+  // 🔥 FUNÇÃO DE DISPARO NO GRUPO DA MODELO 🔥
+  const handleSendTelegramBroadcast = async () => {
+    if (!tgGroupId || !tgMessage) return alert("Preencha o ID do Grupo e a Mensagem.");
+    setSendingTg(true); setTgStatus("");
+
+    const miniAppLink = `${modelUrl}/tg-game/${modelSlug}`;
+
+    try {
+      const res = await fetch("/api/tg-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            canal: tgGroupId, 
+            mensagem: tgMessage, 
+            linkRoleta: miniAppLink,
+            modelId: modelId
+        })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setTgStatus("✅ Disparo realizado com sucesso no grupo!");
+      } else {
+        setTgStatus(`❌ Erro: Verifique se o Bot é admin do seu grupo. [${data.error}]`);
+      }
+    } catch (e) {
+      setTgStatus("❌ Erro de conexão ao disparar.");
+    }
+    setSendingTg(false);
+  };
+
+  const applyTemplate = (type: number) => {
+      if (type === 1) {
+          setTgMessage(`🔥 A espera acabou! Minha Roleta VIP está online aqui no Telegram!\n\nGire agora e ganhe fotos inéditas, vídeos exclusivos ou até uma chamada de vídeo comigo. 🤫\n\n👇 Clique no botão abaixo para tentar a sorte:`);
+      } else if (type === 2) {
+          setTgMessage(`Ninguém dorme hoje... 😈\n\nAcabei de colocar prêmios surpresa na minha Roleta VIP. Quem girar nos próximos 30 minutos tem mais chance de levar o prêmio principal.\n\n👇 Vem jogar comigo:`);
+      } else if (type === 3) {
+          setTgMessage(`Alguém do grupo acabou de ganhar meu Pack Premium na roleta! 👀\n\nAinda restam alguns prêmios raros escondidos hoje. Será que você consegue tirar?\n\n👇 Teste sua sorte agora:`);
+      }
+  };
 
   const generateDefaultPrizes = async () => {
       if (!modelId) return;
@@ -716,6 +785,12 @@ function DashboardContent() {
 
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
+          
+          {/* 🔥 BOTAO DA ABA MARKETING NO MENU 🔥 */}
+          <button onClick={() => setActiveTab("marketing")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "marketing" ? "bg-[#00f0ff] text-black shadow-lg shadow-[#00f0ff]/30" : "text-white/30 hover:bg-white/5"}`}>
+              <Rocket size={14}/> TG Ads
+          </button>
+
           <button onClick={() => setActiveTab("hub")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "hub" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Hub</button>
           <button onClick={() => setActiveTab("gallery")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "gallery" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Galeria</button>
           <button onClick={() => setActiveTab("chat")} className={`relative flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "chat" ? "bg-[#D946EF] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>
@@ -731,6 +806,92 @@ function DashboardContent() {
         </div>
 
         {/* -------------------- CONTEÚDO DAS ABAS -------------------- */}
+
+        {/* 🔥 ABA DE MARKETING EXCLUSIVA DA MODELO 🔥 */}
+        {activeTab === "marketing" && (
+            <div className="animate-in fade-in space-y-6">
+                {/* CAIXA DO TOKEN DO BOT (CONFIGURAÇÃO ÚNICA) */}
+                <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                    <div className="flex items-center gap-3 mb-6">
+                        <Key size={24} className="text-[#FFD700]"/>
+                        <h2 className="text-xl font-black uppercase italic text-white">Seu Bot <span className="text-[#FFD700]">Exclusivo</span></h2>
+                    </div>
+                    <p className="text-xs text-white/60 mb-6 font-medium leading-relaxed max-w-2xl">
+                        Vá no Telegram, pesquise por <b>@BotFather</b> e crie o seu Bot. Cole o <b>Token (API Key)</b> que ele te der aqui embaixo. É esse bot que vai entregar os prêmios no privado dos seus clientes de forma automática!
+                    </p>
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                        <input 
+                            type="text" 
+                            placeholder="Cole seu Token aqui (Ex: 123456:AAAbbbCCC...)" 
+                            value={tgToken} 
+                            onChange={(e) => setTgToken(e.target.value)}
+                            className="flex-1 w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-xs text-white outline-none focus:border-[#FFD700] transition-all"
+                        />
+                        <button 
+                            onClick={handleSaveTgToken} 
+                            disabled={savingToken}
+                            className="w-full md:w-auto bg-[#FFD700] text-black px-8 py-5 rounded-2xl font-black uppercase text-[10px] shadow-[0_0_20px_rgba(255,215,0,0.3)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+                        >
+                            {savingToken ? <Loader2 size={16} className="animate-spin"/> : "Salvar Meu Bot"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* CAIXA DO DISPARADOR NO GRUPO */}
+                <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-[#00f0ff]/30 p-8 rounded-[3rem] shadow-[0_0_30px_rgba(0,240,255,0.1)] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-[#00f0ff]/5 rounded-full blur-[50px] pointer-events-none"></div>
+                    
+                    <h2 className="text-2xl font-black uppercase italic mb-2 text-white flex items-center gap-3"><Rocket size={24} className="text-[#00f0ff]"/> Disparador de <span className="text-[#00f0ff]">Iscas</span></h2>
+                    <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mb-8">Envie a sua roleta com um botão mágico direto no seu Grupo Grátis.</p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-6">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-[#00f0ff] ml-2 flex items-center gap-1"><Users size={12}/> ID do seu Grupo</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Ex: @clubinhodasavanah ou -1001234567" 
+                                    value={tgGroupId} onChange={(e) => setTgGroupId(e.target.value)}
+                                    className="w-full bg-black/50 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#00f0ff] mt-2 transition-all" 
+                                />
+                                <p className="text-[8px] text-white/30 uppercase font-black mt-2 ml-2">⚠️ Seu Bot precisa ser Administrador do grupo para poder postar a mensagem.</p>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-[#00f0ff] ml-2 mb-2 block">Textos de Alta Conversão</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button onClick={() => applyTemplate(1)} className="bg-white/5 hover:bg-[#00f0ff]/20 text-white/60 hover:text-[#00f0ff] border border-white/5 hover:border-[#00f0ff]/30 py-3 rounded-xl text-[9px] font-black uppercase transition-all">Lançamento</button>
+                                    <button onClick={() => applyTemplate(2)} className="bg-white/5 hover:bg-[#00f0ff]/20 text-white/60 hover:text-[#00f0ff] border border-white/5 hover:border-[#00f0ff]/30 py-3 rounded-xl text-[9px] font-black uppercase transition-all">Madrugada</button>
+                                    <button onClick={() => applyTemplate(3)} className="bg-white/5 hover:bg-[#00f0ff]/20 text-white/60 hover:text-[#00f0ff] border border-white/5 hover:border-[#00f0ff]/30 py-3 rounded-xl text-[9px] font-black uppercase transition-all">Sorteio Raro</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-black uppercase text-[#00f0ff] ml-2 mb-2">Sua Mensagem</label>
+                            <textarea 
+                                value={tgMessage} onChange={(e) => setTgMessage(e.target.value)}
+                                placeholder="Escreva a isca para os seus fãs..."
+                                className="flex-1 w-full bg-black/50 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-[#00f0ff] resize-none transition-all custom-scrollbar" 
+                            />
+                            
+                            <button 
+                                onClick={handleSendTelegramBroadcast} disabled={sendingTg}
+                                className="w-full bg-[#00f0ff] text-black py-5 rounded-2xl font-black uppercase shadow-[0_0_20px_rgba(0,240,255,0.4)] flex justify-center items-center gap-2 mt-4 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {sendingTg ? <Loader2 className="animate-spin" size={20} /> : <><Send size={18}/> Disparar Roleta Agora</>}
+                            </button>
+
+                            {tgStatus && (
+                                <div className={`p-4 rounded-xl text-[10px] font-black uppercase text-center mt-4 ${tgStatus.includes('✅') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                                    {tgStatus}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {activeTab === "finance" && (
             <div className="space-y-6 animate-in fade-in">
@@ -913,7 +1074,6 @@ function DashboardContent() {
         {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
                 
-                {/* BOTÃO DE EMERGÊNCIA (SE AS FATIAS NÃO EXISTIREM) */}
                 {prizes.length === 0 && (
                     <div className="bg-red-500/10 border border-red-500/30 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center animate-pulse">
                         <AlertTriangle size={40} className="text-red-500 mb-4" />
@@ -948,7 +1108,6 @@ function DashboardContent() {
                     </div>
                 </div>
                 
-                {/* OS SLOTS SÓ APARECEM SE TIVEREM SIDO CRIADOS NO BANCO */}
                 {prizes.length > 0 && (
                 <div className="bg-black border border-white/10 p-8 rounded-[3rem] shadow-2xl relative">
                     <div className="flex items-center justify-between mb-6">
@@ -1077,9 +1236,8 @@ function DashboardContent() {
 
       </div>
 
-      {/* -------------------- TODOS OS MODAIS E CAMADAS FLUTUANTES (Z-INDEX SUPERIOR) -------------------- */}
+      {/* -------------------- MODAIS E CAMADAS FLUTUANTES (Z-INDEX SUPERIOR) -------------------- */}
 
-      {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
       {activeTab === "chat" && activeChat && (
           <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
               <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
@@ -1169,7 +1327,6 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS DA GALERIA) - LIVRE DE ABAS 🔥 */}
       {showMediaStats && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
               <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
@@ -1210,7 +1367,6 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
       {showMediaModal && chatMediaPreview && (
           <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
@@ -1255,7 +1411,6 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS (VITRINE/ROLETA) 🔥 */}
       {editingPrize && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
@@ -1279,7 +1434,6 @@ function DashboardContent() {
                     </select>
                 </div>
 
-                {/* 1. SE ELA ESCOLHER "LINK" */}
                 {editingPrize.delivery_type === 'link' && (
                     <div className="bg-white/5 p-4 rounded-2xl animate-in fade-in space-y-2">
                         <p className="text-[10px] font-black uppercase text-white/40">URL do Prêmio (Obrigatório)</p>
@@ -1287,7 +1441,6 @@ function DashboardContent() {
                     </div>
                 )}
 
-                {/* 2. SE ELA ESCOLHER "CREDIT" */}
                 {editingPrize.delivery_type === 'credit' && (
                     <div className="bg-white/5 p-4 rounded-2xl animate-in fade-in space-y-2">
                         <p className="text-[10px] font-black uppercase text-white/40">Quantidade de Giros Extras</p>
@@ -1296,7 +1449,6 @@ function DashboardContent() {
                     </div>
                 )}
 
-                {/* 3. SE ELA ESCOLHER "WHATSAPP" (SUPORTE) */}
                 {editingPrize.delivery_type === 'whatsapp' && (
                     <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 animate-in fade-in text-center">
                         <MessageCircle size={20} className="text-emerald-500 mx-auto mb-2" />
@@ -1304,7 +1456,6 @@ function DashboardContent() {
                     </div>
                 )}
 
-                {/* 4. SE ELA ESCOLHER "MEDIA" (UPLOAD) */}
                 {editingPrize.delivery_type === 'media' && (
                     <div className="bg-white/5 p-4 rounded-2xl space-y-3 animate-in fade-in">
                         <p className="text-[10px] font-black uppercase text-white/40 flex justify-between">
@@ -1341,7 +1492,6 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* MODAL TUTORIAL ROLETA */}
       {showRoletaTutorial && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#FF1493]/30 p-8 rounded-[2rem] w-full max-w-sm shadow-2xl relative">
