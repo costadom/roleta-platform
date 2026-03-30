@@ -1,78 +1,68 @@
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
+export async function GET() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json({ error: "Configuração do servidor ausente." }, { status: 500 });
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.json({ error: "Faltam chaves do Supabase" }, { status: 500 });
   }
 
   const headers = {
-    apikey: serviceKey,
-    Authorization: `Bearer ${serviceKey}`,
-    "Content-Type": "application/json"
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
   };
 
-  const safeFetch = async (endpoint: string, isCount = false) => {
+  // O Servidor Node.js fazendo a busca (Ignora totalmente regras de CORS de navegador)
+  const getDb = async (endpoint: string, isCount = false) => {
     try {
       const res = await fetch(`${supabaseUrl}/rest/v1/${endpoint}`, {
-        headers: isCount ? { ...headers, "Prefer": "count=exact" } : headers,
+        headers: isCount ? { ...headers, Prefer: 'count=exact' } : headers,
         cache: 'no-store'
       });
       if (!res.ok) return null;
-      if (isCount) return parseInt(res.headers.get("content-range")?.split("/")[1] || "0", 10);
+      if (isCount) return parseInt(res.headers.get('content-range')?.split('/')[1] || '0', 10);
       return await res.json();
-    } catch (error) {
-      console.error(`Erro na API Interna ao buscar ${endpoint}:`, error);
+    } catch (e) {
       return null;
     }
   };
 
   try {
-    // Dispara todas as requisições ao Supabase SIMULTANEAMENTE direto do servidor (Bypassa o CORS do navegador)
+    // Como estamos no servidor, podemos usar Promise.all sem medo de bloqueio
     const [
-      globalSettings,
-      models,
-      transactions,
-      withdrawals,
-      applications,
-      playersCount,
-      abandonedCarts,
-      videoRequests
+      dataGlob, dataMod, dataTrans, dataWith, dataApp, dataPlayersCount, dataAbandon, dataVideos
     ] = await Promise.all([
-      safeFetch('GlobalSettings?id=eq.main&select=*'),
-      safeFetch('Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc'),
-      safeFetch('Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100'),
-      safeFetch('Withdrawals?select=*&order=created_at.desc'),
-      safeFetch('Applications?select=*'),
-      safeFetch('Players?select=id&limit=1', true),
-      safeFetch('AbandonedCarts?select=*&order=created_at.desc&limit=500'),
-      safeFetch('VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)')
+      getDb('GlobalSettings?id=eq.main&select=*'),
+      getDb('Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc'),
+      getDb('Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100'),
+      getDb('Withdrawals?select=*&order=created_at.desc'),
+      getDb('Applications?select=*'),
+      getDb('Players?select=id&limit=1', true),
+      getDb('AbandonedCarts?select=*&order=created_at.desc&limit=500'),
+      getDb('VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)')
     ]);
 
     const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-    
-    // Empacota e entrega mastigado para a tela
-    const payload = {
-      globalSettings: globalSettings?.[0] || null,
-      models: models || [],
-      transactions: transactions || [],
-      withdrawals: withdrawals || [],
-      applications: (applications || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
-      totalPlayers: playersCount || 0,
-      abandonedCarts: (abandonedCarts || []).filter((c: any) => {
+
+    // Devolvemos um JSON único, limpo e super leve para a sua tela
+    return NextResponse.json({
+      globalSettings: dataGlob?.[0] || null,
+      models: dataMod || [],
+      transactions: dataTrans || [],
+      withdrawals: dataWith || [],
+      applications: (dataApp || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
+      totalPlayers: dataPlayersCount || 0,
+      abandonedCarts: (dataAbandon || []).filter((c: any) => {
         const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
         const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
         return isPendente && isOldEnough;
       }),
-      videoRequests: videoRequests || []
-    };
-
-    return NextResponse.json(payload);
+      videoRequests: dataVideos || []
+    });
 
   } catch (error) {
-    console.error("Erro Crítico na API Super Admin:", error);
-    return NextResponse.json({ error: "Falha interna no servidor." }, { status: 500 });
+    console.error("Erro interno na API do Super Admin", error);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }
