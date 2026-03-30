@@ -21,53 +21,66 @@ export default function SuperAdmin() {
   const [videoRequests, setVideoRequests] = useState<any[]>([]); 
   const [totalPlayers, setTotalPlayers] = useState(0); 
   
-  const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newModel, setNewModel] = useState({ slug: "", email: "", password: "", referred_by: "" });
-
+  const [loading, setLoading] = useState(false);
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
   const [globalMsg, setGlobalMsg] = useState("");
   const [rankVisible, setRankVisible] = useState(false);
   const [goalAmount, setGoalAmount] = useState(1000);
   const [goalReward, setGoalReward] = useState("");
   const [savingGlobal, setSavingGlobal] = useState(false);
-
   const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
-  // 🔥 HELPER PADRONIZADO E BLINDADO (Conecta apenas com nossa API) 🔥
-  const apiRequest = async (method: 'GET' | 'POST', action?: string, payload?: any) => {
-    try {
-      const options: RequestInit = {
-        method,
-        headers: { "Content-Type": "application/json" },
-        cache: 'no-store'
-      };
-
-      if (method === 'POST') {
-        options.body = JSON.stringify({ action, payload });
-      }
-
-      const res = await fetch('/api/portal', options);
-      const json = await res.json();
-
-      if (!res.ok || !json.ok) {
-        throw new Error(json?.error || "Falha na comunicação com o servidor.");
-      }
-
-      return json;
-    } catch (error: any) {
-      console.error(`Erro no apiRequest [${method} ${action || ''}]:`, error);
-      throw error;
-    }
+  const [spyLogs, setSpyLogs] = useState<string[]>([]);
+  const addLog = (msg: string) => {
+    setSpyLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
   };
 
-  // 🔥 LEITURA INICIAL (GET) 🔥
+  const apiRequest = async (method: 'GET' | 'POST', action?: string, payload?: any) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const targetUrl = `${origin}/api/portal`; // Aponta para a nova API
+    
+    addLog(`[API] Solicitando ${targetUrl}`);
+    
+    const options: RequestInit = {
+      method,
+      headers: { "Content-Type": "application/json" },
+      cache: 'no-store'
+    };
+
+    if (method === 'POST') {
+      options.body = JSON.stringify({ action, payload });
+    }
+
+    addLog(`[API] Aguardando Servidor da Vercel...`);
+    
+    const res = await fetch(targetUrl, options);
+    addLog(`[API] Resposta do Servidor: Status ${res.status}`);
+
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+      addLog(`[API] Dados recebidos com sucesso.`);
+    } catch(e) {
+      addLog(`❌ ERRO: A Vercel não retornou JSON. Retornou: ${text.substring(0, 50)}...`);
+      throw new Error("A API não existe ou quebrou na Vercel.");
+    }
+
+    if (!res.ok || !json.ok) {
+      throw new Error(json?.error || "Erro interno na API.");
+    }
+
+    return json;
+  };
+
   const fetchData = async () => {
+    addLog("Iniciando carregamento do painel...");
     try {
       const response = await apiRequest('GET');
       const data = response.data;
 
-      // Os nomes batem exatamente com o que a API retorna
       if (data.global) {
         setGlobalMsg(data.global.announcement_msg || "");
         setRankVisible(!!data.global.ranking_visible);
@@ -83,10 +96,11 @@ export default function SuperAdmin() {
       setAbandoned(data.abandoned || []);
       setVideoRequests(data.videoRequests || []);
 
+      addLog("Painel montado. Liberando a tela.");
+      setInitialLoading(false); 
+
     } catch (err: any) { 
-      alert(`Erro ao carregar o painel: ${err.message}`);
-    } finally {
-      setInitialLoading(false);
+      addLog(`❌ FALHA: ${err.message}`);
     }
   };
 
@@ -103,11 +117,12 @@ export default function SuperAdmin() {
     e.preventDefault();
     if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
       localStorage.setItem("super_admin_auth", "true");
-      setIsLogged(true); setInitialLoading(true); fetchData();
+      setIsLogged(true); 
+      setInitialLoading(true); 
+      setSpyLogs([]);
+      fetchData();
     } else { alert("Acesso negado!"); }
   };
-
-  // 🔥 MUTAÇÕES (POST) CENTRALIZADAS NA NOSSA API 🔥
 
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
@@ -116,7 +131,7 @@ export default function SuperAdmin() {
     try {
       await apiRequest('POST', 'resetSystem');
       await fetchData();
-      alert("Sistema zerado com sucesso.");
+      alert("Sistema zerado.");
     } catch (err: any) { alert(err.message); setInitialLoading(false); }
   };
 
@@ -151,8 +166,7 @@ export default function SuperAdmin() {
       const res = await apiRequest('POST', 'approveApplication', app);
       setSelectedApp(null); 
       await fetchData();
-
-      const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\n\nLogin: ${res.data.generatedEmail}\nSenha: ${res.data.generatedPass}\n\nQualquer dúvida, é só me chamar aqui. Bora fazer muito dinheiro!`;
+      const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\nLogin: ${res.data.generatedEmail}\nSenha: ${res.data.generatedPass}`;
       window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
     } catch (err: any) { alert(err.message); } finally { setLoading(false); }
   };
@@ -173,7 +187,7 @@ export default function SuperAdmin() {
       setShowModal(false); 
       setNewModel({ slug: "", email: "", password: "", referred_by: "" });
       await fetchData();
-      alert("Modelo criada com sucesso.");
+      alert("Criada com sucesso.");
     } catch (err: any) { alert(err.message); } finally { setLoading(false); }
   };
 
@@ -186,7 +200,6 @@ export default function SuperAdmin() {
     }
   };
 
-  // Cálculos Financeiros
   const financialData = useMemo(() => {
     let totalSales = 0, totalPlatform = 0, totalModels = 0;
     const byModel: Record<string, number> = {};
@@ -199,7 +212,29 @@ export default function SuperAdmin() {
     return { totalSales, totalPlatform, totalModels, byModel };
   }, [transactions]);
 
-  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
+  if (initialLoading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 font-mono">
+      <Loader2 className="animate-spin text-[#FF1493] mb-6" size={50}/>
+      <div className="w-full max-w-2xl bg-[#0a0a0a] border border-[#FF1493]/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(255,20,147,0.2)]">
+        <h3 className="text-[#FF1493] font-black mb-4 uppercase flex items-center gap-2">
+          <AlertCircle size={18}/> Conectando com a Nave-Mãe
+        </h3>
+        <div className="space-y-2">
+          {spyLogs.map((log, i) => (
+            <p key={i} className={`text-xs ${log.includes('❌') ? 'text-red-500 font-bold' : 'text-emerald-400'}`}>
+              {log}
+            </p>
+          ))}
+        </div>
+        {spyLogs.some(log => log.includes('❌')) && (
+          <div className="mt-6 border-t border-white/10 pt-4">
+             <p className="text-white/50 text-xs mb-4">O espião encontrou um erro. Tire print desta tela!</p>
+             <button onClick={() => window.location.reload()} className="w-full bg-white text-black py-3 rounded-xl font-black uppercase text-xs">Tentar Novamente</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (!isLogged) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center">
@@ -329,7 +364,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* FINANCEIRO */}
         <div className="mb-12">
           <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
           
@@ -352,7 +386,6 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* LISTA DE MUSAS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
@@ -421,7 +454,6 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -449,7 +481,6 @@ export default function SuperAdmin() {
         </div>
       )}
 
-      {/* MODAL CRIAR MANUAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
