@@ -14,7 +14,6 @@ export default function SuperAdmin() {
   const [showPass, setShowPass] = useState(false);
   
   const [models, setModels] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
@@ -35,21 +34,33 @@ export default function SuperAdmin() {
 
   const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // 🔥 HELPER DE COMUNICAÇÃO COM A NOSSA API (Frontend Limpo) 🔥
+  const apiRequest = async (method: 'GET' | 'POST', action?: string, payload?: any) => {
+    const options: RequestInit = {
+      method,
+      headers: { "Content-Type": "application/json" },
+      cache: 'no-store'
+    };
 
-  // 🔥 FETCH DATA: AGORA COM A ESTRUTURA CORRETA DA NOSSA API 🔥
+    if (method === 'POST') {
+      options.body = JSON.stringify({ action, payload });
+    }
+
+    const res = await fetch('/api/sys-data', options);
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      throw new Error(json?.error || "Falha na API interna.");
+    }
+
+    return json;
+  };
+
+  // 🔥 CARREGAMENTO DE DADOS VIA API 🔥
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/sys-data', { cache: 'no-store' });
-      
-      const json = await res.json();
-
-      if (!res.ok || !json.ok) {
-        throw new Error(json?.error || "Falha ao consultar a API interna.");
-      }
-
-      const data = json.data;
+      const response = await apiRequest('GET');
+      const data = response.data;
 
       if (data.global) {
         setGlobalMsg(data.global.announcement_msg || "");
@@ -66,12 +77,11 @@ export default function SuperAdmin() {
       setAbandoned(data.abandoned || []);
       setVideoRequests(data.videoRequests || []);
 
-      setInitialLoading(false); 
-
     } catch (err: any) { 
-      console.error("Erro Crítico no FetchData:", err); 
+      console.error("Erro no Fetch:", err); 
+      alert(`Erro ao carregar o painel: ${err.message}`);
+    } finally {
       setInitialLoading(false);
-      alert(`Houve um erro de conexão com o banco de dados. \nDetalhe: ${err.message}`);
     }
   };
 
@@ -92,105 +102,86 @@ export default function SuperAdmin() {
     } else { alert("Acesso negado!"); }
   };
 
+  // 🔥 MUTAÇÕES (AÇÕES DE ESCRITA) VIA API 🔥
+
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
     if (confirmText !== "ZERARTUDO") return;
     setInitialLoading(true);
     try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers })
-      ]);
-      fetchData();
-    } catch (err) { alert("Erro."); setInitialLoading(false); }
+      await apiRequest('POST', 'resetSystem');
+      await fetchData();
+      alert("Sistema zerado com sucesso.");
+    } catch (err: any) { alert(err.message); setInitialLoading(false); }
   };
 
   const handleSaveGlobal = async () => {
     setSavingGlobal(true);
     try {
-      await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main`, {
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ announcement_msg: globalMsg, ranking_visible: rankVisible, goal_amount: goalAmount, goal_reward: goalReward, updated_at: new Date().toISOString() })
-      });
-    } catch (err) {} finally { setSavingGlobal(false); }
+      await apiRequest('POST', 'saveGlobal', { globalMsg, rankVisible, goalAmount, goalReward });
+      alert("Comunicado salvo.");
+    } catch (err: any) { alert(err.message); } finally { setSavingGlobal(false); }
   };
 
-  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
+  const handleApproveWithdrawal = async (id: string, amount: number, modelPhone: string) => {
     if (!confirm(`Pagar R$ ${amount.toFixed(2)}?`)) return;
     try {
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ status: 'pago', is_read: false })
-      });
+      await apiRequest('POST', 'approveWithdrawal', { id });
       if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii! Seu PIX de R$ ${amount.toFixed(2)} foi enviado!`)}`, '_blank');
-      fetchData();
-    } catch (err) { alert("Erro."); }
+      await fetchData();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleIgnoreAbandoned = async (id: string) => {
+    try {
+      setAbandoned(prev => prev.filter(c => c.id !== id));
+      await apiRequest('POST', 'ignoreAbandoned', { id });
+    } catch (err: any) { alert(err.message); }
   };
 
   const handleApproveApplication = async (app: any) => {
     if (!confirm(`Aprovar ${app.nickname}?`)) return;
     setLoading(true);
     try {
-      const now = new Date().toISOString();
-      const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
-      
-      const generatedEmail = app.email || `${app.nickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `${capNick}Labz2026!`;
-      
-      const payloadModel = { 
-          slug: app.nickname.toLowerCase(), 
-          email: generatedEmail, 
-          password: generatedPass, 
-          full_name: app.full_name, 
-          whatsapp: app.whatsapp, 
-          created_at: now,
-          referred_by: app.referred_by || null 
-      };
+      const res = await apiRequest('POST', 'approveApplication', app);
+      setSelectedApp(null); 
+      await fetchData();
 
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify(payloadModel),
-      });
-      const dataMod = await resMod.json();
-      if(dataMod && dataMod[0]) {
-          const mId = dataMod[0].id;
-          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, profile_url: app.profile_url || app.bg_url, created_at: now }), });
-          await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aprovada' }), });
-          
-          setSelectedApp(null); 
-          fetchData();
+      const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\n\nLogin: ${res.data.generatedEmail}\nSenha: ${res.data.generatedPass}\n\nQualquer dúvida, é só me chamar aqui. Bora fazer muito dinheiro!`;
+      window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+    } catch (err: any) { alert(err.message); } finally { setLoading(false); }
+  };
 
-          const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\n\nLogin: ${generatedEmail}\nSenha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui. Bora fazer muito dinheiro!`;
-          window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-      }
-    } catch (err) { alert("Erro ao aprovar."); } finally { setLoading(false); }
+  const handleRejectApplication = async (id: string) => {
+    if(!confirm('Rejeitar e excluir esta candidatura?')) return;
+    try {
+      await apiRequest('POST', 'rejectApplication', { id });
+      setSelectedApp(null);
+      await fetchData();
+    } catch (err: any) { alert(err.message); }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
-      const now = new Date().toISOString(); 
-      const payloadModel = { 
-          slug: newModel.slug.toLowerCase(), 
-          email: newModel.email, 
-          password: newModel.password, 
-          created_at: now,
-          referred_by: newModel.referred_by || null
-      };
-
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(payloadModel), });
-      const dataMod = await resMod.json();
-      if(dataMod && dataMod[0]) {
-          const mId = dataMod[0].id;
-          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }), });
-      }
-      setShowModal(false); fetchData();
-    } catch (err) {} finally { setLoading(false); }
+      await apiRequest('POST', 'createModel', newModel);
+      setShowModal(false); 
+      setNewModel({ slug: "", email: "", password: "", referred_by: "" });
+      await fetchData();
+      alert("Modelo criada com sucesso.");
+    } catch (err: any) { alert(err.message); } finally { setLoading(false); }
   };
 
+  const handleDeleteModel = async (m: any) => {
+    if(confirm(`Excluir a musa ${m.slug} permanentemente? Isso não pode ser desfeito.`)) { 
+      try {
+        await apiRequest('POST', 'deleteModel', { id: m.id });
+        await fetchData();
+      } catch (err: any) { alert(err.message); }
+    }
+  };
+
+  // Cálculos Financeiros
   const financialData = useMemo(() => {
     let totalSales = 0, totalPlatform = 0, totalModels = 0;
     const byModel: Record<string, number> = {};
@@ -228,7 +219,7 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* 🔥 NOVOS ALERTAS: VÍDEOS SOLICITADOS 🔥 */}
+        {/* VIDEOS */}
         {videoRequests.length > 0 && (
           <div className="mb-12 bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(59,130,246,0.1)]">
             <h2 className="text-xs font-black uppercase text-blue-400 mb-4 flex items-center gap-2 tracking-widest"><Video size={16}/> {videoRequests.length} Novos Pedidos de Vídeo VIP</h2>
@@ -255,7 +246,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* PIX ABANDONADOS - CARD VERMELHO */}
+        {/* PIX ABANDONADOS */}
         {abandoned.length > 0 && (
           <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
             <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
@@ -280,10 +271,7 @@ export default function SuperAdmin() {
                       >
                         <MessageCircle size={14}/> {phone ? 'Chamar no Zap' : 'Sem Telefone'}
                       </button>
-                      <button onClick={async () => {
-                        setAbandoned(prev => prev.filter(c => c.id !== cart.id));
-                        await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
-                      }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all" title="Ignorar / Limpar"><X size={14}/></button>
+                      <button onClick={() => handleIgnoreAbandoned(cart.id)} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all" title="Ignorar / Limpar"><X size={14}/></button>
                     </div>
                   </div>
                 )
@@ -322,7 +310,7 @@ export default function SuperAdmin() {
                   <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                       <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
-                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, model?.slug || 'Modelo', model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
+                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
                     </div>
                     <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
                       <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves PIX:</p>
@@ -336,6 +324,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
+        {/* FINANCEIRO */}
         <div className="mb-12">
           <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
           
@@ -358,6 +347,7 @@ export default function SuperAdmin() {
           </div>
         </div>
 
+        {/* LISTA DE MUSAS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
@@ -370,13 +360,9 @@ export default function SuperAdmin() {
                     <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
                     <div className="flex gap-2">
                       <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
-                      
-                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes">
-                        <Users size={16}/>
-                      </button>
-
+                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes"><Users size={16}/></button>
                       <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
-                      <button onClick={async () => { if(confirm(`Excluir ${m.slug} permanentemente?`)) { const h = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${m.id}`, { method: "DELETE", headers: h }); await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${m.id}`, { method: "DELETE", headers: h }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${m.id}`, { method: "DELETE", headers: h }); fetchData(); } }} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
+                      <button onClick={() => handleDeleteModel(m)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                     </div>
                   </div>
 
@@ -391,37 +377,18 @@ export default function SuperAdmin() {
                     <div className="relative z-10 mt-2 bg-[#141414] border border-white/10 rounded-2xl p-2 flex flex-col gap-2">
                       <p className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-2">Mandar mensagem rápida:</p>
                       <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Ex: Amor, tudo bem com a sua roleta?"
-                          className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50"
-                          value={customMessages[m.id] || ""}
-                          onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}
-                        />
-                        <button 
-                          onClick={() => {
-                            const userMsg = customMessages[m.id];
-                            const defaultMsg = `Oii ${m.slug}!`;
-                            const finalMsg = userMsg ? userMsg : defaultMsg;
-                            window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
-                            setCustomMessages({ ...customMessages, [m.id]: "" });
-                          }} 
-                          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" 
-                          title="Falar no WhatsApp"
-                        >
-                          <MessageCircle size={16} />
-                        </button>
+                        <input type="text" placeholder="Ex: Amor, tudo bem com a sua roleta?" className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50" value={customMessages[m.id] || ""} onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}/>
+                        <button onClick={() => { const msg = customMessages[m.id] || `Oii ${m.slug}!`; window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank'); setCustomMessages({ ...customMessages, [m.id]: "" }); }} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" title="Falar no WhatsApp"><MessageCircle size={16} /></button>
                       </div>
                     </div>
                   )}
-
                 </div>
               ))}
             </div>
           </div>
           
           <div className="space-y-8">
-            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
+            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={handleSaveGlobal} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
           </div>
         </div>
       </div>
@@ -438,10 +405,8 @@ export default function SuperAdmin() {
               <div className="flex-1 space-y-2">
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
-                
                 <div><p className="text-[8px] text-white/40 uppercase font-black">E-mail de Cadastro</p><p className="text-[10px] font-bold text-white">{selectedApp.email || "Não informado"}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">CPF / Nasc.</p><p className="text-[10px] font-bold text-white">{selectedApp.cpf || "Não informado"} - {selectedApp.birth_date}</p></div>
-
                 {selectedApp.referred_by && <div><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest mt-2">👑 Indicação Ativa</p></div>}
               </div>
             </div>
@@ -449,7 +414,7 @@ export default function SuperAdmin() {
             <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
               {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Enviar WhatsApp</>}
             </button>
-            <button onClick={async () => { if(!confirm('Rejeitar e excluir esta candidatura?')) return; await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }}); setSelectedApp(null); fetchData(); }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
+            <button onClick={() => handleRejectApplication(selectedApp.id)} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
           </div>
         </div>
       )}
@@ -464,9 +429,7 @@ export default function SuperAdmin() {
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug</label><input type="text" required value={newModel.slug} onChange={e => setNewModel({ ...newModel, slug: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Ex: savanah" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
-              
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug da Madrinha (Opcional)</label><input type="text" value={newModel.referred_by} onChange={e => setNewModel({ ...newModel, referred_by: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-amber-500 text-sm outline-none focus:border-amber-500" placeholder="Ex: raphasavanah" /></div>
-
               <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
             </form>
           </div>
