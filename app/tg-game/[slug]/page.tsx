@@ -84,7 +84,6 @@ export default function TelegramMiniApp() {
     }
   }, [slug]);
 
-  // 🔥 FETCH INICIAL OTIMIZADO (Promise.all) PARA A ROLETA 🔥
   async function initializeData(user: any) {
     if (!slug || !supabaseUrl) return;
 
@@ -92,7 +91,6 @@ export default function TelegramMiniApp() {
       setLoading(true);
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
       
-      // Batch A: Busca Configs do Model
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers });
       const modData = await resMod.json();
       
@@ -106,7 +104,6 @@ export default function TelegramMiniApp() {
       setModelName(config?.model_name || slug.toString().toUpperCase());
       setModel({ id: mId, ...config });
 
-      // Batch B: Busca Prêmios e Player em paralelo!
       const pseudoWhatsapp = `TG_${user.id}`;
       
       const [prizesRes, playerRes] = await Promise.all([
@@ -114,7 +111,6 @@ export default function TelegramMiniApp() {
           fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()).catch(() => [])
       ]);
 
-      // Configura os Prêmios
       const fetchedPrizes = Array.isArray(prizesRes) ? prizesRes : [];
       fetchedPrizes.sort((a: any, b: any) => {
           const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
@@ -123,16 +119,13 @@ export default function TelegramMiniApp() {
       });
       setPrizes(fetchedPrizes);
 
-      // Configura o Jogador
       let playerData = playerRes;
 
-      // Fallback para a conta fantasma antiga, se não achou pelo telegram_id
       if (!playerData || playerData.length === 0) {
           const fallbackRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${mId}&select=*`, { headers });
           playerData = await fallbackRes.json();
       }
 
-      // Se é um cliente totalmente novo
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
           whatsapp: pseudoWhatsapp,
@@ -142,7 +135,7 @@ export default function TelegramMiniApp() {
           full_name: `${user.first_name} ${user.last_name || ''}`.trim() || "Usuário Telegram",
           email: `${user.id}@tg.labzsexy.com`, 
           password: `${user.id}TgAuth!`,
-          credits: 3, 
+          credits: 1, // 🔥 AQUI: Começa apenas com 1 crédito
           model_id: mId
         };
 
@@ -455,6 +448,7 @@ export default function TelegramMiniApp() {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2">
                 
+                {/* CAIXA DE VINCULAR CONTA */}
                 {player.whatsapp.startsWith('TG_') ? (
                     <div className="bg-[#050505] border border-white/10 p-5 rounded-3xl shadow-inner mb-6">
                         <h3 className="text-[11px] font-black uppercase text-[#D946EF] mb-2 flex items-center gap-2"><Lock size={14}/> Salve seu Progresso</h3>
@@ -504,16 +498,16 @@ export default function TelegramMiniApp() {
             ) : pixLoading ? (
               <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
             ) : pixData ? (
-              <div className="text-center p-2">
-                <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
-                <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" /></div>
-                <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
-                <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
-                  <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
-               </div>
-               <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
-                  {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
-               </button>
+              <div className="mt-4 text-center">
+                 <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
+                 <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" /></div>
+                 <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
+                 <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
+                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
+                 </div>
+                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+                 </button>
               </div>
             ) : (
               <div className="space-y-4 pt-4">
