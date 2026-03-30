@@ -38,7 +38,7 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 BUSCA SEGURA E TURBINADA 🔥
+  // 🔥 ARQUITETURA ANTI-CORS / CARREGAMENTO SEQUENCIAL ASSÍNCRONO 🔥
   const fetchData = async () => {
     try {
       const headers = { 
@@ -47,24 +47,25 @@ export default function SuperAdmin() {
         "Cache-Control": "no-cache" 
       };
 
-      // Escudo Anti-Crash: Se a rede falhar, ele retorna nulo e não trava a tela!
+      // Função de busca segura que engole os erros sem explodir a tela
       const safeFetch = async (url: string, opts: any = {}) => {
           try {
               const res = await fetch(url, { headers: { ...headers, ...opts.headers } });
               if (!res.ok) return null; 
               if (opts.headers?.Prefer === "count=exact") {
                  const range = res.headers.get("content-range");
-                 if (range) return { count: parseInt(range.split("/")[1]) };
+                 if (range) return { count: parseInt(range.split("/")[1], 10) };
               }
               return await res.json();
-          } catch (e) { return null; }
+          } catch (e) {
+              console.error("Falha silenciosa na rota:", url);
+              return null; 
+          }
       };
 
-      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
-      const [dataGlob, dataMod] = await Promise.all([
-        safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`),
-      ]);
+      // PASSO 1: Carregar APENAS o essencial para a tela renderizar
+      const dataGlob = await safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`);
+      const dataMod = await safeFetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`);
 
       if (dataGlob && dataGlob[0]) {
         setGlobalMsg(dataGlob[0].announcement_msg);
@@ -75,26 +76,24 @@ export default function SuperAdmin() {
 
       if (dataMod) setModels(dataMod);
       
-      setInitialLoading(false); // 🔥 TELA LIBERADA RAPIDAMENTE 🔥
+      // TELA LIBERADA: O Spinner principal some aqui
+      setInitialLoading(false);
 
-      // 2. CARREGA OS DADOS PESADOS E LISTAS NO FUNDO
-      Promise.all([
-        safeFetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`),
-        safeFetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`),
-        safeFetch(`${supabaseUrl}/rest/v1/Applications?select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { "Prefer": "count=exact" } }),
-        safeFetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`),
-        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`)
-      ]).then(([dataTrans, dataWith, dataApp, dataPlayersCount, dataAbandon, dataVideos]) => {
-          
+      // PASSO 2: Carregar as listas pesadas uma a uma no background (Fila Indiana)
+      const loadBackgroundData = async () => {
+          const dataTrans = await safeFetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`);
           if (dataTrans) setTransactions(dataTrans);
+
+          const dataWith = await safeFetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`);
           if (dataWith) setWithdrawals(dataWith);
-          if (dataVideos) setVideoRequests(dataVideos); 
-          
-          if (dataApp) {
-            setApplications(dataApp.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
-          }
-          
+
+          const dataApp = await safeFetch(`${supabaseUrl}/rest/v1/Applications?select=*`);
+          if (dataApp) setApplications(dataApp.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
+
+          const dataPlayersCount = await safeFetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { "Prefer": "count=exact" } });
+          if (dataPlayersCount && dataPlayersCount.count !== undefined) setTotalPlayers(dataPlayersCount.count);
+
+          const dataAbandon = await safeFetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`);
           if (dataAbandon) {
             const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
             setAbandoned(dataAbandon.filter((c: any) => {
@@ -104,14 +103,16 @@ export default function SuperAdmin() {
             }));
           }
 
-          if (dataPlayersCount && dataPlayersCount.count !== undefined) {
-             setTotalPlayers(dataPlayersCount.count);
-          }
-      });
+          const dataVideos = await safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`);
+          if (dataVideos) setVideoRequests(dataVideos);
+      };
+
+      // Dispara a fila de carregamento sem travar a navegação
+      loadBackgroundData();
 
     } catch (err) { 
-      console.error("Erro no fetch principal", err); 
-      setInitialLoading(false); // Libera a tela mesmo em caso de erro extremo
+      console.error("Erro crítico no carregamento inicial:", err); 
+      setInitialLoading(false); 
     }
   };
 
