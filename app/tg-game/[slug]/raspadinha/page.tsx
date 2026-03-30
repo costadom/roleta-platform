@@ -23,7 +23,6 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
-// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -51,7 +50,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     }
 
     ctx.fillStyle = "#333";
-    ctx.font = "900 22px sans-serif";
+    ctx.font = "900 24px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
@@ -99,7 +98,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleMove = (e: any) => {
     if (!isDrawing || isRevealed) return;
-    if (e.cancelable) e.preventDefault(); // Trava scroll do iPhone
+    if (e.cancelable) e.preventDefault();
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -136,8 +135,8 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       ref={canvasRef}
       width={400}
       height={500}
-      style={{ touchAction: 'none' }} // Trava bruta de tela no iOS
-      className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
+      style={{ touchAction: 'none' }} // 🔥 Trava bruta de scroll no iOS
+      className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
       onMouseUp={handleEnd}
@@ -148,9 +147,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     />
   );
 };
-
-
-// --- PÁGINA PRINCIPAL DO TELEGRAM ---
 
 export default function TelegramScratchApp() {
   const params = useParams();
@@ -188,7 +184,6 @@ export default function TelegramScratchApp() {
 
   const [clickCount, setClickCount] = useState(0);
 
-  // Estados de Vincular Conta
   const [linkWa, setLinkWa] = useState("");
   const [linkPwd, setLinkPwd] = useState("");
   const [isLinking, setIsLinking] = useState(false);
@@ -244,7 +239,6 @@ export default function TelegramScratchApp() {
 
       const pseudoWhatsapp = `TG_${user.id}`;
       
-      // BUSCA INTELIGENTE DO PLAYER
       let resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${modelData.id}&select=*`, { headers });
       let playerData = await resPlayer.json();
 
@@ -288,7 +282,6 @@ export default function TelegramScratchApp() {
     }
   }
 
-  // O UNIFICADOR DE CONTAS 
   const handleLinkAccount = async () => {
       if (!linkWa || !linkPwd || linkWa.length < 10) return setNotice("Preencha seu WhatsApp com DDD e crie uma senha.");
       setIsLinking(true);
@@ -297,7 +290,7 @@ export default function TelegramScratchApp() {
           const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
           const cleanWa = linkWa.replace(/\D/g, "");
           
-          const checkRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWa}&model_id=eq.${model.id}&select=*`, { headers });
+          const checkRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWa}&model_id=eq.${model.id}&select=*`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
           const realAccountData = await checkRes.json();
 
           if (realAccountData && realAccountData.length > 0) {
@@ -747,25 +740,26 @@ export default function TelegramScratchApp() {
           </div>
         )}
 
-        {/* Modal PIX IGUAL AO DA ROLETA */}
+        {/* 🔥 PACOTES CORRIGIDOS (IGUAIS AOS DA ROLETA) 🔥 */}
         {showDeposit && (
-          <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200 overflow-y-auto">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)] my-auto">
-              <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
+          <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
+            <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
+              <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
+              
               {pixPaid ? (
                  <div className="py-10 text-center animate-in zoom-in">
-                    <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle2 className="text-emerald-500" size={40} /></div>
-                    <h2 className="text-2xl font-black text-white uppercase italic mb-2 tracking-tighter">Aprovado!</h2>
-                    <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Créditos liberados.</p>
-                    <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg active:scale-95 transition-all">Voltar ao Jogo</button>
+                    <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle className="text-emerald-500" size={40} /></div>
+                    <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
+                    <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
+                    <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar ao Jogo</button>
                  </div>
               ) : pixLoading ? (
-                <div className="py-20 flex flex-col items-center text-[#D946EF] font-black text-xs uppercase animate-pulse tracking-widest"><Loader2 className="animate-spin mb-4" size={40} /> Gerando Pix...</div>
+                <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
               ) : pixData ? (
                 <div className="text-center p-2">
-                  <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
-                  <div className="bg-white p-4 rounded-[2rem] inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-52 h-52" /></div>
-                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
+                  <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pague com PIX</h2>
+                  <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" /></div>
+                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
                   <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
                     <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
                  </div>
@@ -777,7 +771,7 @@ export default function TelegramScratchApp() {
                 <div className="space-y-4 pt-4">
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                   
-                  {/* 🔥 PACOTES EXATAMENTE IGUAIS AOS DA ROLETA 🔥 */}
+                  {/* 🔥 PACOTES PADRÃO (IGUAIS AOS DA ROLETA) 🔥 */}
                   {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
                       <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
