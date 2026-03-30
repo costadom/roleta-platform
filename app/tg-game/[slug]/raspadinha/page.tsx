@@ -7,13 +7,9 @@ import {
   Image as ImageIcon, Lock, CheckCircle2, Copy, Loader2, 
   LayoutGrid, Zap, Trophy, MessageCircle, Star, Home, Heart, Sparkles, AlertTriangle, Gift
 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
 import confetti from "canvas-confetti";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- COMPONENTES AUXILIARES ---
 
@@ -55,7 +51,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     }
 
     ctx.fillStyle = "#333";
-    ctx.font = "900 24px sans-serif";
+    ctx.font = "900 22px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
@@ -91,6 +87,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleStart = (e: any) => {
     if (isRevealed) return;
+    if (e.cancelable) e.preventDefault();
     setIsDrawing(true);
     const { x, y } = getPointerPos(e);
     const ctx = canvasRef.current?.getContext('2d');
@@ -102,6 +99,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleMove = (e: any) => {
     if (!isDrawing || isRevealed) return;
+    if (e.cancelable) e.preventDefault(); // Trava scroll do iPhone
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -138,7 +136,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       ref={canvasRef}
       width={400}
       height={500}
-      style={{ touchAction: 'none' }} // 🔥 Trava bruta anti-scroll do iPhone
+      style={{ touchAction: 'none' }} // Trava bruta de tela no iOS
       className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
@@ -196,6 +194,9 @@ export default function TelegramScratchApp() {
   const [isLinking, setIsLinking] = useState(false);
   const [linkSuccess, setLinkSuccess] = useState("");
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-web-app.js";
@@ -224,22 +225,26 @@ export default function TelegramScratchApp() {
   async function fetchInitialData(user: any) {
     try {
       setLoading(true);
+      const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
-      const { data: modelData, error: modErr } = await supabase.from('Models').select('*, Configs(*)').eq('slug', slug).single();
-      if (modErr || !modelData) throw new Error("Musa não encontrada.");
+      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers });
+      const modData = await resMod.json();
       
+      if (!modData || modData.length === 0) throw new Error("Musa não encontrada.");
+      
+      const modelData = modData[0];
       setModel(modelData);
       const config = Array.isArray(modelData.Configs) ? modelData.Configs[0] : modelData.Configs;
       setBackgroundUrl(config?.bg_url || "");
       setModelName(config?.model_name || slug);
 
-      const { data: photos } = await supabase.from('ModelScratchPhotos').select('*').eq('model_id', modelData.id).eq('active', true);
+      const resPhotos = await fetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelData.id}&active=eq.true`, { headers });
+      const photos = await resPhotos.json();
       setModelPhotos(photos || []);
 
       const pseudoWhatsapp = `TG_${user.id}`;
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
       
-      // BUSCA INTELIGENTE: Pelo telegram_id real ou pelo whatsapp fantasma antigo
+      // BUSCA INTELIGENTE DO PLAYER
       let resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${modelData.id}&select=*`, { headers });
       let playerData = await resPlayer.json();
 
@@ -271,7 +276,8 @@ export default function TelegramScratchApp() {
       
       if (playerData && playerData[0]) {
         setPlayer(playerData[0]);
-        const { data: history } = await supabase.from('ScratchHistory').select('*').eq('player_id', playerData[0].id);
+        const resHist = await fetch(`${supabaseUrl}/rest/v1/ScratchHistory?player_id=eq.${playerData[0].id}`, { headers });
+        const history = await resHist.json();
         setUnlockedPhotos(history || []);
       }
 
@@ -282,16 +288,16 @@ export default function TelegramScratchApp() {
     }
   }
 
-  // O UNIFICADOR DE CONTAS (Igualzinho o da Roleta)
+  // O UNIFICADOR DE CONTAS 
   const handleLinkAccount = async () => {
       if (!linkWa || !linkPwd || linkWa.length < 10) return setNotice("Preencha seu WhatsApp com DDD e crie uma senha.");
       setIsLinking(true);
       
       try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
+          const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
           const cleanWa = linkWa.replace(/\D/g, "");
           
-          const checkRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWa}&model_id=eq.${model.id}&select=*`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+          const checkRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWa}&model_id=eq.${model.id}&select=*`, { headers });
           const realAccountData = await checkRes.json();
 
           if (realAccountData && realAccountData.length > 0) {
@@ -303,7 +309,7 @@ export default function TelegramScratchApp() {
                   body: JSON.stringify({ credits: mergedCredits, telegram_id: tgUser.id.toString() }) 
               });
               
-              await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+              await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "DELETE", headers });
               
               setPlayer({ ...realAccount, credits: mergedCredits, telegram_id: tgUser.id.toString() });
               setLinkSuccess("Contas fundidas com sucesso! Seu saldo foi somado.");
@@ -340,7 +346,13 @@ export default function TelegramScratchApp() {
       if (!player) return;
       const newTokens = player.credits + 50;
       setPlayer({ ...player, credits: newTokens });
-      await supabase.from('Players').update({ credits: newTokens }).eq('id', player.id);
+      
+      const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, {
+          method: "PATCH", headers,
+          body: JSON.stringify({ credits: newTokens })
+      });
+      
       if ((window as any).Telegram?.WebApp) {
           (window as any).Telegram.WebApp.showAlert("🤖 MODO DEV: 50 Giros adicionados com sucesso!");
       } else {
@@ -378,7 +390,13 @@ export default function TelegramScratchApp() {
 
         const winThreshold = 1 - winChance;
         let currentCredits = player.credits - cost;
-        await supabase.from('Players').update({ credits: currentCredits }).eq('id', player.id);
+        
+        const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+        await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, {
+            method: "PATCH", headers,
+            body: JSON.stringify({ credits: currentCredits })
+        });
+        
         setPlayer({...player, credits: currentCredits});
 
         const availablePhotos = modelPhotos.filter(mp => !unlockedPhotos.find(up => up.photo_url === mp.photo_url));
@@ -413,11 +431,16 @@ export default function TelegramScratchApp() {
       setIsRevealed(true);
       if (currentScratch && currentScratch.type === 'win' && currentScratch.photo_url) {
           try {
-              await supabase.from('ScratchHistory').insert([{
-                  player_id: player.id,
-                  model_id: model.id,
-                  photo_url: currentScratch.photo_url
-              }]);
+              const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+              await fetch(`${supabaseUrl}/rest/v1/ScratchHistory`, {
+                  method: "POST", headers,
+                  body: JSON.stringify({
+                      player_id: player.id,
+                      model_id: model.id,
+                      photo_url: currentScratch.photo_url
+                  })
+              });
+
               setUnlockedPhotos(prev => [...prev, { photo_url: currentScratch.photo_url }]);
               confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, zIndex: 9999, colors: ['#D946EF', '#FFD700', '#ffffff'] });
 
@@ -459,13 +482,21 @@ export default function TelegramScratchApp() {
     if (pixData && !pixPaid && player) {
       interval = setInterval(async () => {
         try {
-            const { data } = await supabase.from('Players').select('credits').eq('id', player?.id).single();
-            if (data && data.credits > player.credits) {
+            const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+            const res = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}&select=credits`, { headers });
+            const data = await res.json();
+            
+            if (data && data[0] && data[0].credits > player.credits) {
                 setPixPaid(true);
-                setPlayer({ ...player, credits: data.credits });
+                setPlayer({ ...player, credits: data[0].credits });
                 confetti({ particleCount: 200, spread: 100, origin: { y: 0.4 }, zIndex: 9999 });
+                
                 if (activeCartId) {
-                    await supabase.from('AbandonedCarts').update({ status: 'pago' }).eq('id', activeCartId);
+                    await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${activeCartId}`, {
+                        method: "PATCH", 
+                        headers: { ...headers, "Content-Type": "application/json" },
+                        body: JSON.stringify({ status: 'pago' })
+                    });
                 }
                 clearInterval(interval);
             }
@@ -492,15 +523,19 @@ export default function TelegramScratchApp() {
     setPixTimeLeft(600); 
 
     try {
-        const resCart = await supabase.from('AbandonedCarts').insert([{
-            player_name: player.nickname || player.full_name || "Cliente TG",
-            player_phone: player.whatsapp,
-            model_name: modelName || slug,
-            amount: amount,
-            status: 'pendente'
-        }]).select();
-        
-        if (resCart.data && resCart.data[0]) setActiveCartId(resCart.data[0].id);
+        const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
+        const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
+            method: "POST", headers,
+            body: JSON.stringify({
+                player_name: player.nickname || player.full_name || "Cliente TG",
+                player_phone: player.whatsapp,
+                model_name: modelName || slug,
+                amount: amount,
+                status: 'pendente'
+            })
+        });
+        const cartData = await resCart.json();
+        if (cartData && cartData[0]) setActiveCartId(cartData[0].id);
     } catch (e) { console.error(e); }
 
     try {
@@ -538,7 +573,7 @@ export default function TelegramScratchApp() {
               <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
            </div>
 
-           {/* MENU DE ABAS */}
+           {/* MENU DE ABAS INVERTIDO */}
            <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-1 w-max shadow-[0_0_20px_rgba(255,215,0,0.15)] z-20">
               <button onClick={() => router.push(`/tg-game/${slug}`)} className="px-6 py-2 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
                  <Zap size={14} /> Roleta
@@ -561,10 +596,10 @@ export default function TelegramScratchApp() {
           </div>
         </div>
 
-        {/* 🔥 TELA DO CARTÃO - MENOR PARA CABER TUDO SEM EXPRIMIR 🔥 */}
+        {/* 🔥 TELA DO CARTÃO - MENOR PARA CABER TUDO (max-w-[240px]) 🔥 */}
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-2 px-4 touch-none min-h-[300px]">
           
-          <div className="w-full max-w-[260px] aspect-[3/4] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0 touch-none">
+          <div className="w-full max-w-[240px] aspect-[3/4] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0 touch-none">
              
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -572,25 +607,25 @@ export default function TelegramScratchApp() {
                          <>
                              <img src={currentScratch.photo_url} className="absolute inset-0 w-full h-full object-cover" alt="VIP" />
                              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent" />
-                             <div className="absolute bottom-6 left-0 right-0 text-center animate-in slide-in-from-bottom-4">
-                                 <span className="bg-[#D946EF] border border-[#D946EF]/50 text-white px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-[0_10px_30px_rgba(217,70,239,0.5)] flex items-center justify-center gap-2 mx-auto w-max"><Gift size={14}/> FOTO REVELADA</span>
+                             <div className="absolute bottom-4 left-0 right-0 text-center animate-in slide-in-from-bottom-4">
+                                 <span className="bg-[#D946EF] border border-[#D946EF]/50 text-white px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-[0_10px_30px_rgba(217,70,239,0.5)] flex items-center justify-center gap-2 mx-auto w-max"><Gift size={12}/> FOTO REVELADA</span>
                              </div>
                          </>
                      ) : (
-                         <div className="flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
-                             <div className="w-16 h-16 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-4 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
-                               <CloseIcon size={32} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
+                         <div className="flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
+                             <div className="w-14 h-14 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-3 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
+                               <CloseIcon size={24} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
                              </div>
-                             <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-2 drop-shadow-lg">Veio o X</h3>
+                             <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-1 drop-shadow-lg">Veio o X</h3>
                              <p className="text-[9px] text-white/50 uppercase font-bold tracking-[0.1em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
                          </div>
                      )}
                  </div>
              ) : (
                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#151515] to-[#050505]">
-                    <ImageIcon size={40} className="text-[#D946EF]/20 mb-4" />
-                    <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Raspadinha VIP</h3>
-                    <p className="text-[9px] font-black text-white/20 uppercase mt-2 text-center px-8">Compre um pacote abaixo para raspar</p>
+                    <ImageIcon size={32} className="text-[#D946EF]/20 mb-3" />
+                    <h3 className="text-white/40 font-black uppercase italic text-xs tracking-widest">Raspadinha VIP</h3>
+                    <p className="text-[8px] font-black text-white/20 uppercase mt-2 text-center px-6">Compre um pacote abaixo para raspar</p>
                  </div>
              )}
 
@@ -605,12 +640,12 @@ export default function TelegramScratchApp() {
           </div>
 
           {currentScratch && !isRevealed && (
-              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-2 animate-pulse shrink-0">Raspe a tela com o dedo</p>
+              <p className="text-[8px] text-[#FFD700] font-black uppercase tracking-widest mt-2 animate-pulse shrink-0">Raspe a tela com o dedo</p>
           )}
 
           {currentScratch && isRevealed && (
-              <div className="mt-3 w-full max-w-[260px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
-                  <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-[10px] shadow-xl active:scale-95 transition-all">
+              <div className="mt-3 w-full max-w-[240px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
+                  <button onClick={nextScratch} className="w-full py-3 bg-white text-black rounded-xl font-black uppercase text-[10px] shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
               </div>
@@ -618,12 +653,12 @@ export default function TelegramScratchApp() {
 
           {!currentScratch && (
               <div className="mt-3 flex flex-col items-center gap-2 w-full animate-in fade-in shrink-0">
-                 <div className="px-6 py-2 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
-                    <Coins size={14} className="text-[#FFD700] pointer-events-none" />
+                 <div className="px-5 py-1.5 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-full flex items-center gap-2 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
+                    <Coins size={12} className="text-[#FFD700] pointer-events-none" />
                     <span className="text-sm font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
                  </div>
-                 <div className="flex flex-col items-center gap-1.5 w-full max-w-[200px]">
-                    <div className="h-1.5 w-full bg-[#111] rounded-full overflow-hidden border border-white/5">
+                 <div className="flex flex-col items-center gap-1 w-full max-w-[180px]">
+                    <div className="h-1 w-full bg-[#111] rounded-full overflow-hidden border border-white/5">
                         <div className="h-full bg-gradient-to-r from-[#D946EF] to-[#FFD700] transition-all duration-1000 relative" style={{ width: `${(unlockedPhotos.length / 10) * 100}%` }}>
                             <div className="absolute inset-0 bg-white/20 animate-pulse"/>
                         </div>
@@ -634,23 +669,23 @@ export default function TelegramScratchApp() {
           )}
         </div>
 
-        <div className={`relative z-10 p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 mt-auto transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`relative z-10 p-3 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 mt-auto transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
           
           <div className="grid grid-cols-2 gap-2 mb-2">
-             <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
-                <span className="text-[9px] font-black uppercase text-white/40 mb-0.5">1 Raspada</span>
-                <span className="text-sm font-black text-white italic">2 CR</span>
+             <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-12 rounded-xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
+                <span className="text-[8px] font-black uppercase text-white/40 mb-0.5">1 Raspada</span>
+                <span className="text-xs font-black text-white italic">2 CR</span>
              </button>
-             <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group shadow-lg">
-                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-1.5 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
-                <span className="text-[9px] font-black uppercase text-white/60 mb-0.5">Combo 5x</span>
-                <span className="text-sm font-black text-[#D946EF] italic">8 CR</span>
+             <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-12 rounded-xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[5px] font-black px-1.5 py-0.5 rounded-bl-md">ECONOMIZE 20%</div>
+                <span className="text-[8px] font-black uppercase text-white/60 mb-0.5">Combo 5x</span>
+                <span className="text-xs font-black text-[#D946EF] italic">8 CR</span>
              </button>
           </div>
 
-          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all border border-white/20">
-             <span className="flex items-center gap-2 font-black italic text-sm"><Zap size={14} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
-             <span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
+          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-3 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all border border-white/20">
+             <span className="flex items-center gap-2 font-black italic text-xs"><Zap size={12} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
+             <span className="text-[7px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
           </button>
         </div>
 
@@ -712,7 +747,7 @@ export default function TelegramScratchApp() {
           </div>
         )}
 
-        {/* Modal PIX */}
+        {/* Modal PIX IGUAL AO DA ROLETA */}
         {showDeposit && (
           <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200 overflow-y-auto">
             <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)] my-auto">
@@ -729,7 +764,7 @@ export default function TelegramScratchApp() {
               ) : pixData ? (
                 <div className="text-center p-2">
                   <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
-                  <div className="bg-white p-4 rounded-[2rem] inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} className="w-52 h-52" alt="QR Code" /></div>
+                  <div className="bg-white p-4 rounded-[2rem] inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-52 h-52" /></div>
                   <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
                   <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
                     <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
@@ -741,9 +776,11 @@ export default function TelegramScratchApp() {
               ) : (
                 <div className="space-y-4 pt-4">
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
-                  {[ { rs: 20, cr: 25, b: 5 }, { rs: 40, cr: 55, b: 15 }, { rs: 70, cr: 100, b: 30 } ].map((p) => (
+                  
+                  {/* 🔥 PACOTES EXATAMENTE IGUAIS AOS DA ROLETA 🔥 */}
+                  {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
-                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
+                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
                       <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
                       <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                     </button>
