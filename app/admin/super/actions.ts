@@ -4,11 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 
 const getSupabase = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Chave mestra da Vercel
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// 🔥 BUSCA COMPLETA DE DADOS (GET) 🔥
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
@@ -33,8 +32,7 @@ export async function getSuperAdminData() {
       supabase.from('VideoRequests').select('*, Models(slug,whatsapp,full_name)').eq('status', 'pago')
     ]);
 
-    // O tempo exato de 3 minutos atrás em milissegundos (Blindado contra fuso horário)
-    const threeMinsAgo = Date.now() - 3 * 60 * 1000;
+    const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
     return {
       ok: true,
@@ -45,11 +43,9 @@ export async function getSuperAdminData() {
         withdrawals: withsRes || [],
         applications: (appsRes || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
         totalPlayers: pCount || 0,
-        // 🔥 AQUI ESTÁ O FILTRO DE CARRINHOS ABANDONADOS 🔥
         abandoned: (cartsRes || []).filter((c: any) => {
           const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-          const isOldEnough = new Date(c.created_at).getTime() < threeMinsAgo;
-          return isPendente && isOldEnough;
+          return isPendente && c.created_at < threeMinsAgo;
         }),
         videoRequests: vidsRes || []
       }
@@ -60,7 +56,6 @@ export async function getSuperAdminData() {
   }
 }
 
-// 🔥 CENTRAL DE AÇÕES (POST) 🔥
 export async function runAdminAction(action: string, payload: any) {
   try {
     const supabase = getSupabase();
@@ -80,6 +75,7 @@ export async function runAdminAction(action: string, payload: any) {
         ranking_visible: payload.rankVisible,
         goal_amount: payload.goalAmount,
         goal_reward: payload.goalReward,
+        recharge_packages: payload.rechargePackages, // 🔥 AQUI ESTÁ A MÁGICA DOS PACOTES 🔥
         updated_at: new Date().toISOString()
       }).eq('id', 'main');
     }
