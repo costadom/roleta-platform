@@ -184,6 +184,7 @@ function DashboardContent() {
     if (modelSlug && typeof window !== 'undefined') setModelUrl(window.location.origin);
   }, [modelSlug]);
 
+  // 🔥 OTIMIZAÇÃO (PROMISE.ALL EM DOIS BATCHES) 🔥
   const loadData = async () => {
     if (!modelId) {
         setDashboardLoading(false);
@@ -192,14 +193,21 @@ function DashboardContent() {
     
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-      const safeFetch = async (url: string) => {
+      const safeFetch = async (url: string, opts: any = {}) => {
           try {
-              const res = await fetch(url, { headers });
-              if (!res.ok) return []; 
+              const res = await fetch(url, { headers: { ...headers, ...opts.headers } });
+              if (!res.ok) return null; 
+              
+              // Se foi pedido count exact, tenta extrair do header ao invés do JSON inteiro
+              if (opts.headers?.Prefer === "count=exact") {
+                 const range = res.headers.get("content-range");
+                 if (range) return { count: parseInt(range.split("/")[1]) };
+              }
               return await res.json();
-          } catch (e) { return []; }
+          } catch (e) { return null; }
       };
 
+      // ── BATCH A: Essenciais (Libera a tela) ──
       const [resGlob, resModel, resConfig] = await Promise.all([
         safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
         safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`),
@@ -209,7 +217,11 @@ function DashboardContent() {
       if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
       
       if (resModel && resModel[0]) {
-        setModelData(resModel[0]); setModelBalance(resModel[0].balance || 0); setPixKey1(resModel[0].pix_key_1 || ""); setPixKey2(resModel[0].pix_key_2 || ""); setBio(resModel[0].bio || "");
+        setModelData(resModel[0]); 
+        setModelBalance(resModel[0].balance || 0); 
+        setPixKey1(resModel[0].pix_key_1 || ""); 
+        setPixKey2(resModel[0].pix_key_2 || ""); 
+        setBio(resModel[0].bio || "");
         localStorage.setItem("labz_model_id", resModel[0].id);
         localStorage.setItem("labz_model_slug", resModel[0].slug);
       }
@@ -224,6 +236,7 @@ function DashboardContent() {
 
       setDashboardLoading(false);
 
+      // ── BATCH B: Dados Pesados em Segundo Plano ──
       Promise.all([
         safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
         safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
@@ -231,19 +244,22 @@ function DashboardContent() {
         safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`),
         safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`),
         safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`),
-        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`)
+        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`) // Traz o json dos jogadores (usado pros followers)
       ]).then(([resTrans, resPrizes, resMedia, resVideos, resSales, resScratch, resFollowers]) => {
+          
           setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
           setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
           setMediaList(Array.isArray(resMedia) ? resMedia : []); 
           setVideoRequests(Array.isArray(resVideos) ? resVideos : []); 
           setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
-          setFollowersList(Array.isArray(resFollowers) ? resFollowers : []);
+          
+          const fList = Array.isArray(resFollowers) ? resFollowers : [];
+          setFollowersList(fList);
 
           const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
           setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
           
-          loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], Array.isArray(resFollowers) ? resFollowers : []);
+          loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], fList);
       });
 
     } catch (err) { console.error(err); setDashboardLoading(false); }
@@ -295,7 +311,6 @@ function DashboardContent() {
         body: JSON.stringify({ 
             canal: finalChatId,
             mensagem: tgMessage, 
-            linkRoleta: miniAppLink,
             modelId: modelId
         })
       });
@@ -348,12 +363,10 @@ function DashboardContent() {
       }
   };
 
-  // 🔥 SOLUÇÃO DEFINITIVA DO ERRO 400 (LIMITE DE 3 FOTOS PARA O FEED) 🔥
   const loadActivityFeed = async (medias: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           
-          // 🔥 Cortado para APENAS 3 fotos, impossível dar erro 400 agora!
           const recentMedias = medias.slice(0, 3); 
           const mediaIds = recentMedias.map(m => m.id);
           
