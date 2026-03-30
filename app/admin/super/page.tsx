@@ -34,8 +34,22 @@ export default function SuperAdmin() {
 
   const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
-  // 🔥 HELPER DE COMUNICAÇÃO COM A NOSSA API (Frontend Limpo) 🔥
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // 🔥 TERMINAL ESPIÃO 🔥
+  const [spyLogs, setSpyLogs] = useState<string[]>([]);
+  const addLog = (msg: string) => {
+    setSpyLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
+    console.log("🕵️ ESPIÃO:", msg);
+  };
+
   const apiRequest = async (method: 'GET' | 'POST', action?: string, payload?: any) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const targetUrl = `${origin}/api/sys-data`;
+    
+    addLog(`[API] URL Alvo: ${targetUrl}`);
+    
     const options: RequestInit = {
       method,
       headers: { "Content-Type": "application/json" },
@@ -46,8 +60,13 @@ export default function SuperAdmin() {
       options.body = JSON.stringify({ action, payload });
     }
 
-    const res = await fetch('/api/sys-data', options);
+    addLog(`[API] Disparando fetch (${method})...`);
+    const res = await fetch(targetUrl, options);
+    
+    addLog(`[API] Resposta Recebida! Status: ${res.status}`);
+
     const json = await res.json();
+    addLog(`[API] JSON parseado. OK: ${json.ok}`);
 
     if (!res.ok || !json.ok) {
       throw new Error(json?.error || "Falha na API interna.");
@@ -56,10 +75,13 @@ export default function SuperAdmin() {
     return json;
   };
 
-  // 🔥 CARREGAMENTO DE DADOS VIA API 🔥
   const fetchData = async () => {
+    addLog("=== INICIANDO FETCH DATA ===");
     try {
+      addLog("Pedindo dados para apiRequest...");
       const response = await apiRequest('GET');
+      
+      addLog("Dados recebidos, distribuindo...");
       const data = response.data;
 
       if (data.global) {
@@ -77,19 +99,22 @@ export default function SuperAdmin() {
       setAbandoned(data.abandoned || []);
       setVideoRequests(data.videoRequests || []);
 
+      addLog("=== SUCESSO! Removendo Loading ===");
+      setInitialLoading(false); 
+
     } catch (err: any) { 
+      addLog(`❌ ERRO FATAL: ${err.name} - ${err.message}`);
       console.error("Erro no Fetch:", err); 
-      alert(`Erro ao carregar o painel: ${err.message}`);
-    } finally {
-      setInitialLoading(false);
     }
   };
 
   useEffect(() => {
     if (localStorage.getItem("super_admin_auth") === "true") { 
       setIsLogged(true); 
+      addLog("Auth encontrada. Chamando fetchData().");
       fetchData(); 
     } else { 
+      addLog("Sem auth. Exibindo login.");
       setInitialLoading(false); 
     }
   }, []);
@@ -98,11 +123,12 @@ export default function SuperAdmin() {
     e.preventDefault();
     if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
       localStorage.setItem("super_admin_auth", "true");
-      setIsLogged(true); setInitialLoading(true); fetchData();
+      setIsLogged(true); 
+      setInitialLoading(true); 
+      setSpyLogs([]); // Limpa o terminal para o login
+      fetchData();
     } else { alert("Acesso negado!"); }
   };
-
-  // 🔥 MUTAÇÕES (AÇÕES DE ESCRITA) VIA API 🔥
 
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
@@ -181,7 +207,6 @@ export default function SuperAdmin() {
     }
   };
 
-  // Cálculos Financeiros
   const financialData = useMemo(() => {
     let totalSales = 0, totalPlatform = 0, totalModels = 0;
     const byModel: Record<string, number> = {};
@@ -194,7 +219,30 @@ export default function SuperAdmin() {
     return { totalSales, totalPlatform, totalModels, byModel };
   }, [transactions]);
 
-  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
+  // 🔥 TELA DE LOADING MODIFICADA COM O TERMINAL ESPIÃO 🔥
+  if (initialLoading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 font-mono">
+      <Loader2 className="animate-spin text-[#FF1493] mb-6" size={50}/>
+      <div className="w-full max-w-2xl bg-[#0a0a0a] border border-[#FF1493]/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(255,20,147,0.2)]">
+        <h3 className="text-[#FF1493] font-black mb-4 uppercase flex items-center gap-2">
+          <AlertCircle size={18}/> Terminal Espião Labz
+        </h3>
+        <div className="space-y-2">
+          {spyLogs.map((log, i) => (
+            <p key={i} className={`text-xs ${log.includes('❌') ? 'text-red-500 font-bold' : 'text-emerald-400'}`}>
+              {log}
+            </p>
+          ))}
+        </div>
+        {spyLogs.some(log => log.includes('❌')) && (
+          <div className="mt-6 border-t border-white/10 pt-4">
+             <p className="text-white/50 text-xs mb-4">O espião encontrou um erro. Tire print desta tela!</p>
+             <button onClick={() => window.location.reload()} className="w-full bg-white text-black py-3 rounded-xl font-black uppercase text-xs">Tentar Novamente</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (!isLogged) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center">
@@ -324,7 +372,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* FINANCEIRO */}
         <div className="mb-12">
           <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
           
@@ -347,7 +394,6 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* LISTA DE MUSAS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
@@ -360,7 +406,11 @@ export default function SuperAdmin() {
                     <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
                     <div className="flex gap-2">
                       <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
-                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes"><Users size={16}/></button>
+                      
+                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes">
+                        <Users size={16}/>
+                      </button>
+
                       <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
                       <button onClick={() => handleDeleteModel(m)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                     </div>
@@ -377,23 +427,41 @@ export default function SuperAdmin() {
                     <div className="relative z-10 mt-2 bg-[#141414] border border-white/10 rounded-2xl p-2 flex flex-col gap-2">
                       <p className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-2">Mandar mensagem rápida:</p>
                       <div className="flex gap-2">
-                        <input type="text" placeholder="Ex: Amor, tudo bem com a sua roleta?" className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50" value={customMessages[m.id] || ""} onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}/>
-                        <button onClick={() => { const msg = customMessages[m.id] || `Oii ${m.slug}!`; window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank'); setCustomMessages({ ...customMessages, [m.id]: "" }); }} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" title="Falar no WhatsApp"><MessageCircle size={16} /></button>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: Amor, tudo bem com a sua roleta?"
+                          className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50"
+                          value={customMessages[m.id] || ""}
+                          onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}
+                        />
+                        <button 
+                          onClick={() => {
+                            const userMsg = customMessages[m.id];
+                            const defaultMsg = `Oii ${m.slug}!`;
+                            const finalMsg = userMsg ? userMsg : defaultMsg;
+                            window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
+                            setCustomMessages({ ...customMessages, [m.id]: "" });
+                          }} 
+                          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" 
+                          title="Falar no WhatsApp"
+                        >
+                          <MessageCircle size={16} />
+                        </button>
                       </div>
                     </div>
                   )}
+
                 </div>
               ))}
             </div>
           </div>
           
           <div className="space-y-8">
-            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={handleSaveGlobal} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
+            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
           </div>
         </div>
       </div>
 
-      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -405,8 +473,10 @@ export default function SuperAdmin() {
               <div className="flex-1 space-y-2">
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
+                
                 <div><p className="text-[8px] text-white/40 uppercase font-black">E-mail de Cadastro</p><p className="text-[10px] font-bold text-white">{selectedApp.email || "Não informado"}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">CPF / Nasc.</p><p className="text-[10px] font-bold text-white">{selectedApp.cpf || "Não informado"} - {selectedApp.birth_date}</p></div>
+
                 {selectedApp.referred_by && <div><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest mt-2">👑 Indicação Ativa</p></div>}
               </div>
             </div>
@@ -419,7 +489,6 @@ export default function SuperAdmin() {
         </div>
       )}
 
-      {/* MODAL CRIAR MANUAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
@@ -429,7 +498,9 @@ export default function SuperAdmin() {
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug</label><input type="text" required value={newModel.slug} onChange={e => setNewModel({ ...newModel, slug: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Ex: savanah" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
+              
               <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug da Madrinha (Opcional)</label><input type="text" value={newModel.referred_by} onChange={e => setNewModel({ ...newModel, referred_by: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-amber-500 text-sm outline-none focus:border-amber-500" placeholder="Ex: raphasavanah" /></div>
+
               <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
             </form>
           </div>
