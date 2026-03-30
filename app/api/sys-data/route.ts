@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic'; // 🔥 OBRIGA A VERCEL A NÃO CACHEAR A ROTA 🔥
+
 export async function GET() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json({ error: "Configuração do servidor ausente." }, { status: 500 });
+    console.error("ERRO: Variáveis de ambiente do Supabase ausentes no servidor.");
+    return NextResponse.json({ ok: false, error: "Servidor mal configurado." }, { status: 500 });
   }
 
   const headers = {
@@ -16,15 +19,25 @@ export async function GET() {
 
   const safeFetch = async (endpoint: string, isCount = false) => {
     try {
+      const fetchHeaders = isCount ? { ...headers, "Prefer": "count=exact" } : headers;
       const res = await fetch(`${supabaseUrl}/rest/v1/${endpoint}`, {
-        headers: isCount ? { ...headers, "Prefer": "count=exact" } : headers,
+        headers: fetchHeaders,
         cache: 'no-store'
       });
-      if (!res.ok) return null;
-      if (isCount) return parseInt(res.headers.get("content-range")?.split("/")[1] || "0", 10);
+      
+      if (!res.ok) {
+        console.error(`Falha na API interna ao buscar: ${endpoint}`, await res.text());
+        return null;
+      }
+      
+      if (isCount) {
+        const range = res.headers.get("content-range");
+        return range ? parseInt(range.split("/")[1] || "0", 10) : 0;
+      }
+      
       return await res.json();
     } catch (error) {
-      console.error(`Erro na API ao buscar ${endpoint}:`, error);
+      console.error(`Erro de rede na API interna ao buscar ${endpoint}:`, error);
       return null;
     }
   };
@@ -52,22 +65,27 @@ export async function GET() {
 
     const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
     
+    // 🔥 FORMATO ESTRUTURADO (Como o GPT sugeriu) 🔥
     return NextResponse.json({
-      globalSettings: globalSettings?.[0] || null,
-      models: models || [],
-      transactions: transactions || [],
-      withdrawals: withdrawals || [],
-      applications: (applications || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
-      totalPlayers: playersCount || 0,
-      abandonedCarts: (abandonedCarts || []).filter((c: any) => {
-        const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-        const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
-        return isPendente && isOldEnough;
-      }),
-      videoRequests: videoRequests || []
+      ok: true,
+      data: {
+        global: globalSettings?.[0] || null,
+        models: models || [],
+        transactions: transactions || [],
+        withdrawals: withdrawals || [],
+        applications: (applications || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
+        totalPlayers: playersCount || 0,
+        abandoned: (abandonedCarts || []).filter((c: any) => {
+          const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
+          const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
+          return isPendente && isOldEnough;
+        }),
+        videoRequests: videoRequests || []
+      }
     });
 
-  } catch (error) {
-    return NextResponse.json({ error: "Falha interna no servidor." }, { status: 500 });
+  } catch (error: any) {
+    console.error("Erro fatal na Route Handler:", error);
+    return NextResponse.json({ ok: false, error: error.message || "Erro no servidor" }, { status: 500 });
   }
 }
