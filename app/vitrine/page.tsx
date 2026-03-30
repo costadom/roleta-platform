@@ -1,514 +1,265 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2, Video } from "lucide-react";
+import { Loader2, Sparkles, User, Key, Radio } from "lucide-react";
+import AuthModal from "@/components/AuthModal";
 
-export default function SuperAdmin() {
+// TIPOS SEGUROS - SÓ O QUE O CLIENTE PRECISA VER
+type ModelCard = {
+  id: string;
+  slug: string;
+  live_status: string;
+  config: {
+    model_name: string;
+    profile_url: string;
+    bg_url: string;
+  } | null;
+  bio?: string;
+};
+
+export default function VitrinePage() {
   const router = useRouter();
-  const [isLogged, setIsLogged] = useState(false);
+  const [models, setModels] = useState<ModelCard[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [adminUser, setAdminUser] = useState("");
-  const [adminPass, setAdminPass] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  
-  const [models, setModels] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [withdrawals, setWithdrawals] = useState<any[]>([]);
-  const [applications, setApplications] = useState<any[]>([]);
-  const [abandoned, setAbandoned] = useState<any[]>([]); 
-  const [videoRequests, setVideoRequests] = useState<any[]>([]); 
-  const [totalPlayers, setTotalPlayers] = useState(0); 
-  
-  const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [newModel, setNewModel] = useState({ slug: "", email: "", password: "", referred_by: "" });
-
-  const [selectedApp, setSelectedApp] = useState<any | null>(null);
-  const [globalMsg, setGlobalMsg] = useState("");
-  const [rankVisible, setRankVisible] = useState(false);
-  const [goalAmount, setGoalAmount] = useState(1000);
-  const [goalReward, setGoalReward] = useState("");
-  const [savingGlobal, setSavingGlobal] = useState(false);
-
-  const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const fetchData = async () => {
-    try {
-      const headers = { 
-        apikey: supabaseKey!, 
-        Authorization: `Bearer ${supabaseKey}`, 
-        "Cache-Control": "no-cache" 
-      };
-
-      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
-      const [resGlob, resMod] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
-      ]);
-
-      if (resGlob.ok) {
-        const dataGlob = await resGlob.json();
-        if (dataGlob[0]) {
-          setGlobalMsg(dataGlob[0].announcement_msg);
-          setRankVisible(dataGlob[0].ranking_visible);
-          setGoalAmount(dataGlob[0].goal_amount);
-          setGoalReward(dataGlob[0].goal_reward);
-        }
-      }
-
-      if (resMod.ok) setModels(await resMod.json());
-      
-      setInitialLoading(false); // 🔥 TELA LIBERADA 🔥
-
-      // 2. CARREGA OS DADOS PESADOS E LISTAS NO FUNDO
-      Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, headers: new Headers() })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers })
-      ]).then(async ([resTrans, resWith, resApp, resPlayers, resAbandon, resVideos]) => {
-          
-          if (resTrans.ok) setTransactions(await resTrans.json());
-          if (resWith.ok) setWithdrawals(await resWith.json());
-          if (resVideos.ok) setVideoRequests(await resVideos.json()); 
-          
-          if (resApp.ok) {
-            const apps = await resApp.json();
-            setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
-          }
-          
-          if (resAbandon.ok) {
-            const carts = await resAbandon.json();
-            const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-            setAbandoned(carts.filter((c: any) => {
-              const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-              const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
-              return isPendente && isOldEnough;
-            }));
-          }
-
-          if (resPlayers && resPlayers.headers) {
-             const range = resPlayers.headers.get("content-range");
-             if (range) {
-               const total = range.split("/")[1];
-               setTotalPlayers(parseInt(total));
-             }
-          }
-      });
-
-    } catch (err) { 
-      console.error("Erro no fetch", err); 
-      setInitialLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (localStorage.getItem("super_admin_auth") === "true") { 
-      setIsLogged(true); 
-      fetchData(); 
-    } else { 
-      setInitialLoading(false); 
+    async function fetchData() {
+      try {
+        const headers = {
+          apikey: supabaseKey!,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Cache-Control": "no-cache",
+        };
+
+        const logged = localStorage.getItem("labz_player_logged") === "true";
+        setIsLoggedIn(logged);
+
+        // FIX 1: Busca somente Configs com showcase_visible=true (filtra no banco, não no JS)
+        // FIX 2: Seleciona APENAS os campos necessários (sem email, password, whatsapp, pix_key...)
+        // FIX 3: Limita a 50 modelos para não sobrecarregar
+        const [modelsRes, configsRes] = await Promise.all([
+          fetch(
+            `${supabaseUrl}/rest/v1/Models?select=id,slug,live_status,bio&order=created_at.desc&limit=50`,
+            { headers }
+          ),
+          fetch(
+            `${supabaseUrl}/rest/v1/Configs?showcase_visible=eq.true&select=model_id,model_name,profile_url,bg_url`,
+            { headers }
+          ),
+        ]);
+
+        if (modelsRes.ok && configsRes.ok) {
+          const modelsData: any[] = await modelsRes.json();
+          const configsData: any[] = await configsRes.json();
+
+          // Cria um map de configs para O(1) lookup (mais rápido do que .find() em loop)
+          const configMap = new Map(
+            configsData.map((c: any) => [c.model_id, c])
+          );
+
+          // Filtra e junta: só aparece quem tem config ativa
+          let activeModels: ModelCard[] = modelsData
+            .filter((m: any) => configMap.has(m.id))
+            .map((m: any) => ({
+              id: m.id,
+              slug: m.slug,
+              live_status: m.live_status || "offline",
+              bio: m.bio,
+              config: configMap.get(m.id),
+            }));
+
+          // Ordena: VIP > Online > Offline
+          activeModels.sort((a, b) => {
+            const weight = (s: string) =>
+              s === "vip" ? 2 : s === "online" ? 1 : 0;
+            return weight(b.live_status) - weight(a.live_status);
+          });
+
+          setModels(activeModels);
+        }
+      } catch (err) {
+        console.error("Falha ao buscar musas:", err);
+      } finally {
+        setInitialLoading(false);
+      }
     }
-  }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
-      localStorage.setItem("super_admin_auth", "true");
-      setIsLogged(true); setInitialLoading(true); fetchData();
-    } else { alert("Acesso negado!"); }
-  };
+    fetchData();
+  }, [supabaseUrl, supabaseKey]);
 
-  const handleResetSystem = async () => {
-    const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
-    if (confirmText !== "ZERARTUDO") return;
-    setInitialLoading(true);
-    try {
-      const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers })
-      ]);
-      fetchData();
-    } catch (err) { alert("Erro."); }
-  };
-
-  const handleSaveGlobal = async () => {
-    setSavingGlobal(true);
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main`, {
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ announcement_msg: globalMsg, ranking_visible: rankVisible, goal_amount: goalAmount, goal_reward: goalReward, updated_at: new Date().toISOString() })
-      });
-    } catch (err) {} finally { setSavingGlobal(false); }
-  };
-
-  const handleApproveWithdrawal = async (id: string, amount: number, modelId: string, modelName: string, modelPhone: string) => {
-    if (!confirm(`Pagar R$ ${amount.toFixed(2)}?`)) return;
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=eq.${id}`, {
-        method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ status: 'pago', is_read: false })
-      });
-      if (modelPhone) window.open(`https://wa.me/${modelPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Oii! Seu PIX de R$ ${amount.toFixed(2)} foi enviado!`)}`, '_blank');
-      fetchData();
-    } catch (err) { alert("Erro."); }
-  };
-
-  const handleApproveApplication = async (app: any) => {
-    if (!confirm(`Aprovar ${app.nickname}?`)) return;
-    setLoading(true);
-    try {
-      const now = new Date().toISOString();
-      const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
-      
-      // 🔥 CRIAÇÃO DO PERFIL: Usa o e-mail real da modelo, e gera uma senha padrão segura 🔥
-      const generatedEmail = app.email || `${app.nickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `${capNick}Labz2026!`;
-      
-      const payloadModel = { 
-          slug: app.nickname.toLowerCase(), 
-          email: generatedEmail, 
-          password: generatedPass, 
-          full_name: app.full_name, 
-          whatsapp: app.whatsapp, 
-          created_at: now,
-          referred_by: app.referred_by || null 
-      };
-
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, {
-        method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify(payloadModel),
-      });
-      const dataMod = await resMod.json();
-      if(dataMod && dataMod[0]) {
-          const mId = dataMod[0].id;
-          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: app.nickname.toUpperCase(), spin_cost: 2, bg_url: app.bg_url, profile_url: app.profile_url || app.bg_url, created_at: now }), });
-          await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${app.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'aprovada' }), });
-          
-          setSelectedApp(null); 
-          fetchData();
-
-          // 🔥 MENSAGEM WHATSAPP LIMPA: Puxando os dados reais e sem emojis que quebram 🔥
-          const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\n\nLogin: ${generatedEmail}\nSenha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui. Bora fazer muito dinheiro!`;
-          window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-      }
-    } catch (err) { alert("Erro ao aprovar."); } finally { setLoading(false); }
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true);
-    try {
-      const now = new Date().toISOString(); 
-      const payloadModel = { 
-          slug: newModel.slug.toLowerCase(), 
-          email: newModel.email, 
-          password: newModel.password, 
-          created_at: now,
-          referred_by: newModel.referred_by || null
-      };
-
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(payloadModel), });
-      const dataMod = await resMod.json();
-      if(dataMod && dataMod[0]) {
-          const mId = dataMod[0].id;
-          await fetch(`${supabaseUrl}/rest/v1/Configs`, { method: "POST", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model_id: mId, model_name: newModel.slug.toUpperCase(), spin_cost: 2, created_at: now }), });
-      }
-      setShowModal(false); fetchData();
-    } catch (err) {} finally { setLoading(false); }
-  };
-
-  const financialData = useMemo(() => {
-    let totalSales = 0, totalPlatform = 0, totalModels = 0;
-    const byModel: Record<string, number> = {};
-    transactions.forEach(t => {
-      totalSales += Number(t.real_amount) || 0;
-      totalPlatform += Number(t.platform_cut) || 0;
-      totalModels += Number(t.model_cut) || 0;
-      byModel[t.model_id] = (byModel[t.model_id] || 0) + (Number(t.real_amount) || 0);
-    });
-    return { totalSales, totalPlatform, totalModels, byModel };
-  }, [transactions]);
-
-  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
-
-  if (!isLogged) return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center">
-      <ShieldCheck size={40} className="text-[#FF1493] mx-auto mb-6"/><h1 className="text-xl font-black text-white mb-8">PAINEL MASTER</h1>
-      <form onSubmit={handleLogin} className="space-y-4">
-        <input type="email" placeholder="EMAIL" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" value={adminUser} onChange={e => setAdminUser(e.target.value)} />
-        <div className="relative"><input type={showPass ? "text" : "password"} placeholder="SENHA" className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs text-white outline-none" value={adminPass} onChange={e => setAdminPass(e.target.value)} /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
-        <button type="submit" className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase">Acessar</button>
-      </form>
-    </div></div>
-  );
+  if (initialLoading)
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white p-6 text-center">
+        <Loader2 className="animate-spin text-[#D946EF] mb-6" size={50} />
+        <h2 className="text-xl font-black uppercase italic tracking-tighter animate-pulse">
+          Carregando Musas...
+        </h2>
+      </div>
+    );
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-10 font-sans pb-24 animate-in fade-in duration-500">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12">
-          <div><h1 className="text-4xl font-black uppercase italic tracking-tighter"><span className="text-white">SAVANAH</span> <span className="text-[#FF1493]">LABZ</span></h1><p className="text-white/30 text-[10px] font-black tracking-[0.4em] mt-1 uppercase">Sistema V.3001 Master</p></div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button onClick={handleResetSystem} className="bg-red-500/10 border border-red-500/30 text-red-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-xl"><AlertCircle size={16}/> ZERAR SISTEMA</button>
-            <button onClick={() => setShowModal(true)} className="bg-white text-black px-6 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#FF1493] hover:text-white transition-all shadow-xl"><Plus size={16}/> Criar Manual</button>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/30 hover:text-red-500 transition-all"><Lock size={18}/></button>
-          </div>
+    <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20">
+      {/* CABEÇALHO */}
+      <header className="fixed top-0 left-0 w-full h-20 bg-black/80 backdrop-blur-xl border-b border-white/5 z-[100] px-6 flex items-center justify-between shadow-xl">
+        <div>
+          <h1 className="text-xl font-black italic text-[#D946EF] tracking-tighter">
+            SAVANAH <span className="text-white">LABZ</span>
+          </h1>
+          <p className="text-[8px] text-white/30 uppercase font-black tracking-widest -mt-1">
+            Escolha sua Musa
+          </p>
         </div>
 
-        {/* 🔥 NOVOS ALERTAS: VÍDEOS SOLICITADOS 🔥 */}
-        {videoRequests.length > 0 && (
-          <div className="mb-12 bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(59,130,246,0.1)]">
-            <h2 className="text-xs font-black uppercase text-blue-400 mb-4 flex items-center gap-2 tracking-widest"><Video size={16}/> {videoRequests.length} Novos Pedidos de Vídeo VIP</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {videoRequests.map(req => (
-                <div key={req.id} className="bg-black border border-blue-500/20 p-5 rounded-3xl flex flex-col justify-between">
-                  <div className="mb-4">
-                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-1">Musa: @{req.Models?.slug}</p>
-                    <p className="text-[12px] text-white font-bold leading-relaxed mb-2">"{req.description}"</p>
-                    <div className="flex justify-between text-[9px] text-white/50 font-mono uppercase">
-                        <span>💰 R$ {req.price}</span>
-                        <span>⏱ {req.duration} min</span>
-                    </div>
-                  </div>
-                  <button onClick={() => {
-                    const msg = encodeURIComponent(`Oi linda! Você tem um novo pedido de Vídeo VIP! Aceite no seu painel para garantir seu saldo!`);
-                    window.open(`https://wa.me/${req.Models?.whatsapp?.replace(/\D/g, '')}?text=${msg}`, '_blank');
-                  }} className="w-full bg-blue-600 text-white py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-500 transition-all">
-                    <MessageCircle size={14}/> Enviar para Modelo
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push("/explore")}
+            className="hidden sm:flex items-center gap-1.5 bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30 px-4 py-2.5 rounded-full hover:bg-[#00f0ff] hover:text-black transition-all shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+          >
+            <Radio size={14} className="animate-pulse" />
+            <span className="font-black text-[10px] uppercase tracking-widest">
+              Lives Ao Vivo
+            </span>
+          </button>
 
-        {/* PIX ABANDONADOS - CARD VERMELHO */}
-        {abandoned.length > 0 && (
-          <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
-            <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {abandoned.map(cart => {
-                const phone = cart.player_phone || cart.whatsapp;
-                return (
-                  <div key={cart.id} className="bg-black border border-red-500/20 p-5 rounded-3xl flex flex-col justify-between">
-                    <div className="mb-4">
-                      <p className="text-[12px] text-white uppercase font-black">{cart.player_name || 'Cliente VIP'}</p>
-                      <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-1">TENTOU COMPRAR R$ {Number(cart.amount).toFixed(2)}</p>
-                      <p className="text-[9px] text-white/50 uppercase font-mono">Item: {cart.model_name}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        disabled={!phone}
-                        onClick={() => {
-                          const msg = `Oii ${cart.player_name || 'VIP'}! Vi aqui que você tentou acessar um conteúdo da ${cart.model_name.split(' ')[0]}, mas o PIX não concluiu.\n\nQuer que eu te mande a chave PIX de novo pra você não perder o bônus?`;
-                          window.open(`https://wa.me/${phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
-                        }} 
-                        className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-1 transition-transform ${phone ? 'bg-emerald-500 text-black hover:scale-105' : 'bg-white/5 text-white/20'}`}
+          {!isLoggedIn ? (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="px-5 py-2.5 bg-white text-black rounded-full text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#D946EF] hover:text-white transition-all shadow-xl"
+            >
+              <Key size={14} /> Login VIP
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push("/hub")}
+              className="px-5 py-2.5 bg-[#D946EF] text-white rounded-full text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#f062ff] transition-all shadow-[0_0_15px_rgba(217,70,239,0.3)]"
+            >
+              <User size={14} /> Meu Perfil
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto p-6 mt-28">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl font-black uppercase italic text-white tracking-tighter drop-shadow-lg">
+            ESCOLHA SUA <span className="text-[#D946EF]">MUSA</span>
+          </h2>
+          <p className="text-[#FFD700] text-[10px] font-bold uppercase tracking-[0.3em] mt-2 flex items-center justify-center gap-2">
+            <Sparkles size={12} /> HUB PRIVADO E ROLETA VIP <Sparkles size={12} />
+          </p>
+        </div>
+
+        {/* BOTÃO LIVES MOBILE */}
+        <div className="sm:hidden flex justify-center mb-8">
+          <button
+            onClick={() => router.push("/explore")}
+            className="flex w-full items-center justify-center gap-2 bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30 px-6 py-4 rounded-2xl hover:bg-[#00f0ff] hover:text-black transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+          >
+            <Radio size={18} className="animate-pulse" />
+            <span className="font-black text-xs uppercase tracking-widest">
+              Acessar Câmeras Ao Vivo
+            </span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          {models.length > 0 ? (
+            models.map((m) => {
+              const isOnline =
+                m.live_status === "online" || m.live_status === "vip";
+
+              return (
+                <div
+                  key={m.id}
+                  className="relative aspect-[3/4] rounded-[2.5rem] overflow-hidden group border border-white/5 bg-[#0a0a0a] shadow-2xl cursor-pointer"
+                  onClick={() => {
+                    if (!isLoggedIn) return setShowAuthModal(true);
+                    router.push(`/profile/${m.slug}`);
+                  }}
+                >
+                  {/* FIX 4: loading="lazy" para não baixar todas as fotos de uma vez */}
+                  <img
+                    src={m.config?.profile_url}
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-1000 opacity-80 group-hover:opacity-100"
+                    alt={m.config?.model_name || m.slug}
+                  />
+
+                  {/* BADGE AO VIVO */}
+                  {isOnline && (
+                    <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+                      <span
+                        className={`w-2 h-2 rounded-full animate-pulse ${
+                          m.live_status === "vip"
+                            ? "bg-[#ff0055] shadow-[0_0_10px_rgba(255,0,85,0.8)]"
+                            : "bg-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.8)]"
+                        }`}
+                      ></span>
+                      <span
+                        className={`text-[8px] font-black uppercase tracking-widest ${
+                          m.live_status === "vip"
+                            ? "text-[#ff0055]"
+                            : "text-[#00f0ff]"
+                        }`}
                       >
-                        <MessageCircle size={14}/> {phone ? 'Chamar no Zap' : 'Sem Telefone'}
-                      </button>
-                      <button onClick={async () => {
-                        setAbandoned(prev => prev.filter(c => c.id !== cart.id));
-                        await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=eq.${cart.id}`, { method: 'PATCH', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: 'ignorado' }) });
-                      }} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/30 hover:text-red-500 transition-all" title="Ignorar / Limpar"><X size={14}/></button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* CANDIDATURAS */}
-        {applications.length > 0 && (
-          <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
-            <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {applications.map(app => (
-                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-black border border-indigo-500/20 p-5 rounded-3xl flex flex-col justify-between cursor-pointer hover:border-indigo-400 transition-all group">
-                  <div className="mb-4">
-                    <p className="text-[12px] text-white uppercase font-black">{app.full_name}</p>
-                    <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mb-2">@{app.nickname}</p>
-                    <div className="text-[9px] text-white/50 uppercase font-mono space-y-1"><p>📱 {app.whatsapp}</p></div>
-                  </div>
-                  <button className="bg-indigo-500/20 text-indigo-400 px-4 py-3 rounded-xl text-[9px] font-black uppercase group-hover:bg-indigo-500 group-hover:text-white transition-all">Analisar Perfil</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* SAQUES PENDENTES */}
-        {withdrawals.filter(w => w.status === 'pendente').length > 0 && (
-          <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
-            <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {withdrawals.filter(w => w.status === 'pendente').length} Saques (PIX) Solicitados</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {withdrawals.filter(w => w.status === 'pendente').map(w => {
-                const model = models.find(m => m.id === w.model_id);
-                return (
-                  <div key={w.id} className="bg-black border border-amber-500/20 p-5 rounded-3xl flex flex-col justify-between">
-                    <div className="flex justify-between items-start mb-4">
-                      <div><p className="text-[10px] text-white/40 uppercase font-black mb-1">Modelo: {model?.slug}</p><p className="text-xl font-black text-white">R$ {Number(w.amount).toFixed(2)}</p></div>
-                      <button onClick={() => handleApproveWithdrawal(w.id, w.amount, w.model_id, model?.slug || 'Modelo', model?.whatsapp || '')} className="bg-amber-500 text-black px-4 py-3 rounded-xl text-[9px] font-black uppercase hover:scale-105 transition-transform flex items-center gap-1"><CheckCircle2 size={14}/> Pagar</button>
-                    </div>
-                    <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-                      <p className="text-[8px] font-black uppercase text-white/30 mb-1">Chaves PIX:</p>
-                      <p className="text-[10px] font-mono text-emerald-400 break-all mb-1">1: {model?.pix_key_1 || 'N/A'}</p>
-                      <p className="text-[10px] font-mono text-white/50 break-all">2: {model?.pix_key_2 || 'N/A'}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        <div className="mb-12">
-          <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="bg-[#FF1493]/10 border border-[#FF1493]/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={80} className="text-[#FF1493]"/></div><p className="text-[10px] font-black text-[#FF1493] uppercase mb-1 tracking-widest relative z-10">Faturamento Bruto</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalSales.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-8 rounded-[2.5rem] relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><ShieldCheck size={80} className="text-emerald-500"/></div><p className="text-[10px] font-black text-emerald-500 uppercase mb-1 tracking-widest relative z-10">Lucro Plataforma (30%)</p><h3 className="text-4xl font-black text-white relative z-10">{financialData.totalPlatform.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden"><p className="text-[10px] font-black text-white/30 uppercase mb-1 tracking-widest">Repasse Modelos (70%)</p><h3 className="text-4xl font-black text-white/70">{financialData.totalModels.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h3></div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
-              <div className="p-4 bg-[#FFD700]/20 rounded-2xl"><Users size={32} className="text-[#FFD700]" /></div>
-              <div><p className="text-[10px] font-black text-[#FFD700] uppercase tracking-widest mb-1">Modelos Parceiras Ativas</p><h3 className="text-3xl font-black text-white">{models.length} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Contas</span></h3></div>
-            </div>
-            
-            <div className="bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] flex items-center gap-5 shadow-xl">
-              <div className="p-4 bg-blue-500/20 rounded-2xl"><Gamepad2 size={32} className="text-blue-500" /></div>
-              <div><p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Clientes Cadastrados</p><h3 className="text-3xl font-black text-white">{totalPlayers} <span className="text-xs text-white/30 font-bold uppercase tracking-widest">Jogadores</span></h3></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {models.map(m => (
-                <div key={m.id} className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2.5rem] hover:border-[#FF1493]/30 transition-all shadow-xl group relative overflow-hidden">
-                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#FF1493]/5 rounded-full blur-[40px] pointer-events-none" />
-                  
-                  <div className="flex justify-between items-start mb-4 relative z-10">
-                    <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#FF1493]"><Users size={20}/></div>
-                    <div className="flex gap-2">
-                      <div className="text-right"><span className="text-[8px] font-black text-white/30 uppercase block">ID</span><span className="text-[9px] font-mono text-white/50">{m.id.split('-')[0]}</span></div>
-                      
-                      <button onClick={() => router.push(`/admin/models/${m.id}/players`)} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FFD700] hover:bg-[#FFD700] hover:text-black transition-all shadow-lg" title="Ver Clientes">
-                        <Users size={16}/>
-                      </button>
-
-                      <a href={`/admin/dashboard?model=${m.id}&slug=${m.slug}`} className="p-3 bg-white/5 border border-white/10 rounded-xl text-[#FF1493] hover:bg-[#FF1493] hover:text-white transition-all"><LayoutDashboard size={16}/></a>
-                      <button onClick={async () => { if(confirm(`Excluir ${m.slug} permanentemente?`)) { const h = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }; await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${m.id}`, { method: "DELETE", headers: h }); await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${m.id}`, { method: "DELETE", headers: h }); await fetch(`${supabaseUrl}/rest/v1/Models?id=eq.${m.id}`, { method: "DELETE", headers: h }); fetchData(); } }} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-
-                  <h3 className="font-black uppercase text-sm mb-1 relative z-10">{m.slug}</h3>
-                  <p className="text-[10px] text-emerald-400 font-bold mb-3 relative z-10 tracking-widest">GEROU: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                  
-                  {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Indicada por Afiliado</span></div>)}
-                  
-                  <div className="space-y-1.5 p-3 bg-black/50 rounded-xl border border-white/5 relative z-10 mb-4"><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Mail size={10} className="text-[#FF1493]"/> {m.email}</div><div className="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-widest"><Key size={10} className="text-[#FF1493]"/> {m.password}</div></div>
-
-                  {m.whatsapp && (
-                    <div className="relative z-10 mt-2 bg-[#141414] border border-white/10 rounded-2xl p-2 flex flex-col gap-2">
-                      <p className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-2">Mandar mensagem rápida:</p>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Ex: Amor, tudo bem com a sua roleta?"
-                          className="flex-1 bg-black border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/50"
-                          value={customMessages[m.id] || ""}
-                          onChange={(e) => setCustomMessages({ ...customMessages, [m.id]: e.target.value })}
-                        />
-                        <button 
-                          onClick={() => {
-                            const userMsg = customMessages[m.id];
-                            const defaultMsg = `Oii ${m.slug}!`;
-                            const finalMsg = userMsg ? userMsg : defaultMsg;
-                            window.open(`https://wa.me/${m.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(finalMsg)}`, '_blank');
-                            setCustomMessages({ ...customMessages, [m.id]: "" });
-                          }} 
-                          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center shrink-0" 
-                          title="Falar no WhatsApp"
-                        >
-                          <MessageCircle size={16} />
-                        </button>
-                      </div>
+                        {m.live_status === "vip" ? "VIP" : "Ao Vivo"}
+                      </span>
                     </div>
                   )}
 
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col p-8 items-center justify-end text-center pointer-events-none">
+                    <h3 className="text-3xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl mb-1">
+                      {m.config?.model_name}
+                    </h3>
+                    <p className="text-white/70 text-xs italic mb-6 line-clamp-2 px-2">
+                      {m.bio || "Acesse meu Hub para ver meus conteúdos e roleta."}
+                    </p>
+
+                    <button
+                      className="w-full flex items-center justify-center gap-3 py-4 bg-[#D946EF] rounded-2xl text-[10px] font-black uppercase shadow-2xl transition-all group-hover:scale-[1.03] group-active:scale-95 pointer-events-auto"
+                      onClick={(evt) => {
+                        evt.stopPropagation();
+                        if (!isLoggedIn) return setShowAuthModal(true);
+                        router.push(`/profile/${m.slug}`);
+                      }}
+                    >
+                      <User size={16} /> Acessar Hub Privado
+                    </button>
+                  </div>
                 </div>
-              ))}
+              );
+            })
+          ) : (
+            <div className="py-20 text-center text-white/10 italic font-black uppercase tracking-widest border-2 border-dashed border-white/5 rounded-[3rem] col-span-full">
+              Nenhuma musa ativa na vitrine no momento.
             </div>
-          </div>
-          
-          <div className="space-y-8">
-            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
-      {selectedApp && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
-            <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
-            <h2 className="text-2xl font-black uppercase mb-6 text-indigo-400 italic tracking-tighter">Analisar Perfil</h2>
-            
-            <div className="flex gap-6 mb-6">
-              <div className="w-32 h-40 bg-black border border-white/10 rounded-2xl overflow-hidden shrink-0"><img src={selectedApp.profile_url || selectedApp.bg_url} className="w-full h-full object-cover" /></div>
-              <div className="flex-1 space-y-2">
-                <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
-                <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
-                
-                {/* 🔥 EXIBIÇÃO DE EMAIL E CPF 🔥 */}
-                <div><p className="text-[8px] text-white/40 uppercase font-black">E-mail de Cadastro</p><p className="text-[10px] font-bold text-white">{selectedApp.email || "Não informado"}</p></div>
-                <div><p className="text-[8px] text-white/40 uppercase font-black">CPF / Nasc.</p><p className="text-[10px] font-bold text-white">{selectedApp.cpf || "Não informado"} - {selectedApp.birth_date}</p></div>
+      <button
+        onClick={() => {
+          if (!isLoggedIn) return setShowAuthModal(true);
+          router.push("/hub");
+        }}
+        className="fixed bottom-6 right-6 z-[99] bg-[#D946EF] text-white p-4 rounded-full shadow-[0_10px_40px_rgba(217,70,239,0.5)] hover:scale-110 hover:bg-[#f062ff] transition-all flex items-center justify-center group border border-white/20"
+      >
+        <User size={24} />
+        <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 font-black uppercase text-xs tracking-widest">
+          Meu Perfil VIP
+        </span>
+      </button>
 
-                {selectedApp.referred_by && <div><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest mt-2">👑 Indicação Ativa</p></div>}
-              </div>
-            </div>
-
-            <button onClick={() => handleApproveApplication(selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all">
-              {loading ? <Loader2 className="animate-spin" size={16}/> : <><MessageCircle size={16}/> Aprovar e Enviar WhatsApp</>}
-            </button>
-            <button onClick={async () => { if(!confirm('Rejeitar e excluir esta candidatura?')) return; await fetch(`${supabaseUrl}/rest/v1/Applications?id=eq.${selectedApp.id}`, { method: 'DELETE', headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` }}); setSelectedApp(null); fetchData(); }} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar Candidatura</button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL CRIAR MANUAL */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
-            <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-white/30 hover:text-white"><X size={24} /></button>
-            <h2 className="text-2xl font-black uppercase mb-6 italic">Criar <span className="text-[#FF1493]">Manual</span></h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug</label><input type="text" required value={newModel.slug} onChange={e => setNewModel({ ...newModel, slug: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" placeholder="Ex: savanah" /></div>
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Email</label><input type="email" required value={newModel.email} onChange={e => setNewModel({ ...newModel, email: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Senha</label><input type="text" required value={newModel.password} onChange={e => setNewModel({ ...newModel, password: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-white text-sm outline-none focus:border-[#FF1493]" /></div>
-              
-              <div><label className="text-[10px] font-black text-white/50 uppercase ml-2">Slug da Madrinha (Opcional)</label><input type="text" value={newModel.referred_by} onChange={e => setNewModel({ ...newModel, referred_by: e.target.value })} className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 mt-1 text-amber-500 text-sm outline-none focus:border-amber-500" placeholder="Ex: raphasavanah" /></div>
-
-              <button type="submit" disabled={loading} className="w-full bg-[#FF1493] text-white py-5 rounded-2xl font-black uppercase shadow-lg flex justify-center items-center gap-2 mt-4">{loading ? <Loader2 className="animate-spin" size={20} /> : "Criar Franquia"}</button>
-            </form>
-          </div>
-        </div>
-      )}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
     </div>
   );
 }
