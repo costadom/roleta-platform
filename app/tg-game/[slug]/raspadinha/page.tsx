@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  ArrowLeft, User, Coins, ShoppingCart, X as CloseIcon, 
+  ArrowLeft, User, Coins, ShoppingCart, X, 
   Image as ImageIcon, Lock, CheckCircle2, Copy, Loader2, 
   LayoutGrid, Zap, Trophy, MessageCircle, Star, Home, Heart, Sparkles, AlertTriangle, Gift
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import confetti from "canvas-confetti";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
@@ -135,7 +136,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       ref={canvasRef}
       width={400}
       height={500}
-      style={{ touchAction: 'none' }} // 🔥 Trava bruta de scroll no iOS
+      style={{ touchAction: 'none' }} 
       className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
@@ -607,7 +608,7 @@ export default function TelegramScratchApp() {
                      ) : (
                          <div className="flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
                              <div className="w-14 h-14 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-3 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
-                               <CloseIcon size={24} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
+                               <X size={24} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
                              </div>
                              <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-1 drop-shadow-lg">Veio o X</h3>
                              <p className="text-[9px] text-white/50 uppercase font-bold tracking-[0.1em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
@@ -686,7 +687,7 @@ export default function TelegramScratchApp() {
         {showProfile && player && (
           <div className="fixed inset-0 z-[400] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-2xl">
-              <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
+              <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/20 hover:text-white"><X size={24} /></button>
               
               <div className="w-16 h-16 bg-[#D946EF]/10 border border-[#D946EF]/30 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3">
                   <User size={30} className="text-[#D946EF]"/>
@@ -697,7 +698,6 @@ export default function TelegramScratchApp() {
 
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2">
                   
-                  {/* CAIXA DE VINCULAR CONTA */}
                   {player.whatsapp.startsWith('TG_') ? (
                       <div className="bg-[#050505] border border-white/10 p-5 rounded-3xl shadow-inner mb-6">
                           <h3 className="text-[11px] font-black uppercase text-[#D946EF] mb-2 flex items-center gap-2"><Lock size={14}/> Salve seu Progresso</h3>
@@ -740,9 +740,9 @@ export default function TelegramScratchApp() {
           </div>
         )}
 
-        {/* 🔥 PACOTES CORRIGIDOS (IGUAIS AOS DA ROLETA) 🔥 */}
+        {/* Modal PIX */}
         {showDeposit && (
-          <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
+          <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-200 overflow-y-auto">
             <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
               <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
               
@@ -771,7 +771,7 @@ export default function TelegramScratchApp() {
                 <div className="space-y-4 pt-4">
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                   
-                  {/* 🔥 PACOTES PADRÃO (IGUAIS AOS DA ROLETA) 🔥 */}
+                  {/* PACOTES PADRÃO: 25 por R$20, 35 por R$30, 45 por R$40, 55 por R$50 */}
                   {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
                       <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
