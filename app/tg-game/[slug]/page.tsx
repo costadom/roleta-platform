@@ -84,51 +84,58 @@ export default function TelegramMiniApp() {
     }
   }, [slug]);
 
+  // 🔥 FETCH INICIAL OTIMIZADO (Promise.all) PARA A ROLETA 🔥
   async function initializeData(user: any) {
     if (!slug || !supabaseUrl) return;
 
     try {
+      setLoading(true);
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
       
-      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id`, { headers }).catch(() => null);
-      if (!resMod || !resMod.ok) throw new Error("Musa não encontrada.");
+      // Batch A: Busca Configs do Model
+      const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers });
+      const modData = await resMod.json();
       
-      const dataMod = await resMod.json();
-      const mId = dataMod[0]?.id;
-      if (!mId) throw new Error("Musa não encontrada.");
-
-      let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).catch(() => null);
-      if (!prizesRes || !prizesRes.ok) prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).catch(() => null);
-      const prizesData = prizesRes && prizesRes.ok ? await prizesRes.json() : [];
-
-      const resConfig = await fetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()).catch(() => []);
+      if (!modData || modData.length === 0) throw new Error("Musa não encontrada.");
       
-      const fetchedPrizes = Array.isArray(prizesData) ? prizesData : [];
+      const modelData = modData[0];
+      const mId = modelData.id;
+      const config = Array.isArray(modelData.Configs) ? modelData.Configs[0] : modelData.Configs;
+
+      setBgUrl(config?.bg_url || "");
+      setModelName(config?.model_name || slug.toString().toUpperCase());
+      setModel({ id: mId, ...config });
+
+      // Batch B: Busca Prêmios e Player em paralelo!
+      const pseudoWhatsapp = `TG_${user.id}`;
+      
+      const [prizesRes, playerRes] = await Promise.all([
+          fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).then(r => r.json()).catch(() => []),
+          fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${mId}&select=*`, { headers }).then(r => r.json()).catch(() => [])
+      ]);
+
+      // Configura os Prêmios
+      const fetchedPrizes = Array.isArray(prizesRes) ? prizesRes : [];
       fetchedPrizes.sort((a: any, b: any) => {
           const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
           const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
           return dateA - dateB;
       });
       setPrizes(fetchedPrizes);
-      
-      if (resConfig?.[0]) {
-        setBgUrl(resConfig[0].bg_url || "");
-        setModelName(resConfig[0].model_name || slug.toString().toUpperCase());
-        setModel({ id: mId, ...resConfig[0] });
-      }
 
-      let resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${mId}&select=*`, { headers });
-      let playerData = await resPlayer.json();
+      // Configura o Jogador
+      let playerData = playerRes;
 
+      // Fallback para a conta fantasma antiga, se não achou pelo telegram_id
       if (!playerData || playerData.length === 0) {
-          const pseudoWhatsapp = `TG_${user.id}`;
-          resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${mId}&select=*`, { headers });
-          playerData = await resPlayer.json();
+          const fallbackRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${mId}&select=*`, { headers });
+          playerData = await fallbackRes.json();
       }
 
+      // Se é um cliente totalmente novo
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
-          whatsapp: `TG_${user.id}`,
+          whatsapp: pseudoWhatsapp,
           telegram_id: user.id.toString(),
           name: user.first_name || "Visitante TG", 
           nickname: user.first_name || "VIP",
@@ -145,16 +152,14 @@ export default function TelegramMiniApp() {
             body: JSON.stringify(newPlayerPayload) 
         });
         
-        const createdData = await createRes.json();
-        
-        if (createdData && Array.isArray(createdData) && createdData.length > 0) {
-            playerData = createdData;
-        } else {
-            throw new Error("Erro Crítico ao criar jogador.");
-        }
+        playerData = await createRes.json();
       }
       
-      setPlayer(playerData[0]);
+      if (playerData && playerData[0]) {
+          setPlayer(playerData[0]);
+      } else {
+          throw new Error("Erro ao carregar dados do jogador.");
+      }
 
     } catch (e: any) {
       setErrorMsg(e.message || "Erro de conexão com o Labz.");
@@ -178,12 +183,10 @@ export default function TelegramMiniApp() {
               const realAccount = realAccountData[0];
               const mergedCredits = realAccount.credits + player.credits;
               
-              await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${realAccount.id}`, { 
-                  method: "PATCH", headers, 
-                  body: JSON.stringify({ credits: mergedCredits, telegram_id: tgUser.id.toString() }) 
-              });
-              
-              await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+              await Promise.all([
+                 fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${realAccount.id}`, { method: "PATCH", headers, body: JSON.stringify({ credits: mergedCredits, telegram_id: tgUser.id.toString() }) }),
+                 fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } })
+              ]);
               
               setPlayer({ ...realAccount, credits: mergedCredits, telegram_id: tgUser.id.toString() });
               setLinkSuccess("Contas fundidas com sucesso! Seu saldo foi somado.");
@@ -242,14 +245,7 @@ export default function TelegramMiniApp() {
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
   const handleGeneratePix = async (val: number) => {
-    if (!player) {
-        if ((window as any).Telegram?.WebApp) {
-            (window as any).Telegram.WebApp.showAlert("Erro: Identificação perdida. Feche a roleta e abra de novo.");
-        } else {
-            alert("Erro: Identificação perdida. Feche a roleta e abra de novo.");
-        }
-        return;
-    }
+    if (!player) return;
     
     setPixLoading(true);
     setPixData(null);
@@ -351,7 +347,7 @@ export default function TelegramMiniApp() {
       setModalOpen(true);
       
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", 'Prefer': 'return=representation' };
-      await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers, body: JSON.stringify({ credits: newBal }) });
+      fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "PATCH", headers, body: JSON.stringify({ credits: newBal }) }).catch(() => {});
 
       if (soundEnabled) winAudioRef.current?.play().catch(() => {});
       
@@ -375,7 +371,7 @@ export default function TelegramMiniApp() {
     }, SPIN_DURATION);
   };
 
-  if (loading) return <div className="h-[100dvh] w-full bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-[10px] animate-pulse">Carregando Telegram App...</div>;
+  if (loading) return <div className="h-[100dvh] w-full bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-[10px] animate-pulse tracking-widest">Carregando Telegram App...</div>;
   if (errorMsg) return <div className="h-[100dvh] w-full bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
@@ -396,7 +392,7 @@ export default function TelegramMiniApp() {
                 </div>
              </div>
              
-             {/* MENU DE ABAS */}
+             {/* MENU DE ABAS (HUB DE JOGOS) */}
              <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-2 w-max shadow-[0_0_20px_rgba(217,70,239,0.15)] z-20">
                 <div className="px-6 py-2 bg-gradient-to-r from-[#D946EF] to-[#9b29ab] text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
                    <Zap size={14} fill="currentColor"/> Roleta VIP
@@ -492,7 +488,7 @@ export default function TelegramMiniApp() {
         </div>
       )}
 
-      {/* 🔥 PACOTES CORRIGIDOS 🔥 */}
+      {/* Modal PIX */}
       {showDeposit && (
         <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
@@ -503,27 +499,26 @@ export default function TelegramMiniApp() {
                   <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle className="text-emerald-500" size={40} /></div>
                   <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
                   <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
-                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar para a Roleta</button>
+                  <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar ao Jogo</button>
                </div>
             ) : pixLoading ? (
               <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
             ) : pixData ? (
-              <div className="mt-4 text-center">
-                 <h2 className="text-xl font-black text-white uppercase italic mb-6">Pague com PIX</h2>
-                 <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" /></div>
-                 <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
-                 <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
-                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
-                 </div>
-                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
-                 </button>
+              <div className="text-center p-2">
+                <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
+                <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" /></div>
+                <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
+                <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
+                  <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
+               </div>
+               <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
+                  {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+               </button>
               </div>
             ) : (
               <div className="space-y-4 pt-4">
                 <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                 
-                {/* PACOTES PADRÃO: 25 por R$20, 35 por R$30, 45 por R$40, 55 por R$50 */}
                 {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                   <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
                     <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
