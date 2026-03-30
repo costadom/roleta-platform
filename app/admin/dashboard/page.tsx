@@ -184,7 +184,7 @@ function DashboardContent() {
     if (modelSlug && typeof window !== 'undefined') setModelUrl(window.location.origin);
   }, [modelSlug]);
 
-  // 🔥 OTIMIZAÇÃO (PROMISE.ALL EM DOIS BATCHES) 🔥
+  // 🔥 ARQUITETURA ANTI-BLOQUEIO (FILA INDIANA COM RESPIRO) 🔥
   const loadData = async () => {
     if (!modelId) {
         setDashboardLoading(false);
@@ -193,26 +193,22 @@ function DashboardContent() {
     
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
+      
       const safeFetch = async (url: string, opts: any = {}) => {
           try {
               const res = await fetch(url, { headers: { ...headers, ...opts.headers } });
               if (!res.ok) return null; 
-              
-              // Se foi pedido count exact, tenta extrair do header ao invés do JSON inteiro
-              if (opts.headers?.Prefer === "count=exact") {
-                 const range = res.headers.get("content-range");
-                 if (range) return { count: parseInt(range.split("/")[1]) };
-              }
               return await res.json();
-          } catch (e) { return null; }
+          } catch (e) {
+              console.error("Falha silenciosa na rota:", url);
+              return null; 
+          }
       };
 
-      // ── BATCH A: Essenciais (Libera a tela) ──
-      const [resGlob, resModel, resConfig] = await Promise.all([
-        safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`)
-      ]);
+      // PASSO 1: Carrega apenas o essencial (Perfil e Configs)
+      const resGlob = await safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`);
+      const resModel = await safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`);
+      const resConfig = await safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`);
 
       if (resGlob && resGlob[0]) setGlobalAnnouncement(resGlob[0].announcement_msg); 
       
@@ -234,35 +230,55 @@ function DashboardContent() {
         setTgToken(resConfig[0].tg_bot_token || ""); 
       }
 
+      // TELA LIBERADA
       setDashboardLoading(false);
 
-      // ── BATCH B: Dados Pesados em Segundo Plano ──
-      Promise.all([
-        safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`),
-        safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`),
-        safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`),
-        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`),
-        safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`),
-        safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`),
-        safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`) // Traz o json dos jogadores (usado pros followers)
-      ]).then(([resTrans, resPrizes, resMedia, resVideos, resSales, resScratch, resFollowers]) => {
-          
-          setAccumulatedEarnings(Array.isArray(resTrans) ? resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0) : 0);
-          setPrizes(Array.isArray(resPrizes) ? resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)) : []);
-          setMediaList(Array.isArray(resMedia) ? resMedia : []); 
-          setVideoRequests(Array.isArray(resVideos) ? resVideos : []); 
-          setScratchPhotos(Array.isArray(resScratch) ? resScratch : []);
-          
-          const fList = Array.isArray(resFollowers) ? resFollowers : [];
+      // PASSO 2: Carrega as listas pesadas com Respiro
+      const loadBackgroundData = async () => {
+          const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+          await sleep(200); // Respiro
+          const resTrans = await safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`);
+          if (resTrans) setAccumulatedEarnings(resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0));
+
+          await sleep(200); // Respiro
+          const resPrizes = await safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`);
+          if (resPrizes) setPrizes(resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
+
+          await sleep(200); // Respiro
+          const resVideos = await safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`);
+          if (resVideos) setVideoRequests(resVideos);
+
+          await sleep(200); // Respiro
+          const resScratch = await safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`);
+          if (resScratch) setScratchPhotos(resScratch);
+
+          await sleep(200); // Respiro
+          const resFollowers = await safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`);
+          const fList = resFollowers || [];
           setFollowersList(fList);
 
-          const mySales = Array.isArray(resSales) ? resSales.filter((s: any) => s.Media?.model_id === modelId) : [];
-          setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
-          
-          loadActivityFeed(Array.isArray(resMedia) ? resMedia : [], fList);
-      });
+          await sleep(200); // Respiro
+          const resSales = await safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`);
+          if (resSales) {
+             const mySales = resSales.filter((s: any) => s.Media?.model_id === modelId);
+             setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
+          }
 
-    } catch (err) { console.error(err); setDashboardLoading(false); }
+          await sleep(200); // Respiro
+          const resMedia = await safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`);
+          if (resMedia) {
+             setMediaList(resMedia);
+             loadActivityFeed(resMedia, fList); // O feed usa essas infos
+          }
+      };
+
+      loadBackgroundData();
+
+    } catch (err) { 
+        console.error(err); 
+        setDashboardLoading(false); 
+    }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
@@ -374,6 +390,7 @@ function DashboardContent() {
           
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(',');
+              // Esses requests aqui vão com calma porque já tem dados para mostrar na tela
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
