@@ -55,13 +55,13 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
     }
 
     ctx.fillStyle = "#333";
-    ctx.font = "900 28px sans-serif";
+    ctx.font = "900 24px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
     
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = 50; 
+    ctx.lineWidth = 45; 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
   }, [coverText]);
@@ -91,7 +91,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleStart = (e: any) => {
     if (isRevealed) return;
-    if (e.cancelable) e.preventDefault();
     setIsDrawing(true);
     const { x, y } = getPointerPos(e);
     const ctx = canvasRef.current?.getContext('2d');
@@ -103,7 +102,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleMove = (e: any) => {
     if (!isDrawing || isRevealed) return;
-    if (e.cancelable) e.preventDefault(); // Evita o scroll de arrastar
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -140,8 +138,8 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       ref={canvasRef}
       width={400}
       height={500}
-      style={{ touchAction: 'none' }} // 🔥 TRAVA DE CONCRETO PRO IPHONE NÃO DESCER A TELA
-      className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
+      style={{ touchAction: 'none' }} // 🔥 Trava bruta anti-scroll do iPhone
+      className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
       onMouseUp={handleEnd}
@@ -192,6 +190,12 @@ export default function TelegramScratchApp() {
 
   const [clickCount, setClickCount] = useState(0);
 
+  // Estados de Vincular Conta
+  const [linkWa, setLinkWa] = useState("");
+  const [linkPwd, setLinkPwd] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+  const [linkSuccess, setLinkSuccess] = useState("");
+
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-web-app.js";
@@ -205,9 +209,6 @@ export default function TelegramScratchApp() {
         tg.expand();
         
         const user = tg.initDataUnsafe?.user;
-        
-        // 🔥 PARA TESTAR NO NAVEGADOR DO PC, DESCOMENTE ABAIXO 🔥
-        // const user = { id: 123456789, first_name: "Rafael", last_name: "Teste" };
         
         if (user) {
           setTgUser(user);
@@ -235,15 +236,22 @@ export default function TelegramScratchApp() {
       const { data: photos } = await supabase.from('ModelScratchPhotos').select('*').eq('model_id', modelData.id).eq('active', true);
       setModelPhotos(photos || []);
 
-      const pseudoWhatsapp = user.id.toString();
+      const pseudoWhatsapp = `TG_${user.id}`;
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
       
-      const resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${modelData.id}&select=*`, { headers });
+      // BUSCA INTELIGENTE: Pelo telegram_id real ou pelo whatsapp fantasma antigo
+      let resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${modelData.id}&select=*`, { headers });
       let playerData = await resPlayer.json();
+
+      if (!playerData || playerData.length === 0) {
+          resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${modelData.id}&select=*`, { headers });
+          playerData = await resPlayer.json();
+      }
 
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
           whatsapp: pseudoWhatsapp,
+          telegram_id: user.id.toString(),
           name: user.first_name || "Visitante TG", 
           nickname: user.first_name || "VIP",
           full_name: `${user.first_name} ${user.last_name || ''}`.trim() || "Usuário Telegram",
@@ -273,6 +281,48 @@ export default function TelegramScratchApp() {
         setLoading(false); 
     }
   }
+
+  // O UNIFICADOR DE CONTAS (Igualzinho o da Roleta)
+  const handleLinkAccount = async () => {
+      if (!linkWa || !linkPwd || linkWa.length < 10) return setNotice("Preencha seu WhatsApp com DDD e crie uma senha.");
+      setIsLinking(true);
+      
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
+          const cleanWa = linkWa.replace(/\D/g, "");
+          
+          const checkRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWa}&model_id=eq.${model.id}&select=*`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+          const realAccountData = await checkRes.json();
+
+          if (realAccountData && realAccountData.length > 0) {
+              const realAccount = realAccountData[0];
+              const mergedCredits = realAccount.credits + player.credits; 
+              
+              await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${realAccount.id}`, { 
+                  method: "PATCH", headers, 
+                  body: JSON.stringify({ credits: mergedCredits, telegram_id: tgUser.id.toString() }) 
+              });
+              
+              await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
+              
+              setPlayer({ ...realAccount, credits: mergedCredits, telegram_id: tgUser.id.toString() });
+              setLinkSuccess("Contas fundidas com sucesso! Seu saldo foi somado.");
+          } else {
+              const updateRes = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
+                  method: "PATCH", headers, 
+                  body: JSON.stringify({ whatsapp: cleanWa, password: linkPwd, telegram_id: tgUser.id.toString() }) 
+              });
+              const updatedData = await updateRes.json();
+              if (updatedData && updatedData[0]) {
+                  setPlayer(updatedData[0]);
+                  setLinkSuccess("Conta oficial criada! Acesse pelo site quando quiser.");
+              }
+          }
+      } catch (e) {
+          setNotice("Erro ao vincular conta.");
+      }
+      setIsLinking(false);
+  };
 
   const handleDevHack = () => {
       setClickCount((prev) => {
@@ -469,7 +519,7 @@ export default function TelegramScratchApp() {
   if (errorMsg) return <div className="h-[100dvh] w-full bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
-    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden overscroll-none">
+    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden overscroll-none touch-none">
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
@@ -480,7 +530,7 @@ export default function TelegramScratchApp() {
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505] fixed" />
         </div>
 
-        <div className="relative z-10 p-4 flex flex-col gap-2 shrink-0">
+        <div className="relative z-10 p-3 flex flex-col gap-2 shrink-0">
            <div className="flex justify-between items-center px-1">
               <div className="flex gap-2">
                  <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg"><User size={16}/></button>
@@ -488,7 +538,7 @@ export default function TelegramScratchApp() {
               <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
            </div>
 
-           {/* MENU DE ABAS (HUB DE JOGOS) - INVERTIDO PARA A RASPADINHA */}
+           {/* MENU DE ABAS */}
            <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-1 w-max shadow-[0_0_20px_rgba(255,215,0,0.15)] z-20">
               <button onClick={() => router.push(`/tg-game/${slug}`)} className="px-6 py-2 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
                  <Zap size={14} /> Roleta
@@ -500,11 +550,10 @@ export default function TelegramScratchApp() {
 
            <div className="flex flex-col items-center mt-1">
               <span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
-              <span className="text-[9px] text-[#FFD700] font-black uppercase tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
            </div>
         </div>
 
-        <div className="w-full h-8 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0">
+        <div className="w-full h-8 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0 mb-2">
           <div className="flex whitespace-nowrap animate-marquee">
             { NAMES.map((name, i) => (
               <div key={i} className="flex items-center gap-2 mx-8 text-[10px] font-black uppercase tracking-tighter"><Star size={11} className="text-[#FFD700]" fill="currentColor"/><span className="text-white/60">{name}</span><span className="text-white">REVELOU</span><span className="text-[#D946EF]">FOTO VIP</span></div>
@@ -512,10 +561,10 @@ export default function TelegramScratchApp() {
           </div>
         </div>
 
-        {/* 🔥 A TELA DO CARTÃO - AJUSTADA PARA NÃO FICAR EXPRIMIDA 🔥 */}
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-2 px-4 min-h-[340px]">
+        {/* 🔥 TELA DO CARTÃO - MENOR PARA CABER TUDO SEM EXPRIMIR 🔥 */}
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-2 px-4 touch-none min-h-[300px]">
           
-          <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
+          <div className="w-full max-w-[260px] aspect-[3/4] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0 touch-none">
              
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -532,8 +581,8 @@ export default function TelegramScratchApp() {
                              <div className="w-16 h-16 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-4 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
                                <CloseIcon size={32} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
                              </div>
-                             <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-2 drop-shadow-lg">Veio o X</h3>
-                             <p className="text-[9px] text-white/50 uppercase font-bold tracking-[0.2em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
+                             <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-2 drop-shadow-lg">Veio o X</h3>
+                             <p className="text-[9px] text-white/50 uppercase font-bold tracking-[0.1em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
                          </div>
                      )}
                  </div>
@@ -556,11 +605,11 @@ export default function TelegramScratchApp() {
           </div>
 
           {currentScratch && !isRevealed && (
-              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-3 animate-pulse shrink-0">Raspe a tela com o dedo</p>
+              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-2 animate-pulse shrink-0">Raspe a tela com o dedo</p>
           )}
 
           {currentScratch && isRevealed && (
-              <div className="mt-3 w-full max-w-[280px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
+              <div className="mt-3 w-full max-w-[260px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
                   <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-[10px] shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
@@ -568,7 +617,7 @@ export default function TelegramScratchApp() {
           )}
 
           {!currentScratch && (
-              <div className="mt-4 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
+              <div className="mt-3 flex flex-col items-center gap-2 w-full animate-in fade-in shrink-0">
                  <div className="px-6 py-2 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
                     <Coins size={14} className="text-[#FFD700] pointer-events-none" />
                     <span className="text-sm font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
@@ -605,29 +654,59 @@ export default function TelegramScratchApp() {
           </button>
         </div>
 
-        {/* Modal Perfil/Galeria */}
+        {/* 🔥 MODAL DE PERFIL / UNIFICADOR DE CONTAS 🔥 */}
         {showProfile && player && (
-          <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-[400] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-2xl">
               <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
-              <div className="w-16 h-16 bg-[#D946EF]/10 border border-[#D946EF]/30 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3"><User size={30} className="text-[#D946EF]"/></div>
-              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">{player.nickname || player.full_name || 'Jogador'}</h2>
-              <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-6 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
               
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 border-t border-white/10 pt-6">
-                <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest"><Trophy size={14} className="text-[#FFD700]"/> Galeria ({unlockedPhotos.length}/10)</h3>
-                {unlockedPhotos.length === 0 ? (
-                  <div className="py-10 text-center opacity-20"><ImageIcon size={40} className="mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Você não tem fotos</p></div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {unlockedPhotos.map((img, i) => (
-                      <div key={i} className="aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-[#111] shadow-lg relative group cursor-pointer">
-                        <img src={img.photo_url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="Galeria" />
-                        <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm p-1.5 rounded-full"><Star size={10} fill="#FFD700" className="text-[#FFD700]" /></div>
+              <div className="w-16 h-16 bg-[#D946EF]/10 border border-[#D946EF]/30 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3">
+                  <User size={30} className="text-[#D946EF]"/>
+              </div>
+              
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">{player.nickname || 'Visitante VIP'}</h2>
+              <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-4 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2">
+                  
+                  {/* CAIXA DE VINCULAR CONTA */}
+                  {player.whatsapp.startsWith('TG_') ? (
+                      <div className="bg-[#050505] border border-white/10 p-5 rounded-3xl shadow-inner mb-6">
+                          <h3 className="text-[11px] font-black uppercase text-[#D946EF] mb-2 flex items-center gap-2"><Lock size={14}/> Salve seu Progresso</h3>
+                          <p className="text-[9px] text-white/50 mb-4 uppercase tracking-widest font-bold leading-relaxed">Crie um login agora para acessar o site oficial no Google sem perder seu saldo e prêmios.</p>
+                          
+                          <div className="space-y-3">
+                              <input type="text" placeholder="Seu WhatsApp (Ex: 11999999999)" value={linkWa} onChange={(e) => setLinkWa(e.target.value)} className="w-full bg-black border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-[#D946EF] transition-all" />
+                              <input type="password" placeholder="Crie uma Senha" value={linkPwd} onChange={(e) => setLinkPwd(e.target.value)} className="w-full bg-black border border-white/10 px-4 py-3 rounded-xl text-xs text-white outline-none focus:border-[#D946EF] transition-all" />
+                              <button onClick={handleLinkAccount} disabled={isLinking} className="w-full bg-[#D946EF] text-white py-3 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all shadow-lg mt-2">
+                                  {isLinking ? <Loader2 size={14} className="animate-spin mx-auto"/> : "Vincular e Salvar Agora"}
+                              </button>
+                          </div>
+                          {linkSuccess && <p className="text-[9px] font-black text-emerald-500 text-center uppercase tracking-widest mt-4">{linkSuccess}</p>}
                       </div>
-                    ))}
-                  </div>
-                )}
+                  ) : (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3 mb-6">
+                          <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
+                          <div>
+                              <p className="text-[10px] font-black uppercase text-emerald-500">Conta Blindada</p>
+                              <p className="text-[8px] text-white/50 uppercase tracking-widest font-bold">{player.whatsapp}</p>
+                          </div>
+                      </div>
+                  )}
+
+                  <h3 className="text-[10px] text-white/40 uppercase font-black mb-3 flex items-center gap-2 tracking-widest border-t border-white/5 pt-6"><Trophy size={14} className="text-[#FFD700]"/> Galeria ({unlockedPhotos.length}/10)</h3>
+                  {unlockedPhotos.length === 0 ? (
+                    <div className="py-10 text-center opacity-20"><ImageIcon size={40} className="mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Você não tem fotos</p></div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {unlockedPhotos.map((img, i) => (
+                        <div key={i} className="aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-[#111] shadow-lg relative group cursor-pointer">
+                          <img src={img.photo_url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="Galeria" />
+                          <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm p-1.5 rounded-full"><Star size={10} fill="#FFD700" className="text-[#FFD700]" /></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -651,10 +730,13 @@ export default function TelegramScratchApp() {
                 <div className="text-center p-2">
                   <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
                   <div className="bg-white p-4 rounded-[2rem] inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} className="w-52 h-52" alt="QR Code" /></div>
-                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {Math.floor(pixTimeLeft/60)}:{(pixTimeLeft%60).toString().padStart(2,'0')}</div>
-                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
+                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
+                  <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
+                    <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
+                 </div>
+                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
                     {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
-                  </button>
+                 </button>
                 </div>
               ) : (
                 <div className="space-y-4 pt-4">
@@ -662,7 +744,7 @@ export default function TelegramScratchApp() {
                   {[ { rs: 20, cr: 25, b: 5 }, { rs: 40, cr: 55, b: 15 }, { rs: 70, cr: 100, b: 30 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
                       <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
-                      <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em]">R$ {p.rs},00</span></div>
+                      <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
                       <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                     </button>
                   ))}
