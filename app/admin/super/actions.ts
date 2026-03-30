@@ -4,16 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 
 const getSupabase = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Garanta que essa chave está na Vercel
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Chave mestra da Vercel
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// 🔥 NOME CORRIGIDO PARA BATER COM O SEU IMPORT 🔥
+// 🔥 BUSCA COMPLETA DE DADOS (GET) 🔥
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
     
-    // Busca todas as tabelas necessárias para a sua dash completa
     const [
       { data: globRes },
       { data: modelsRes },
@@ -34,7 +33,8 @@ export async function getSuperAdminData() {
       supabase.from('VideoRequests').select('*, Models(slug,whatsapp,full_name)').eq('status', 'pago')
     ]);
 
-    const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    // O tempo exato de 3 minutos atrás em milissegundos (Blindado contra fuso horário)
+    const threeMinsAgo = Date.now() - 3 * 60 * 1000;
 
     return {
       ok: true,
@@ -45,9 +45,11 @@ export async function getSuperAdminData() {
         withdrawals: withsRes || [],
         applications: (appsRes || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
         totalPlayers: pCount || 0,
+        // 🔥 AQUI ESTÁ O FILTRO DE CARRINHOS ABANDONADOS 🔥
         abandoned: (cartsRes || []).filter((c: any) => {
           const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-          return isPendente && c.created_at < threeMinsAgo;
+          const isOldEnough = new Date(c.created_at).getTime() < threeMinsAgo;
+          return isPendente && isOldEnough;
         }),
         videoRequests: vidsRes || []
       }
@@ -112,6 +114,14 @@ export async function runAdminAction(action: string, payload: any) {
 
     if (action === "rejectApplication") {
       await supabase.from('Applications').delete().eq('id', payload.id);
+    }
+
+    if (action === "createModel") {
+      const { data: m, error: mErr } = await supabase.from('Models').insert({
+        slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
+      }).select().single();
+      if (mErr || !m) throw new Error("Erro ao criar modelo manual.");
+      await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
     }
 
     if (action === "deleteModel") {
