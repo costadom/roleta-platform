@@ -43,7 +43,6 @@ export default function TelegramMiniApp() {
 
   const [clickCount, setClickCount] = useState(0);
   
-  // Estados para Vincular Conta
   const [linkWa, setLinkWa] = useState("");
   const [linkPwd, setLinkPwd] = useState("");
   const [isLinking, setIsLinking] = useState(false);
@@ -118,22 +117,19 @@ export default function TelegramMiniApp() {
         setModel({ id: mId, ...resConfig[0] });
       }
 
-      // 🔥 BUSCA INTELIGENTE: Procura primeiro se existe conta vinculada ao Telegram ID
       let resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${mId}&select=*`, { headers });
       let playerData = await resPlayer.json();
 
-      // Se não achou, procura pela conta fantasma antiga (TG_...)
       if (!playerData || playerData.length === 0) {
           const pseudoWhatsapp = `TG_${user.id}`;
           resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${mId}&select=*`, { headers });
           playerData = await resPlayer.json();
       }
 
-      // Se não tem NENHUMA das duas, cria uma nova
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
           whatsapp: `TG_${user.id}`,
-          telegram_id: user.id.toString(), // Salva o ID real aqui!
+          telegram_id: user.id.toString(),
           name: user.first_name || "Visitante TG", 
           nickname: user.first_name || "VIP",
           full_name: `${user.first_name} ${user.last_name || ''}`.trim() || "Usuário Telegram",
@@ -167,40 +163,31 @@ export default function TelegramMiniApp() {
     }
   }
 
-  // 🔥 O UNIFICADOR DE CONTAS 🔥
   const handleLinkAccount = async () => {
       if (!linkWa || !linkPwd || linkWa.length < 10) return alert("Preencha seu WhatsApp com DDD e crie uma senha.");
       setIsLinking(true);
       
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
-          
-          // Limpa o numero (só numeros)
           const cleanWa = linkWa.replace(/\D/g, "");
           
-          // 1. Verifica se já existe conta oficial no site
           const checkRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${cleanWa}&model_id=eq.${model.id}&select=*`, { headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
           const realAccountData = await checkRes.json();
 
           if (realAccountData && realAccountData.length > 0) {
-              // 🔴 CENÁRIO 1: A CONTA OFICIAL JÁ EXISTE! VAMOS FUNDIR AS DUAS.
               const realAccount = realAccountData[0];
-              const mergedCredits = realAccount.credits + player.credits; // Soma os créditos
+              const mergedCredits = realAccount.credits + player.credits;
               
-              // Atualiza a conta oficial com o saldo somado e o ID do Telegram
               await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${realAccount.id}`, { 
                   method: "PATCH", headers, 
                   body: JSON.stringify({ credits: mergedCredits, telegram_id: tgUser.id.toString() }) 
               });
               
-              // Apaga a conta fantasma do Telegram
               await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { method: "DELETE", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` } });
               
-              // Atualiza a tela pro cliente
               setPlayer({ ...realAccount, credits: mergedCredits, telegram_id: tgUser.id.toString() });
               setLinkSuccess("Contas fundidas com sucesso! Seu saldo foi somado.");
           } else {
-              // 🟢 CENÁRIO 2: É UM CLIENTE NOVO! VAMOS TRANSFORMAR A FANTASMA NUMA OFICIAL.
               const updateRes = await fetch(`${supabaseUrl}/rest/v1/Players?id=eq.${player.id}`, { 
                   method: "PATCH", headers, 
                   body: JSON.stringify({ whatsapp: cleanWa, password: linkPwd, telegram_id: tgUser.id.toString() }) 
@@ -255,7 +242,15 @@ export default function TelegramMiniApp() {
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
   const handleGeneratePix = async (val: number) => {
-    if (!player) return;
+    if (!player) {
+        if ((window as any).Telegram?.WebApp) {
+            (window as any).Telegram.WebApp.showAlert("Erro: Identificação perdida. Feche a roleta e abra de novo.");
+        } else {
+            alert("Erro: Identificação perdida. Feche a roleta e abra de novo.");
+        }
+        return;
+    }
+    
     setPixLoading(true);
     setPixData(null);
     setPixPaid(false);
@@ -401,7 +396,7 @@ export default function TelegramMiniApp() {
                 </div>
              </div>
              
-             {/* MENU DE ABAS (HUB DE JOGOS) */}
+             {/* MENU DE ABAS */}
              <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-2 w-max shadow-[0_0_20px_rgba(217,70,239,0.15)] z-20">
                 <div className="px-6 py-2 bg-gradient-to-r from-[#D946EF] to-[#9b29ab] text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
                    <Zap size={14} fill="currentColor"/> Roleta VIP
@@ -464,7 +459,6 @@ export default function TelegramMiniApp() {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2">
                 
-                {/* CAIXA DE VINCULAR CONTA */}
                 {player.whatsapp.startsWith('TG_') ? (
                     <div className="bg-[#050505] border border-white/10 p-5 rounded-3xl shadow-inner mb-6">
                         <h3 className="text-[11px] font-black uppercase text-[#D946EF] mb-2 flex items-center gap-2"><Lock size={14}/> Salve seu Progresso</h3>
@@ -498,6 +492,7 @@ export default function TelegramMiniApp() {
         </div>
       )}
 
+      {/* 🔥 PACOTES CORRIGIDOS 🔥 */}
       {showDeposit && (
         <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
@@ -523,16 +518,17 @@ export default function TelegramMiniApp() {
                  <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
                     {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
                  </button>
-                 <p className="mt-4 text-[8px] text-white/30 uppercase font-black animate-pulse">Aguardando confirmação...</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
-                {[ { rs: 20, cr: 25, b: 5 }, { rs: 40, cr: 55, b: 15 }, { rs: 70, cr: 100, b: 30 } ].map((p) => (
+              <div className="space-y-4 pt-4">
+                <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
+                
+                {/* PACOTES PADRÃO: 25 por R$20, 35 por R$30, 45 por R$40, 55 por R$50 */}
+                {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                   <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
-                    <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
+                    <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
                     <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
-                    <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-md">Comprar</div>
+                    <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                   </button>
                 ))}
               </div>
