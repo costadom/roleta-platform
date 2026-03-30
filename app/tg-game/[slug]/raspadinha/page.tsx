@@ -245,6 +245,12 @@ export default function TelegramScratchApp() {
   const [isLinking, setIsLinking] = useState(false);
   const [linkSuccess, setLinkSuccess] = useState("");
 
+  // 🔥 NOVO ESTADO: PACOTES DA CENTRAL 🔥
+  const [rechargePackages, setRechargePackages] = useState<any[]>([
+    { id: 1, amount: 10, bonus: 2 },
+    { id: 2, amount: 20, bonus: 5 }
+  ]);
+
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
@@ -278,6 +284,12 @@ export default function TelegramScratchApp() {
   async function fetchInitialData(user: any) {
     try {
       setLoading(true);
+
+      // 🔥 PUXA PACOTES DA CENTRAL 🔥
+      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=recharge_packages`, { headers }).then(r => r.json()).catch(() => null);
+      if (resGlob?.[0]?.recharge_packages) {
+          setRechargePackages(resGlob[0].recharge_packages);
+      }
 
       const [modRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers }),
@@ -833,7 +845,7 @@ export default function TelegramScratchApp() {
             currentScratch ? "opacity-30 pointer-events-none" : "opacity-100"
           }`}
         >
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-2 gap-2 mb-2">
             <button
               onClick={() => buyPackage(1)}
               disabled={isProcessingBuy}
@@ -980,7 +992,7 @@ export default function TelegramScratchApp() {
           </div>
         )}
 
-        {/* MODAL DE DEPÓSITO / PIX */}
+        {/* Modal PIX 🔥 BOTOES DINAMICOS AQUI 🔥 */}
         {showDeposit && (
           <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
             <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
@@ -1022,7 +1034,7 @@ export default function TelegramScratchApp() {
               ) : pixData ? (
                 <div className="text-center p-2">
                   <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">
-                    Pagar com PIX
+                    Pague com PIX
                   </h2>
                   <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
                     <img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" />
@@ -1054,26 +1066,25 @@ export default function TelegramScratchApp() {
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">
                     Recarregar <span className="text-[#D946EF]">Labz</span>
                   </h2>
-                  {[
-                    { rs: 20, cr: 25 },
-                    { rs: 30, cr: 35 },
-                    { rs: 40, cr: 45 },
-                    { rs: 50, cr: 55 },
-                  ].map((p) => (
+                  
+                  {/* 🔥 A MÁGICA DOS PACOTES DINÂMICOS AQUI 🔥 */}
+                  {rechargePackages.map((p) => (
                     <button
-                      key={p.rs}
-                      onClick={() => handleGeneratePix(p.rs)}
-                      className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden shadow-lg"
+                      key={p.id || p.amount}
+                      onClick={() => handleGeneratePix(p.amount)}
+                      className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg"
                     >
-                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">
-                        +5 BÔNUS
-                      </div>
+                      {Number(p.bonus) > 0 && (
+                        <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">
+                          +{p.bonus} BÔNUS
+                        </div>
+                      )}
                       <div className="text-left">
                         <span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">
-                          {p.cr} CRÉDITOS
+                          {Number(p.amount) + Number(p.bonus)} CRÉDITOS
                         </span>
                         <span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">
-                          R$ {p.rs},00
+                          R$ {p.amount},00
                         </span>
                       </div>
                       <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">
