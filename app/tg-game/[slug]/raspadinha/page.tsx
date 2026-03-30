@@ -15,8 +15,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- COMPONENTES AUXILIARES ---
-
 const NoticeModal = ({ message, onClose }: { message: string, onClose: () => void }) => (
   <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
     <div className="bg-[#111] border border-[#D946EF]/30 p-6 rounded-3xl w-full max-w-xs text-center shadow-[0_0_40px_rgba(217,70,239,0.2)] animate-in zoom-in-95">
@@ -27,7 +25,6 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
-// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -153,10 +150,9 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 };
 
 
-// --- PÁGINA PRINCIPAL DO TELEGRAM ---
-
 export default function TelegramScratchApp() {
   const params = useParams();
+  const router = useRouter();
   const slug = params.slug as string;
 
   const [tgUser, setTgUser] = useState<any>(null);
@@ -204,9 +200,6 @@ export default function TelegramScratchApp() {
         
         const user = tg.initDataUnsafe?.user;
         
-        // 🔥 PARA TESTAR NO CHROME/SAFARI NO COMPUTADOR, DESCOMENTE A LINHA ABAIXO 🔥
-        // const user = { id: 123456789, first_name: "Rafael", last_name: "Teste" };
-        
         if (user) {
           setTgUser(user);
           fetchInitialData(user);
@@ -233,7 +226,6 @@ export default function TelegramScratchApp() {
       const { data: photos } = await supabase.from('ModelScratchPhotos').select('*').eq('model_id', modelData.id).eq('active', true);
       setModelPhotos(photos || []);
 
-      // LOGIN INVISÍVEL DO TELEGRAM
       const pseudoWhatsapp = user.id.toString();
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
       
@@ -370,7 +362,6 @@ export default function TelegramScratchApp() {
               setUnlockedPhotos(prev => [...prev, { photo_url: currentScratch.photo_url }]);
               confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, zIndex: 9999, colors: ['#D946EF', '#FFD700', '#ffffff'] });
 
-              // Avisa pelo bot (opicional na raspadinha, mas legal)
               if(!String(currentScratch.photo_url).includes("TENTE")) {
                   await fetch("/api/tg-send", {
                       method: "POST",
@@ -378,7 +369,7 @@ export default function TelegramScratchApp() {
                       body: JSON.stringify({
                           telegramId: tgUser.id,
                           prizeName: "Foto Exclusiva (Raspadinha)",
-                          deliveryValue: "Sua foto foi salva na sua Galeria da Raspadinha! Acesse para ver.",
+                          deliveryValue: "Sua foto foi salva na sua Galeria da Raspadinha! Acesse o Perfil para ver.",
                           modelName: modelName || slug,
                           modelSlug: slug
                       })
@@ -404,7 +395,6 @@ export default function TelegramScratchApp() {
       }
   };
 
-  // --- MONITORAMENTO PIX ---
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -466,7 +456,7 @@ export default function TelegramScratchApp() {
     } catch (e) { setNotice("Falha ao gerar o Pix. Tente novamente."); } finally { setPixLoading(false); }
   };
 
-  if (loading) return <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center text-[#D946EF] font-black uppercase text-xs animate-pulse tracking-widest">Carregando Labz...</div>;
+  if (loading) return <div className="h-[100dvh] w-full bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-xs animate-pulse tracking-widest">Carregando Labz...</div>;
   if (errorMsg) return <div className="h-[100dvh] w-full bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
@@ -474,7 +464,6 @@ export default function TelegramScratchApp() {
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      {/* Libera o scroll se a tela for pequena */}
       <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar pb-6">
         
         <div className="absolute inset-0 z-0 h-[100vh] fixed pointer-events-none">
@@ -484,12 +473,23 @@ export default function TelegramScratchApp() {
 
         <div className="relative z-10 p-4 flex flex-col gap-3 shrink-0">
            <div className="flex justify-between items-center px-1">
-              <div className="flex gap-2">
-                 <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all"><User size={16}/></button>
-              </div>
               <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
+              <div className="flex gap-2">
+                 <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg"><User size={16}/></button>
+              </div>
            </div>
-           <div className="flex flex-col items-center">
+
+           {/* MENU DE ABAS (HUB DE JOGOS) - INVERTIDO PARA A RASPADINHA */}
+           <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-2 w-max shadow-[0_0_20px_rgba(255,215,0,0.15)] z-20">
+              <button onClick={() => router.push(`/tg-game/${slug}`)} className="px-6 py-2 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
+                 <Zap size={14} /> Roleta
+              </button>
+              <div className="px-6 py-2 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
+                 <Sparkles size={14} fill="currentColor"/> Raspadinha
+              </div>
+           </div>
+
+           <div className="flex flex-col items-center mt-2">
               <span className="text-[#D946EF] font-black italic text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
               <span className="text-[9px] text-[#FFD700] font-black uppercase mt-1 tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
            </div>
@@ -559,7 +559,6 @@ export default function TelegramScratchApp() {
 
           {!currentScratch && (
               <div className="mt-6 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
-                 {/* BOTAO MAGICO DO DEV AQUI */}
                  <div className="px-6 py-2 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
                     <Coins size={16} className="text-[#FFD700] pointer-events-none" />
                     <span className="text-lg font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
