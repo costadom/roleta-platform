@@ -4,15 +4,16 @@ import { createClient } from '@supabase/supabase-js';
 
 const getSupabase = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Garanta que essa chave está na Vercel
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// 🔥 NOME CORRIGIDO PARA BATER COM O IMPORT DA PAGE 🔥
+// 🔥 NOME CORRIGIDO PARA BATER COM O SEU IMPORT 🔥
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
     
+    // Busca todas as tabelas necessárias para a sua dash completa
     const [
       { data: globRes },
       { data: modelsRes },
@@ -57,6 +58,7 @@ export async function getSuperAdminData() {
   }
 }
 
+// 🔥 CENTRAL DE AÇÕES (POST) 🔥
 export async function runAdminAction(action: string, payload: any) {
   try {
     const supabase = getSupabase();
@@ -110,14 +112,6 @@ export async function runAdminAction(action: string, payload: any) {
 
     if (action === "rejectApplication") {
       await supabase.from('Applications').delete().eq('id', payload.id);
-    }
-
-    if (action === "createModel") {
-      const { data: m, error: mErr } = await supabase.from('Models').insert({
-        slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
-      }).select().single();
-      if (mErr || !m) throw new Error("Erro ao criar modelo manual.");
-      await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
     }
 
     if (action === "deleteModel") {
