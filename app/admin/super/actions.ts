@@ -4,24 +4,24 @@ import { createClient } from '@supabase/supabase-js';
 
 const getSupabase = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Chave mestra da Vercel
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// 1. BUSCA COMPLETA DE DADOS (GET)
-export async function getSuperAdminData() {
+export async function getSuperData() {
   try {
     const supabase = getSupabase();
     
+    // Puxa TUDO do banco com a Chave Mestra
     const [
-      { data: globRes },
-      { data: modelsRes },
-      { data: transRes },
-      { data: withsRes },
-      { data: appsRes },
+      { data: glob }, 
+      { data: mods }, 
+      { data: trans },
+      { data: withs }, 
+      { data: apps }, 
       { count: pCount },
-      { data: cartsRes },
-      { data: vidsRes }
+      { data: carts }, 
+      { data: vids }
     ] = await Promise.all([
       supabase.from('GlobalSettings').select('*').eq('id', 'main').single(),
       supabase.from('Models').select('*').order('created_at', { ascending: true }),
@@ -29,7 +29,7 @@ export async function getSuperAdminData() {
       supabase.from('Withdrawals').select('*').order('created_at', { ascending: false }),
       supabase.from('Applications').select('*'),
       supabase.from('Players').select('id', { count: 'exact', head: true }),
-      supabase.from('AbandonedCarts').select('*').order('created_at', { ascending: false }).limit(500),
+      supabase.from('AbandonedCarts').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('VideoRequests').select('*, Models(slug,whatsapp,full_name)').eq('status', 'pago')
     ]);
 
@@ -38,17 +38,16 @@ export async function getSuperAdminData() {
     return {
       ok: true,
       data: {
-        global: globRes || null,
-        models: modelsRes || [],
-        transactions: transRes || [],
-        withdrawals: withsRes || [],
-        applications: (appsRes || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
+        global: glob || null,
+        models: mods || [],
+        transactions: trans || [],
+        withdrawals: withs || [],
+        // Só mostra candidaturas que não foram decididas
+        applications: (apps || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
         totalPlayers: pCount || 0,
-        abandoned: (cartsRes || []).filter((c: any) => {
-          const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-          return isPendente && c.created_at < threeMinsAgo;
-        }),
-        videoRequests: vidsRes || []
+        // Só mostra carrinhos abandonados há mais de 3 minutos e que não foram ignorados
+        abandoned: (carts || []).filter((c: any) => (!c.status || c.status === 'pendente') && c.created_at < threeMinsAgo),
+        videoRequests: vids || []
       }
     };
   } catch (e: any) { 
@@ -56,20 +55,10 @@ export async function getSuperAdminData() {
   }
 }
 
-// 2. CENTRAL DE AÇÕES (POST)
 export async function runAdminAction(action: string, payload: any) {
   try {
     const supabase = getSupabase();
-
-    if (action === "resetSystem") {
-      await Promise.all([
-        supabase.from('Transactions').delete().neq('id', '000'),
-        supabase.from('SpinHistory').delete().neq('id', '000'),
-        supabase.from('Withdrawals').delete().neq('id', '000'),
-        supabase.from('AbandonedCarts').delete().neq('id', '000')
-      ]);
-    }
-
+    
     if (action === "saveGlobal") {
       await supabase.from('GlobalSettings').update({
         announcement_msg: payload.globalMsg,
@@ -81,7 +70,7 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveWithdrawal") {
-      await supabase.from('Withdrawals').update({ status: 'pago', is_read: false }).eq('id', payload.id);
+      await supabase.from('Withdrawals').update({ status: 'pago' }).eq('id', payload.id);
     }
 
     if (action === "ignoreAbandoned") {
@@ -89,45 +78,38 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveApplication") {
-      const generatedEmail = payload.email || `${payload.nickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `${payload.nickname.charAt(0).toUpperCase()}${payload.nickname.slice(1)}Labz2026!`;
-      
-      const { data: m, error: mErr } = await supabase.from('Models').insert({
-        slug: payload.nickname.toLowerCase(), email: generatedEmail, password: generatedPass,
-        full_name: payload.full_name, whatsapp: payload.whatsapp, referred_by: payload.referred_by || null
-      }).select().single();
-
-      if (mErr || !m) throw new Error("Erro ao criar modelo.");
-
-      await supabase.from('Configs').insert({ 
-        model_id: m.id, model_name: payload.nickname.toUpperCase(), spin_cost: 2, 
-        bg_url: payload.bg_url, profile_url: payload.profile_url || payload.bg_url 
-      });
-
-      await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
-      return { ok: true, data: { generatedEmail, generatedPass } };
+        const generatedEmail = payload.email || `${payload.nickname.toLowerCase()}@labzsexy.com`;
+        const generatedPass = `${payload.nickname.charAt(0).toUpperCase()}${payload.nickname.slice(1)}Labz2026!`;
+        
+        const { data: m } = await supabase.from('Models').insert({
+            slug: payload.nickname.toLowerCase(), email: generatedEmail, password: generatedPass,
+            full_name: payload.full_name, whatsapp: payload.whatsapp, referred_by: payload.referred_by || null
+        }).select().single();
+        
+        if (m) {
+            await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.nickname.toUpperCase(), spin_cost: 2, bg_url: payload.bg_url, profile_url: payload.profile_url || payload.bg_url });
+            await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
+            return { ok: true, data: { generatedEmail, generatedPass } };
+        }
     }
 
-    if (action === "rejectApplication") {
-      await supabase.from('Applications').delete().eq('id', payload.id);
-    }
-
-    if (action === "createModel") {
-      const { data: m, error: mErr } = await supabase.from('Models').insert({
-        slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
-      }).select().single();
-      if (mErr || !m) throw new Error("Erro ao criar modelo manual.");
-      await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
-    }
-
+    if (action === "rejectApplication") { await supabase.from('Applications').delete().eq('id', payload.id); }
+    
     if (action === "deleteModel") {
-      await supabase.from('Configs').delete().eq('model_id', payload.id);
-      await supabase.from('Prize').delete().eq('model_id', payload.id);
-      await supabase.from('Models').delete().eq('id', payload.id);
+        await supabase.from('Configs').delete().eq('model_id', payload.id);
+        await supabase.from('Prize').delete().eq('model_id', payload.id);
+        await supabase.from('Models').delete().eq('id', payload.id);
+    }
+
+    if (action === "resetSystem") {
+        await Promise.all([
+          supabase.from('Transactions').delete().neq('id', '000'),
+          supabase.from('SpinHistory').delete().neq('id', '000'),
+          supabase.from('Withdrawals').delete().neq('id', '000'),
+          supabase.from('AbandonedCarts').delete().neq('id', '000')
+        ]);
     }
 
     return { ok: true };
-  } catch (e: any) { 
-    return { ok: false, error: e.message }; 
-  }
+  } catch (e: any) { return { ok: false, error: e.message }; }
 }
