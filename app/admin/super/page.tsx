@@ -38,40 +38,72 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 ARQUITETURA MEDIADA POR SERVIDOR (O fim do erro CORS) 🔥
+  // 🔥 ARQUITETURA À PROVA DE BALAS: SEQUENCIAL E LENTA 🔥
   const fetchData = async () => {
     try {
-      // Faz UMA ÚNICA chamada para a nossa própria API, sem bater no Supabase REST direto
-      const res = await fetch('/api/super-admin', { cache: 'no-store' });
+      // SEM Cache-Control (Evita o erro de CORS do Safari)
+      const headers = { 
+        apikey: supabaseKey!, 
+        Authorization: `Bearer ${supabaseKey}`
+      };
+
+      const getDb = async (endpoint: string) => {
+          try {
+              const res = await fetch(`${supabaseUrl}/rest/v1/${endpoint}`, { headers });
+              if (!res.ok) return null; 
+              return await res.json();
+          } catch (e) { return null; }
+      };
+
+      // 1. CARREGA O ESSENCIAL PRIMEIRO E ABRE A TELA
+      const dataGlob = await getDb('GlobalSettings?id=eq.main&select=*');
+      if (dataGlob && dataGlob[0]) {
+        setGlobalMsg(dataGlob[0].announcement_msg);
+        setRankVisible(dataGlob[0].ranking_visible);
+        setGoalAmount(dataGlob[0].goal_amount);
+        setGoalReward(dataGlob[0].goal_reward);
+      }
+
+      const dataMod = await getDb('Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc');
+      if (dataMod) setModels(dataMod);
       
-      if (!res.ok) {
-          throw new Error("Falha ao carregar dados do servidor interno.");
+      // TELA LIBERADA (O spinner morre aqui!)
+      setInitialLoading(false); 
+
+      // 2. CARREGA O RESTO UM DE CADA VEZ (Para o Supabase não achar que é ataque)
+      const dataTrans = await getDb('Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100');
+      if (dataTrans) setTransactions(dataTrans);
+
+      const dataWith = await getDb('Withdrawals?select=*&order=created_at.desc');
+      if (dataWith) setWithdrawals(dataWith);
+
+      const dataApp = await getDb('Applications?select=*');
+      if (dataApp) setApplications(dataApp.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
+
+      try {
+          const resCount = await fetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { ...headers, "Prefer": "count=exact" } });
+          if (resCount.ok) {
+              const range = resCount.headers.get("content-range");
+              if (range) setTotalPlayers(parseInt(range.split("/")[1], 10));
+          }
+      } catch(e) {}
+
+      const dataAbandon = await getDb('AbandonedCarts?select=*&order=created_at.desc&limit=500');
+      if (dataAbandon) {
+        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
+        setAbandoned(dataAbandon.filter((c: any) => {
+          const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
+          const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
+          return isPendente && isOldEnough;
+        }));
       }
 
-      const data = await res.json();
-
-      // Distribui os dados mastigados pela API para a tela
-      if (data.globalSettings) {
-        setGlobalMsg(data.globalSettings.announcement_msg || "");
-        setRankVisible(data.globalSettings.ranking_visible || false);
-        setGoalAmount(data.globalSettings.goal_amount || 1000);
-        setGoalReward(data.globalSettings.goal_reward || "");
-      }
-
-      setModels(data.models || []);
-      setTransactions(data.transactions || []);
-      setWithdrawals(data.withdrawals || []);
-      setApplications(data.applications || []);
-      setTotalPlayers(data.totalPlayers || 0);
-      setAbandoned(data.abandonedCarts || []);
-      setVideoRequests(data.videoRequests || []);
-
-      setInitialLoading(false); // Tela carregada na hora!
+      const dataVideos = await getDb('VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)');
+      if (dataVideos) setVideoRequests(dataVideos);
 
     } catch (err) { 
-      console.error("Erro no fetch da API Interna:", err); 
-      setInitialLoading(false);
-      alert("Houve um erro de conexão. Tente recarregar a página.");
+      console.error("Erro fatal:", err); 
+      setInitialLoading(false); 
     }
   };
 
@@ -92,19 +124,16 @@ export default function SuperAdmin() {
     } else { alert("Acesso negado!"); }
   };
 
-  // Mutações continuam funcionando normalmente, mas sem o Cache-Control bugado
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
     if (confirmText !== "ZERARTUDO") return;
     setInitialLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers })
-      ]);
+      await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers });
       fetchData();
     } catch (err) { alert("Erro."); setInitialLoading(false); }
   };
