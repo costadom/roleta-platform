@@ -38,14 +38,16 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 ARQUITETURA MEDIADA PELO SERVIDOR (ZERO ERROS DE CORS) 🔥
+  // 🔥 ARQUITETURA MEDIADA POR SERVIDOR E INVISÍVEL AO SAFARI 🔥
   const fetchData = async () => {
     try {
-      // O Navegador pede TUDO numa única rota local
-      const res = await fetch('/api/super-admin', { cache: 'no-store' });
+      // Chama a nova API com nome genérico para burlar o ad-block do iOS/Safari
+      const res = await fetch('/api/sys-data', { cache: 'no-store' });
       
-      if (!res.ok) throw new Error("Falha na API");
-      
+      if (!res.ok) {
+          throw new Error("Falha ao carregar dados do servidor interno.");
+      }
+
       const data = await res.json();
 
       if (data.globalSettings) {
@@ -63,11 +65,11 @@ export default function SuperAdmin() {
       setAbandoned(data.abandonedCarts || []);
       setVideoRequests(data.videoRequests || []);
 
-      setInitialLoading(false); // Tela abre na hora
+      setInitialLoading(false); // Tela carregada na hora com os dados reais!
 
     } catch (err) { 
-      console.error("Erro ao puxar dados da API:", err); 
-      setInitialLoading(false); 
+      console.error("Erro no fetch da API Interna:", err); 
+      setInitialLoading(false);
     }
   };
 
@@ -88,7 +90,6 @@ export default function SuperAdmin() {
     } else { alert("Acesso negado!"); }
   };
 
-  // Funções de Escrita mantidas intactas
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
     if (confirmText !== "ZERARTUDO") return;
@@ -225,7 +226,6 @@ export default function SuperAdmin() {
           </div>
         </div>
 
-        {/* 🔥 NOVOS ALERTAS: VÍDEOS SOLICITADOS 🔥 */}
         {videoRequests.length > 0 && (
           <div className="mb-12 bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(59,130,246,0.1)]">
             <h2 className="text-xs font-black uppercase text-blue-400 mb-4 flex items-center gap-2 tracking-widest"><Video size={16}/> {videoRequests.length} Novos Pedidos de Vídeo VIP</h2>
@@ -252,7 +252,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* PIX ABANDONADOS - CARD VERMELHO */}
         {abandoned.length > 0 && (
           <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
             <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
@@ -289,7 +288,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* CANDIDATURAS */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
@@ -308,7 +306,6 @@ export default function SuperAdmin() {
           </div>
         )}
 
-        {/* SAQUES PENDENTES */}
         {withdrawals.filter(w => w.status === 'pendente').length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {withdrawals.filter(w => w.status === 'pendente').length} Saques (PIX) Solicitados</h2>
@@ -423,7 +420,6 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -436,7 +432,6 @@ export default function SuperAdmin() {
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
                 
-                {/* 🔥 EXIBIÇÃO DE EMAIL E CPF 🔥 */}
                 <div><p className="text-[8px] text-white/40 uppercase font-black">E-mail de Cadastro</p><p className="text-[10px] font-bold text-white">{selectedApp.email || "Não informado"}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">CPF / Nasc.</p><p className="text-[10px] font-bold text-white">{selectedApp.cpf || "Não informado"} - {selectedApp.birth_date}</p></div>
 
@@ -452,7 +447,6 @@ export default function SuperAdmin() {
         </div>
       )}
 
-      {/* MODAL CRIAR MANUAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
