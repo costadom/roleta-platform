@@ -43,6 +43,12 @@ export default function GamePage() {
   const [wonPrizes, setWonPrizes] = useState<any[]>([]);
   const [superMsg, setSuperMsg] = useState("");
 
+  // 🔥 NOVO: Estado que guarda os pacotes dinâmicos da Central 🔥
+  const [rechargePackages, setRechargePackages] = useState<any[]>([
+    { id: 1, amount: 10, bonus: 2 },
+    { id: 2, amount: 20, bonus: 5 }
+  ]); // Valores padrão caso o banco demore
+
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -62,6 +68,15 @@ export default function GamePage() {
         const dataMod = await resMod.json();
         const mId = dataMod[0]?.id;
         if (!mId) { setLoading(false); return; }
+
+        // 🔥 NOVO: Busca os pacotes da Central de Configurações Globais 🔥
+        const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=recharge_packages`, { headers }).catch(() => null);
+        if (resGlob && resGlob.ok) {
+            const globData = await resGlob.json();
+            if (globData?.[0]?.recharge_packages) {
+                setRechargePackages(globData[0].recharge_packages);
+            }
+        }
 
         let prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*&order=created_at.asc`, { headers }).catch(() => null);
         if (!prizesRes || !prizesRes.ok) prizesRes = await fetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${mId}&select=*`, { headers }).catch(() => null);
@@ -106,7 +121,6 @@ export default function GamePage() {
     }
   }, [slug]);
 
-  // Checagem do pagamento aprovado
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -134,7 +148,6 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, [pixData, pixPaid, player, activeCartId]);
 
-  // Cronômetro do Pix
   useEffect(() => {
     let timer: any;
     if (pixData && !pixPaid && pixTimeLeft > 0) {
@@ -145,7 +158,6 @@ export default function GamePage() {
 
   const formatTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
-  // 🔥 RESTAURADA: Função de geração de PIX com Carrinho Abandonado 🔥
   const handleGeneratePix = async (val: number) => {
     if (!player) return;
     setPixLoading(true);
@@ -154,7 +166,6 @@ export default function GamePage() {
     setActiveCartId(null);
     setPixTimeLeft(600); 
     
-    // Registro do Carrinho Abandonado para Recuperação de Vendas
     try {
       const resCart = await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts`, {
         method: 'POST',
@@ -396,13 +407,21 @@ export default function GamePage() {
             ) : (
               <div className="space-y-3">
                 <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
-                {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
-                  <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
-                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+5 BÔNUS</div>
-                    <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
+                
+                {/* 🔥 NOVO: MAPEANDO OS PACOTES DINÂMICOS DO SUPER ADMIN 🔥 */}
+                {rechargePackages.map((p) => (
+                  <button key={p.id || p.amount} onClick={() => handleGeneratePix(p.amount)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
+                    {Number(p.bonus) > 0 && (
+                      <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+{p.bonus} BÔNUS</div>
+                    )}
+                    <div className="text-left">
+                      <span className="block text-sm font-black text-white">{Number(p.amount) + Number(p.bonus)} CRÉDITOS</span>
+                      <span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.amount},00</span>
+                    </div>
                     <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase">Comprar</div>
                   </button>
                 ))}
+
               </div>
             )}
           </div>
