@@ -12,6 +12,7 @@ const SPIN_DURATION = 5000;
 
 export default function TelegramMiniApp() {
   const params = useParams();
+  const router = useRouter(); // 🔥 Adicionado o Router para poder trocar de tela
   const slug = params.slug;
 
   const [tgUser, setTgUser] = useState<any>(null);
@@ -137,7 +138,6 @@ export default function TelegramMiniApp() {
         if (createdData && Array.isArray(createdData) && createdData.length > 0) {
             playerData = createdData;
         } else {
-            console.error("Erro banco de dados:", createdData);
             throw new Error("Erro Crítico: O banco rejeitou a criação do jogador. Avise o Dev.");
         }
       }
@@ -360,10 +360,9 @@ export default function TelegramMiniApp() {
 
   return (
     <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden">
-      {/* 🔥 ALTERAÇÃO DE LAYOUT AQUI: Libera o scroll (overflow-y-auto) se a tela for pequena 🔥 */}
       <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar pb-6">
         
-        <div className="absolute inset-0 z-0 h-[100vh] fixed">
+        <div className="absolute inset-0 z-0 h-[100vh] fixed pointer-events-none">
            <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 blur-[2px]" style={{ backgroundImage: `url(${bgUrl})`, opacity: 0.4 }} />
            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
         </div>
@@ -376,7 +375,17 @@ export default function TelegramMiniApp() {
                    <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
                 </div>
              </div>
-             <div className="flex flex-col items-center"><span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span><span className="text-[10px] text-[#FFD700] font-black uppercase mt-0.5 tracking-widest italic">Musa {modelName}</span></div>
+             
+             {/* MENU DE ABAS (HUB DE JOGOS) */}
+             <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-2 w-max shadow-[0_0_20px_rgba(217,70,239,0.15)] z-20">
+                <div className="px-6 py-2 bg-gradient-to-r from-[#D946EF] to-[#9b29ab] text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
+                   <Zap size={14} fill="currentColor"/> Roleta VIP
+                </div>
+                <button onClick={() => router.push(`/tg-game/${slug}/raspadinha`)} className="px-6 py-2 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
+                   <Sparkles size={14} /> Raspadinha
+                </button>
+             </div>
+
           </div>
 
           <div className="w-full h-9 bg-black/60 border-y border-white/5 backdrop-blur-sm overflow-hidden flex items-center relative shrink-0">
@@ -445,11 +454,11 @@ export default function TelegramMiniApp() {
             ) : (
               <div className="space-y-3">
                 <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
-                {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
-                  <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
-                    <div className="absolute top-0 right-0 bg-[#FFD700] text-black text-[7px] font-black px-2 py-0.5 rounded-bl-lg">+5 BÔNUS</div>
-                    <div className="text-left"><span className="block text-sm font-black text-white">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
-                    <div className="bg-[#D946EF] text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase shadow-md">Comprar</div>
+                {[ { rs: 20, cr: 25, b: 5 }, { rs: 40, cr: 55, b: 15 }, { rs: 70, cr: 100, b: 30 } ].map((p) => (
+                  <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                    <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
+                    <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
+                    <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                   </button>
                 ))}
               </div>
