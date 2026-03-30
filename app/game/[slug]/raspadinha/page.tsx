@@ -188,6 +188,12 @@ export default function RaspadinhaPage() {
   const [pixTimeLeft, setPixTimeLeft] = useState(600);
   const [copied, setCopied] = useState(false);
 
+  // 🔥 NOVO ESTADO: PACOTES DA CENTRAL 🔥
+  const [rechargePackages, setRechargePackages] = useState<any[]>([
+    { id: 1, amount: 10, bonus: 2 },
+    { id: 2, amount: 20, bonus: 5 }
+  ]);
+
   useEffect(() => {
     fetchInitialData();
   }, [slug]);
@@ -200,6 +206,12 @@ export default function RaspadinhaPage() {
           setNotice("Faça login na vitrine para jogar.");
           setLoading(false);
           return;
+      }
+
+      // 🔥 PUXA PACOTES DA CENTRAL 🔥
+      const { data: globData } = await supabase.from('GlobalSettings').select('recharge_packages').eq('id', 'main').single();
+      if (globData?.recharge_packages) {
+          setRechargePackages(globData.recharge_packages);
       }
 
       const { data: modelData, error: modErr } = await supabase.from('Models').select('*, Configs(*)').eq('slug', slug).single();
@@ -248,31 +260,24 @@ export default function RaspadinhaPage() {
 
     try {
         // MOTOR DE CASSINO VIP: 
-        // 1x (10% base), 5x (18% base), 10x (25% base)
         let winChance = bundleSize === 10 ? 0.25 : bundleSize === 5 ? 0.18 : 0.10;
         
-        // FATOR ESCASSEZ: Avalia o inventário do cliente.
         if (unlockedPhotos.length >= 8) {
-            // Faltam só 2: A chance despenca em 75%! Fica entre 2.5% e 6.2%
             winChance = winChance * 0.25; 
         } else if (unlockedPhotos.length >= 5) {
-            // Já passou da metade: A chance cai em 40%. Fica entre 6% e 15%
             winChance = winChance * 0.60; 
         }
 
-        // Inverte a porcentagem para bater no Math.random() (ex: 25% vira 0.75)
         const winThreshold = 1 - winChance;
         
         let currentCredits = player.credits - cost;
         await supabase.from('Players').update({ credits: currentCredits }).eq('id', player.id);
         setPlayer({...player, credits: currentCredits});
 
-        // Pegar só fotos que ele não tem
         const availablePhotos = modelPhotos.filter(mp => !unlockedPhotos.find(up => up.photo_url === mp.photo_url));
         let pool = [...availablePhotos]; 
         let generatedQueue = [];
 
-        // Monta o lote
         for (let i = 0; i < bundleSize; i++) {
             if (Math.random() > winThreshold && pool.length > 0) {
                 const randomIndex = Math.floor(Math.random() * pool.length);
@@ -283,7 +288,6 @@ export default function RaspadinhaPage() {
             }
         }
 
-        // Embaralha para o "ganho" não vir sempre primeiro
         generatedQueue = shuffleArray(generatedQueue);
 
         setScratchQueue(generatedQueue);
@@ -529,7 +533,7 @@ export default function RaspadinhaPage() {
           </div>
         )}
 
-        {/* Modal PIX */}
+        {/* Modal PIX 🔥 AQUI ESTÃO OS BOTOES DINÂMICOS 🔥 */}
         {showDeposit && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200">
             <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)]">
@@ -555,13 +559,20 @@ export default function RaspadinhaPage() {
               ) : (
                 <div className="space-y-4 pt-4">
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
-                  {[ { rs: 20, cr: 25 }, { rs: 40, cr: 55 }, { rs: 70, cr: 100 } ].map((p) => (
-                    <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
-                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.b} BÔNUS</div>
-                      <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em]">R$ {p.rs},00</span></div>
+                  
+                  {rechargePackages.map((p) => (
+                    <button key={p.id || p.amount} onClick={() => handleGeneratePix(p.amount)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                      {Number(p.bonus) > 0 && (
+                        <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.bonus} BÔNUS</div>
+                      )}
+                      <div className="text-left">
+                        <span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{Number(p.amount) + Number(p.bonus)} CRÉDITOS</span>
+                        <span className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em]">R$ {p.amount},00</span>
+                      </div>
                       <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                     </button>
                   ))}
+
                 </div>
               )}
             </div>
