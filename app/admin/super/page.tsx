@@ -38,80 +38,40 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 ARQUITETURA ANTI-BLOQUEIO (FILA INDIANA COM RESPIRO) 🔥
+  // 🔥 ARQUITETURA MEDIADA POR SERVIDOR (O fim do erro CORS) 🔥
   const fetchData = async () => {
     try {
-      const headers = { 
-        apikey: supabaseKey!, 
-        Authorization: `Bearer ${supabaseKey}`, 
-        "Cache-Control": "no-cache" 
-      };
-
-      const fetchSafely = async (url: string, isCount = false) => {
-          try {
-              const res = await fetch(url, { headers: isCount ? { ...headers, "Prefer": "count=exact" } : headers });
-              if (!res.ok) return null;
-              if (isCount) return parseInt(res.headers.get("content-range")?.split("/")[1] || "0", 10);
-              return await res.json();
-          } catch (e) { return null; }
-      };
-
-      // 1. CARREGA O ESSENCIAL (Um por vez)
-      const dataGlob = await fetchSafely(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`);
-      if (dataGlob?.[0]) {
-          setGlobalMsg(dataGlob[0].announcement_msg);
-          setRankVisible(dataGlob[0].ranking_visible);
-          setGoalAmount(dataGlob[0].goal_amount);
-          setGoalReward(dataGlob[0].goal_reward);
+      // Faz UMA ÚNICA chamada para a nossa própria API, sem bater no Supabase REST direto
+      const res = await fetch('/api/super-admin', { cache: 'no-store' });
+      
+      if (!res.ok) {
+          throw new Error("Falha ao carregar dados do servidor interno.");
       }
 
-      const dataMod = await fetchSafely(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`);
-      if (dataMod) setModels(dataMod);
+      const data = await res.json();
 
-      // TELA LIBERADA (Tira a tela preta)
-      setInitialLoading(false); 
+      // Distribui os dados mastigados pela API para a tela
+      if (data.globalSettings) {
+        setGlobalMsg(data.globalSettings.announcement_msg || "");
+        setRankVisible(data.globalSettings.ranking_visible || false);
+        setGoalAmount(data.globalSettings.goal_amount || 1000);
+        setGoalReward(data.globalSettings.goal_reward || "");
+      }
 
-      // 2. CARREGA AS LISTAS PESADAS COM RESPIRO (Evita erro do Supabase)
-      const loadRest = async () => {
-          const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      setModels(data.models || []);
+      setTransactions(data.transactions || []);
+      setWithdrawals(data.withdrawals || []);
+      setApplications(data.applications || []);
+      setTotalPlayers(data.totalPlayers || 0);
+      setAbandoned(data.abandonedCarts || []);
+      setVideoRequests(data.videoRequests || []);
 
-          await sleep(200); // Respiro
-          const dataTrans = await fetchSafely(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`);
-          if (dataTrans) setTransactions(dataTrans);
-
-          await sleep(200); // Respiro
-          const dataWith = await fetchSafely(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`);
-          if (dataWith) setWithdrawals(dataWith);
-
-          await sleep(200); // Respiro
-          const dataApp = await fetchSafely(`${supabaseUrl}/rest/v1/Applications?select=*`);
-          if (dataApp) setApplications(dataApp.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
-
-          await sleep(200); // Respiro
-          const playerCount = await fetchSafely(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, true);
-          if (playerCount !== null) setTotalPlayers(playerCount);
-
-          await sleep(200); // Respiro
-          const dataAbandon = await fetchSafely(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`);
-          if (dataAbandon) {
-              const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-              setAbandoned(dataAbandon.filter((c: any) => {
-                  const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-                  const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
-                  return isPendente && isOldEnough;
-              }));
-          }
-
-          await sleep(200); // Respiro
-          const dataVideos = await fetchSafely(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`);
-          if (dataVideos) setVideoRequests(dataVideos);
-      };
-
-      loadRest(); // Roda no fundo sem travar
+      setInitialLoading(false); // Tela carregada na hora!
 
     } catch (err) { 
-      console.error("Erro no fetch principal", err); 
+      console.error("Erro no fetch da API Interna:", err); 
       setInitialLoading(false);
+      alert("Houve um erro de conexão. Tente recarregar a página.");
     }
   };
 
@@ -132,16 +92,19 @@ export default function SuperAdmin() {
     } else { alert("Acesso negado!"); }
   };
 
+  // Mutações continuam funcionando normalmente, mas sem o Cache-Control bugado
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
     if (confirmText !== "ZERARTUDO") return;
     setInitialLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
-      await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
-      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
-      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers });
+      await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers }),
+        fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers }),
+        fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers }),
+        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers })
+      ]);
       fetchData();
     } catch (err) { alert("Erro."); setInitialLoading(false); }
   };
