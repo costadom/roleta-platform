@@ -22,22 +22,6 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 🔥 FIX #2 — ScratchCanvas robusto para iOS Safari / Telegram WebView
-//
-// Estratégia:
-//   1. Usamos `useRef` para rastrear o estado "isDrawing" → evita closures velhos
-//      que eram a causa raiz do canvas não riscar no iOS.
-//   2. Os handlers de touch são registrados como ouvintes nativos com
-//      `{ passive: false }` no `useEffect` — isso permite chamar
-//      `e.preventDefault()` para bloquear o bounce/scroll do iOS SEM
-//      bloquear o próprio desenho.
-//   3. Os handlers do React (`onTouchStart`, `onTouchMove` etc.) são REMOVIDOS
-//      do JSX para evitar conflito com os ouvintes nativos. Apenas os eventos
-//      de mouse ficam no JSX (para desktop).
-//   4. A lógica de coordenadas usa `getBoundingClientRect` + escala do canvas
-//      para funcionar corretamente em qualquer DPI / zoom.
-// ─────────────────────────────────────────────────────────────────────────────
 const ScratchCanvas = ({
   onReveal,
   isRevealed,
@@ -48,15 +32,13 @@ const ScratchCanvas = ({
   coverText: string;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawingRef = useRef(false); // ← ref em vez de state para evitar closure stale
+  const isDrawingRef = useRef(false); 
   const isRevealedRef = useRef(isRevealed);
 
-  // Mantém a ref sincronizada com a prop
   useEffect(() => {
     isRevealedRef.current = isRevealed;
   }, [isRevealed]);
 
-  // Inicializa (ou re-inicializa) o canvas toda vez que o coverText muda
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -65,7 +47,6 @@ const ScratchCanvas = ({
 
     const { width, height } = canvas;
 
-    // Fundo metálico
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, "#888");
     gradient.addColorStop(0.5, "#ccc");
@@ -74,27 +55,23 @@ const ScratchCanvas = ({
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Ruído de textura
     ctx.fillStyle = "rgba(255,255,255,0.15)";
     for (let i = 0; i < 3000; i++) {
       ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
     }
 
-    // Texto do cartão
     ctx.fillStyle = "#333";
     ctx.font = "900 24px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
 
-    // Modo de apagamento para "raspar"
     ctx.globalCompositeOperation = "destination-out";
     ctx.lineWidth = 45;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }, [coverText]);
 
-  // Quando a prop isRevealed muda para true, limpa o canvas inteiro
   useEffect(() => {
     if (isRevealed && canvasRef.current) {
       const ctx = canvasRef.current.getContext("2d");
@@ -102,7 +79,6 @@ const ScratchCanvas = ({
     }
   }, [isRevealed]);
 
-  // ── Helpers de coordenadas ──
   const getPos = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -113,11 +89,10 @@ const ScratchCanvas = ({
     };
   }, []);
 
-  // ── Verificação de revelação ──
   const checkReveal = useCallback(
     (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
       if (isRevealedRef.current) return;
-      if (Math.random() > 0.1) return; // amostragem para performance
+      if (Math.random() > 0.1) return; 
 
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
@@ -135,7 +110,6 @@ const ScratchCanvas = ({
     [onReveal]
   );
 
-  // ── Handlers genéricos que recebem coordenadas já calculadas ──
   const startDraw = useCallback(
     (x: number, y: number) => {
       if (isRevealedRef.current) return;
@@ -167,24 +141,19 @@ const ScratchCanvas = ({
     isDrawingRef.current = false;
   }, []);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FIX iOS: registra eventos de TOUCH como ouvintes nativos com passive:false
-  // Isso nos permite chamar e.preventDefault() para bloquear o scroll
-  // do Telegram WebView sem impedir o desenho.
-  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault(); // bloqueia bounce do iOS
+      e.preventDefault(); 
       const touch = e.touches[0];
       const { x, y } = getPos(touch.clientX, touch.clientY);
       startDraw(x, y);
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); // bloqueia scroll enquanto raspa
+      e.preventDefault(); 
       const touch = e.touches[0];
       const { x, y } = getPos(touch.clientX, touch.clientY);
       draw(x, y);
@@ -208,7 +177,6 @@ const ScratchCanvas = ({
     };
   }, [getPos, startDraw, draw, endDraw]);
 
-  // ── Handlers de mouse para desktop (ficam no JSX normalmente) ──
   const handleMouseDown = (e: React.MouseEvent) => {
     const { x, y } = getPos(e.clientX, e.clientY);
     startDraw(x, y);
@@ -225,13 +193,10 @@ const ScratchCanvas = ({
       ref={canvasRef}
       width={400}
       height={500}
-      // touch-action:none via CSS impede gestos padrão do browser,
-      // mas os ouvintes nativos com preventDefault garantem o bloqueio real no iOS
       style={{ touchAction: "none" }}
       className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${
         isRevealed ? "pointer-events-none opacity-0 transition-opacity duration-500" : ""
       }`}
-      // Apenas mouse no JSX; touch é gerenciado pelos ouvintes nativos
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -240,9 +205,6 @@ const ScratchCanvas = ({
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Página principal
-// ─────────────────────────────────────────────────────────────────────────────
 export default function TelegramScratchApp() {
   const params = useParams();
   const router = useRouter();
@@ -290,7 +252,6 @@ export default function TelegramScratchApp() {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
-  // ── Inicialização do Telegram SDK ──
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-web-app.js";
@@ -314,24 +275,10 @@ export default function TelegramScratchApp() {
     };
   }, [slug]);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FIX #1 — fetchInitialData otimizado com Promise.all
-  //
-  // Antes: 5+ fetches sequenciais → cada um esperava o anterior terminar.
-  // Agora: agrupa em dois "batches" paralelos:
-  //   Batch A (independentes entre si): Model+Configs e Player lookup
-  //   Batch B (depende do model.id): Photos + ScratchHistory (em paralelo)
-  //
-  // O resultado é tipicamente 60-80% mais rápido no tempo total de carregamento.
-  // ─────────────────────────────────────────────────────────────────────────
   async function fetchInitialData(user: any) {
     try {
       setLoading(true);
 
-      // ── BATCH A: busca o Model (com Configs embutidos) em paralelo ──
-      // Não podemos buscar Player ainda porque precisamos do model.id,
-      // mas podemos montar a URL de lookup do player ao mesmo tempo
-      // que buscamos o model → ganhamos zero latência extra.
       const [modRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers }),
       ]);
@@ -348,7 +295,6 @@ export default function TelegramScratchApp() {
 
       const pseudoWhatsapp = `TG_${user.id}`;
 
-      // ── BATCH B: Photos + Player lookup em paralelo ──
       const [photosRes, playerByTgRes] = await Promise.all([
         fetch(
           `${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelData.id}&active=eq.true`,
@@ -365,7 +311,6 @@ export default function TelegramScratchApp() {
 
       let playerData = playerByTg;
 
-      // Fallback: tenta pelo pseudo-whatsapp se não achou pelo telegram_id
       if (!playerData || playerData.length === 0) {
         const fallbackRes = await fetch(
           `${supabaseUrl}/rest/v1/Players?whatsapp=eq.${pseudoWhatsapp}&model_id=eq.${modelData.id}&select=*`,
@@ -374,7 +319,6 @@ export default function TelegramScratchApp() {
         playerData = await fallbackRes.json();
       }
 
-      // Cria novo player se não existir
       if (!playerData || playerData.length === 0) {
         const newPlayerPayload = {
           whatsapp: pseudoWhatsapp,
@@ -384,7 +328,7 @@ export default function TelegramScratchApp() {
           full_name: `${user.first_name} ${user.last_name || ""}`.trim() || "Usuário Telegram",
           email: `${user.id}@tg.labzsexy.com`,
           password: `${user.id}TgAuth!`,
-          credits: 3,
+          credits: 1, // 🔥 AQUI: Começa apenas com 1 crédito
           model_id: modelData.id,
         };
 
@@ -399,7 +343,6 @@ export default function TelegramScratchApp() {
       if (playerData && playerData[0]) {
         setPlayer(playerData[0]);
 
-        // ScratchHistory busca em paralelo com o setPlayer (não bloqueia a UI)
         fetch(`${supabaseUrl}/rest/v1/ScratchHistory?player_id=eq.${playerData[0].id}`, { headers })
           .then((r) => r.json())
           .then((history) => setUnlockedPhotos(history || []))
@@ -412,7 +355,6 @@ export default function TelegramScratchApp() {
     }
   }
 
-  // ── Vincular conta ──
   const handleLinkAccount = async () => {
     if (!linkWa || !linkPwd || linkWa.length < 10)
       return setNotice("Preencha seu WhatsApp com DDD e crie uma senha.");
@@ -472,7 +414,6 @@ export default function TelegramScratchApp() {
     setIsLinking(false);
   };
 
-  // ── Dev hack ──
   const handleDevHack = () => {
     setClickCount((prev) => {
       const next = prev + 1;
@@ -510,7 +451,6 @@ export default function TelegramScratchApp() {
     return arr;
   };
 
-  // ── Comprar pacote ──
   const buyPackage = async (bundleSize: number) => {
     if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
     if (!player) return setNotice("Faça login para jogar.");
@@ -567,7 +507,6 @@ export default function TelegramScratchApp() {
     }
   };
 
-  // ── Revelar ──
   const handleReveal = async () => {
     setIsRevealed(true);
     if (currentScratch?.type === "win" && currentScratch.photo_url) {
@@ -609,7 +548,6 @@ export default function TelegramScratchApp() {
     }
   };
 
-  // ── Próxima raspada ──
   const nextScratch = () => {
     if (queueIndex < scratchQueue.length) {
       setCurrentScratch(scratchQueue[queueIndex]);
@@ -623,7 +561,6 @@ export default function TelegramScratchApp() {
     }
   };
 
-  // ── Polling de pagamento ──
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid && player) {
@@ -653,7 +590,6 @@ export default function TelegramScratchApp() {
     return () => clearInterval(interval);
   }, [pixData, pixPaid, player, activeCartId]);
 
-  // ── Timer do PIX ──
   useEffect(() => {
     let timer: any;
     if (pixData && !pixPaid && pixTimeLeft > 0) {
@@ -662,7 +598,6 @@ export default function TelegramScratchApp() {
     return () => clearInterval(timer);
   }, [pixData, pixPaid, pixTimeLeft]);
 
-  // ── Gerar PIX ──
   const handleGeneratePix = async (amount: number) => {
     if (!player) return;
     setPixLoading(true);
@@ -705,7 +640,6 @@ export default function TelegramScratchApp() {
     }
   };
 
-  // ── Early returns ──
   if (loading)
     return (
       <div className="h-[100dvh] w-full bg-black flex items-center justify-center text-[#D946EF] font-black uppercase text-xs animate-pulse tracking-widest">
@@ -720,15 +654,11 @@ export default function TelegramScratchApp() {
       </div>
     );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="h-[100dvh] w-full bg-[#0a0a0a] flex justify-center font-sans overflow-hidden">
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
       <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto custom-scrollbar">
-        {/* Fundo */}
         <div className="absolute inset-0 z-0 h-[100vh] fixed pointer-events-none">
           <div
             className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000"
@@ -737,7 +667,6 @@ export default function TelegramScratchApp() {
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505]" />
         </div>
 
-        {/* HEADER */}
         <div className="relative z-10 p-4 flex justify-between items-center w-full shrink-0">
           <button
             onClick={() => setShowProfile(true)}
@@ -753,7 +682,6 @@ export default function TelegramScratchApp() {
           </button>
         </div>
 
-        {/* MENU DE ABAS */}
         <div className="relative z-10 w-full flex justify-center shrink-0 mb-2">
           <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 shadow-[0_0_20px_rgba(255,215,0,0.15)]">
             <button
@@ -768,7 +696,6 @@ export default function TelegramScratchApp() {
           </div>
         </div>
 
-        {/* LOGO */}
         <div className="relative z-10 flex flex-col items-center shrink-0 mb-4">
           <span className="text-[#D946EF] font-black italic text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">
             Savanah <span className="text-white">Labz</span>
@@ -778,7 +705,6 @@ export default function TelegramScratchApp() {
           </span>
         </div>
 
-        {/* MARQUEE */}
         <div className="relative z-10 w-full h-8 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center shrink-0 mb-2">
           <div className="flex whitespace-nowrap animate-marquee">
             {NAMES.map((name, i) => (
@@ -795,7 +721,6 @@ export default function TelegramScratchApp() {
           </div>
         </div>
 
-        {/* CARTÃO DE RASPADINHA */}
         <div className="relative z-10 flex-1 w-full flex flex-col items-center justify-center p-4 min-h-[360px] shrink-0">
           <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden">
             {currentScratch ? (
@@ -845,7 +770,6 @@ export default function TelegramScratchApp() {
               </div>
             )}
 
-            {/* Canvas de raspar — key muda a cada raspada para re-montar o canvas */}
             {currentScratch && (
               <ScratchCanvas
                 key={`scratch-${queueIndex}`}
@@ -904,7 +828,6 @@ export default function TelegramScratchApp() {
           )}
         </div>
 
-        {/* BOTÕES DE PACOTE */}
         <div
           className={`relative z-10 w-full p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 mt-auto transition-all duration-500 ${
             currentScratch ? "opacity-30 pointer-events-none" : "opacity-100"
