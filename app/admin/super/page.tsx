@@ -38,23 +38,24 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 ARQUITETURA MEDIADA POR SERVIDOR E INVISÍVEL AO SAFARI 🔥
+  // 🔥 FETCH DATA: AGORA COM A ESTRUTURA CORRETA DA NOSSA API 🔥
   const fetchData = async () => {
     try {
-      // Chama a nova API com nome genérico para burlar o ad-block do iOS/Safari
       const res = await fetch('/api/sys-data', { cache: 'no-store' });
       
-      if (!res.ok) {
-          throw new Error("Falha ao carregar dados do servidor interno.");
+      const json = await res.json();
+
+      if (!res.ok || !json.ok) {
+        throw new Error(json?.error || "Falha ao consultar a API interna.");
       }
 
-      const data = await res.json();
+      const data = json.data;
 
-      if (data.globalSettings) {
-        setGlobalMsg(data.globalSettings.announcement_msg || "");
-        setRankVisible(data.globalSettings.ranking_visible || false);
-        setGoalAmount(data.globalSettings.goal_amount || 1000);
-        setGoalReward(data.globalSettings.goal_reward || "");
+      if (data.global) {
+        setGlobalMsg(data.global.announcement_msg || "");
+        setRankVisible(!!data.global.ranking_visible);
+        setGoalAmount(Number(data.global.goal_amount || 1000));
+        setGoalReward(data.global.goal_reward || "");
       }
 
       setModels(data.models || []);
@@ -62,14 +63,15 @@ export default function SuperAdmin() {
       setWithdrawals(data.withdrawals || []);
       setApplications(data.applications || []);
       setTotalPlayers(data.totalPlayers || 0);
-      setAbandoned(data.abandonedCarts || []);
+      setAbandoned(data.abandoned || []);
       setVideoRequests(data.videoRequests || []);
 
-      setInitialLoading(false); // Tela carregada na hora com os dados reais!
+      setInitialLoading(false); 
 
-    } catch (err) { 
-      console.error("Erro no fetch da API Interna:", err); 
+    } catch (err: any) { 
+      console.error("Erro Crítico no FetchData:", err); 
       setInitialLoading(false);
+      alert(`Houve um erro de conexão com o banco de dados. \nDetalhe: ${err.message}`);
     }
   };
 
@@ -226,6 +228,7 @@ export default function SuperAdmin() {
           </div>
         </div>
 
+        {/* 🔥 NOVOS ALERTAS: VÍDEOS SOLICITADOS 🔥 */}
         {videoRequests.length > 0 && (
           <div className="mb-12 bg-blue-500/10 border border-blue-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(59,130,246,0.1)]">
             <h2 className="text-xs font-black uppercase text-blue-400 mb-4 flex items-center gap-2 tracking-widest"><Video size={16}/> {videoRequests.length} Novos Pedidos de Vídeo VIP</h2>
@@ -252,6 +255,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
+        {/* PIX ABANDONADOS - CARD VERMELHO */}
         {abandoned.length > 0 && (
           <div className="mb-12 bg-red-500/10 border border-red-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(239,68,68,0.1)]">
             <h2 className="text-xs font-black uppercase text-red-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {abandoned.length} PIX Abandonados (Recuperar Vendas)</h2>
@@ -288,6 +292,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
+        {/* CANDIDATURAS */}
         {applications.length > 0 && (
           <div className="mb-12 bg-indigo-500/10 border border-indigo-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(99,102,241,0.1)]">
             <h2 className="text-xs font-black uppercase text-indigo-400 mb-4 flex items-center gap-2 tracking-widest"><UserPlus size={16}/> {applications.length} Novas Candidaturas</h2>
@@ -306,6 +311,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
+        {/* SAQUES PENDENTES */}
         {withdrawals.filter(w => w.status === 'pendente').length > 0 && (
           <div className="mb-12 bg-amber-500/10 border border-amber-500/30 p-6 rounded-[2.5rem] shadow-[0_0_30px_rgba(245,158,11,0.1)]">
             <h2 className="text-xs font-black uppercase text-amber-500 mb-4 flex items-center gap-2 tracking-widest"><AlertCircle size={16}/> {withdrawals.filter(w => w.status === 'pendente').length} Saques (PIX) Solicitados</h2>
@@ -420,6 +426,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
+      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -447,6 +454,7 @@ export default function SuperAdmin() {
         </div>
       )}
 
+      {/* MODAL CRIAR MANUAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
