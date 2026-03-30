@@ -34,56 +34,40 @@ export default function SuperAdmin() {
 
   const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // 🔥 TERMINAL ESPIÃO 🔥
-  const [spyLogs, setSpyLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => {
-    setSpyLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
-    console.log("🕵️ ESPIÃO:", msg);
-  };
-
+  // 🔥 HELPER PADRONIZADO E BLINDADO (Conecta apenas com nossa API) 🔥
   const apiRequest = async (method: 'GET' | 'POST', action?: string, payload?: any) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const targetUrl = `${origin}/api/sys-data`;
-    
-    addLog(`[API] URL Alvo: ${targetUrl}`);
-    
-    const options: RequestInit = {
-      method,
-      headers: { "Content-Type": "application/json" },
-      cache: 'no-store'
-    };
+    try {
+      const options: RequestInit = {
+        method,
+        headers: { "Content-Type": "application/json" },
+        cache: 'no-store'
+      };
 
-    if (method === 'POST') {
-      options.body = JSON.stringify({ action, payload });
+      if (method === 'POST') {
+        options.body = JSON.stringify({ action, payload });
+      }
+
+      const res = await fetch('/api/portal', options);
+      const json = await res.json();
+
+      if (!res.ok || !json.ok) {
+        throw new Error(json?.error || "Falha na comunicação com o servidor.");
+      }
+
+      return json;
+    } catch (error: any) {
+      console.error(`Erro no apiRequest [${method} ${action || ''}]:`, error);
+      throw error;
     }
-
-    addLog(`[API] Disparando fetch (${method})...`);
-    const res = await fetch(targetUrl, options);
-    
-    addLog(`[API] Resposta Recebida! Status: ${res.status}`);
-
-    const json = await res.json();
-    addLog(`[API] JSON parseado. OK: ${json.ok}`);
-
-    if (!res.ok || !json.ok) {
-      throw new Error(json?.error || "Falha na API interna.");
-    }
-
-    return json;
   };
 
+  // 🔥 LEITURA INICIAL (GET) 🔥
   const fetchData = async () => {
-    addLog("=== INICIANDO FETCH DATA ===");
     try {
-      addLog("Pedindo dados para apiRequest...");
       const response = await apiRequest('GET');
-      
-      addLog("Dados recebidos, distribuindo...");
       const data = response.data;
 
+      // Os nomes batem exatamente com o que a API retorna
       if (data.global) {
         setGlobalMsg(data.global.announcement_msg || "");
         setRankVisible(!!data.global.ranking_visible);
@@ -99,22 +83,18 @@ export default function SuperAdmin() {
       setAbandoned(data.abandoned || []);
       setVideoRequests(data.videoRequests || []);
 
-      addLog("=== SUCESSO! Removendo Loading ===");
-      setInitialLoading(false); 
-
     } catch (err: any) { 
-      addLog(`❌ ERRO FATAL: ${err.name} - ${err.message}`);
-      console.error("Erro no Fetch:", err); 
+      alert(`Erro ao carregar o painel: ${err.message}`);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
   useEffect(() => {
     if (localStorage.getItem("super_admin_auth") === "true") { 
       setIsLogged(true); 
-      addLog("Auth encontrada. Chamando fetchData().");
       fetchData(); 
     } else { 
-      addLog("Sem auth. Exibindo login.");
       setInitialLoading(false); 
     }
   }, []);
@@ -123,12 +103,11 @@ export default function SuperAdmin() {
     e.preventDefault();
     if (adminUser === "admin@savanahlabz.com" && adminPass === "SavanahBoss2026") {
       localStorage.setItem("super_admin_auth", "true");
-      setIsLogged(true); 
-      setInitialLoading(true); 
-      setSpyLogs([]); // Limpa o terminal para o login
-      fetchData();
+      setIsLogged(true); setInitialLoading(true); fetchData();
     } else { alert("Acesso negado!"); }
   };
+
+  // 🔥 MUTAÇÕES (POST) CENTRALIZADAS NA NOSSA API 🔥
 
   const handleResetSystem = async () => {
     const confirmText = prompt("ATENÇÃO: ZERAR SISTEMA?\nDigite ZERARTUDO:");
@@ -207,6 +186,7 @@ export default function SuperAdmin() {
     }
   };
 
+  // Cálculos Financeiros
   const financialData = useMemo(() => {
     let totalSales = 0, totalPlatform = 0, totalModels = 0;
     const byModel: Record<string, number> = {};
@@ -219,30 +199,7 @@ export default function SuperAdmin() {
     return { totalSales, totalPlatform, totalModels, byModel };
   }, [transactions]);
 
-  // 🔥 TELA DE LOADING MODIFICADA COM O TERMINAL ESPIÃO 🔥
-  if (initialLoading) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 font-mono">
-      <Loader2 className="animate-spin text-[#FF1493] mb-6" size={50}/>
-      <div className="w-full max-w-2xl bg-[#0a0a0a] border border-[#FF1493]/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(255,20,147,0.2)]">
-        <h3 className="text-[#FF1493] font-black mb-4 uppercase flex items-center gap-2">
-          <AlertCircle size={18}/> Terminal Espião Labz
-        </h3>
-        <div className="space-y-2">
-          {spyLogs.map((log, i) => (
-            <p key={i} className={`text-xs ${log.includes('❌') ? 'text-red-500 font-bold' : 'text-emerald-400'}`}>
-              {log}
-            </p>
-          ))}
-        </div>
-        {spyLogs.some(log => log.includes('❌')) && (
-          <div className="mt-6 border-t border-white/10 pt-4">
-             <p className="text-white/50 text-xs mb-4">O espião encontrou um erro. Tire print desta tela!</p>
-             <button onClick={() => window.location.reload()} className="w-full bg-white text-black py-3 rounded-xl font-black uppercase text-xs">Tentar Novamente</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
 
   if (!isLogged) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6"><div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 p-10 rounded-[3rem] text-center">
@@ -372,6 +329,7 @@ export default function SuperAdmin() {
           </div>
         )}
 
+        {/* FINANCEIRO */}
         <div className="mb-12">
           <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 mb-4 flex items-center gap-2"><DollarSign size={14}/> Caixa Global & Plataforma</h2>
           
@@ -394,6 +352,7 @@ export default function SuperAdmin() {
           </div>
         </div>
 
+        {/* LISTA DE MUSAS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-[11px] font-black uppercase text-white/40 tracking-[0.3em] px-2 flex items-center gap-2"><Users size={14}/> Unidades Franqueadas</h2>
@@ -457,11 +416,12 @@ export default function SuperAdmin() {
           </div>
           
           <div className="space-y-8">
-            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={() => handleSaveGlobal()} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
+            <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5"><Megaphone size={60}/></div><h2 className="text-xs font-black uppercase text-[#FF1493] mb-6 flex items-center gap-2 tracking-widest relative z-10"><Megaphone size={14}/> Comunicado Global</h2><textarea value={globalMsg} onChange={e => setGlobalMsg(e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-[10px] text-white outline-none focus:border-[#FF1493] h-24 mb-4 resize-none relative z-10" /><button onClick={handleSaveGlobal} disabled={savingGlobal} className="w-full bg-white text-black py-4 rounded-xl text-[9px] font-black uppercase shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all relative z-10">{savingGlobal ? <Loader2 size={14} className="animate-spin"/> : "ENVIAR COMUNICADO"}</button></div>
           </div>
         </div>
       </div>
 
+      {/* 🔥 MODAL DE ANALISAR PERFIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -489,6 +449,7 @@ export default function SuperAdmin() {
         </div>
       )}
 
+      {/* MODAL CRIAR MANUAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-md relative shadow-2xl">
