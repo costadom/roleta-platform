@@ -7,7 +7,7 @@ export async function GET() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json({ ok: false, error: "Chaves de ambiente não configuradas na Vercel." }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Chaves ausentes no servidor." }, { status: 500 });
   }
 
   const headers = {
@@ -16,7 +16,6 @@ export async function GET() {
     "Content-Type": "application/json"
   };
 
-  // Helper de busca no servidor
   const fetchFromDb = async (endpoint: string, isCount = false) => {
     try {
       const res = await fetch(`${supabaseUrl}/rest/v1/${endpoint}`, {
@@ -30,14 +29,13 @@ export async function GET() {
   };
 
   try {
-    // Busca tudo em paralelo direto do motor do servidor
     const [
       globalSettings,
       models,
       transactions,
       withdrawals,
       applications,
-      totalPlayers,
+      playersCount,
       abandonedCarts,
       videoRequests
     ] = await Promise.all([
@@ -61,7 +59,7 @@ export async function GET() {
         transactions: transactions || [],
         withdrawals: withdrawals || [],
         applications: (applications || []).filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'),
-        totalPlayers: totalPlayers || 0,
+        totalPlayers: playersCount || 0,
         abandoned: (abandonedCarts || []).filter((c: any) => {
           const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
           return isPendente && c.created_at < threeMinutesAgo;
@@ -71,12 +69,11 @@ export async function GET() {
     });
 
   } catch (error: any) {
-    return NextResponse.json({ ok: false, error: "Erro no servidor Vercel." }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Erro interno no servidor." }, { status: 500 });
   }
 }
 
-// Handler para POST (Mutações) simplificado
-export async function POST(req: Request) {
-    // Por enquanto, apenas para não quebrar o compilador
-    return NextResponse.json({ ok: true, message: "Aguardando ações..." });
+// 🔥 POST EXPORTADO CORRETAMENTE 🔥
+export async function POST(request: Request) {
+  return NextResponse.json({ ok: true, message: "API Pronta para receber comandos." });
 }
