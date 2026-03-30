@@ -15,6 +15,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// --- COMPONENTES AUXILIARES ---
+
 const NoticeModal = ({ message, onClose }: { message: string, onClose: () => void }) => (
   <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
     <div className="bg-[#111] border border-[#D946EF]/30 p-6 rounded-3xl w-full max-w-xs text-center shadow-[0_0_40px_rgba(217,70,239,0.2)] animate-in zoom-in-95">
@@ -25,6 +27,7 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
+// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -100,7 +103,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleMove = (e: any) => {
     if (!isDrawing || isRevealed) return;
-    if (e.cancelable) e.preventDefault();
+    if (e.cancelable) e.preventDefault(); // Evita o scroll de arrastar
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -137,7 +140,8 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       ref={canvasRef}
       width={400}
       height={500}
-      className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
+      style={{ touchAction: 'none' }} // 🔥 TRAVA DE CONCRETO PRO IPHONE NÃO DESCER A TELA
+      className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
       onMouseUp={handleEnd}
@@ -149,6 +153,8 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   );
 };
 
+
+// --- PÁGINA PRINCIPAL DO TELEGRAM ---
 
 export default function TelegramScratchApp() {
   const params = useParams();
@@ -199,6 +205,9 @@ export default function TelegramScratchApp() {
         tg.expand();
         
         const user = tg.initDataUnsafe?.user;
+        
+        // 🔥 PARA TESTAR NO NAVEGADOR DO PC, DESCOMENTE ABAIXO 🔥
+        // const user = { id: 123456789, first_name: "Rafael", last_name: "Teste" };
         
         if (user) {
           setTgUser(user);
@@ -460,27 +469,27 @@ export default function TelegramScratchApp() {
   if (errorMsg) return <div className="h-[100dvh] w-full bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
-    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden">
+    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden overscroll-none">
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar pb-6">
+      <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar pb-6 overscroll-none">
         
         <div className="absolute inset-0 z-0 h-[100vh] fixed pointer-events-none">
           <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505] fixed" />
         </div>
 
-        <div className="relative z-10 p-4 flex flex-col gap-3 shrink-0">
+        <div className="relative z-10 p-4 flex flex-col gap-2 shrink-0">
            <div className="flex justify-between items-center px-1">
-              <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
               <div className="flex gap-2">
                  <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg"><User size={16}/></button>
               </div>
+              <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
            </div>
 
            {/* MENU DE ABAS (HUB DE JOGOS) - INVERTIDO PARA A RASPADINHA */}
-           <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-2 w-max shadow-[0_0_20px_rgba(255,215,0,0.15)] z-20">
+           <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-1 w-max shadow-[0_0_20px_rgba(255,215,0,0.15)] z-20">
               <button onClick={() => router.push(`/tg-game/${slug}`)} className="px-6 py-2 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
                  <Zap size={14} /> Roleta
               </button>
@@ -489,13 +498,13 @@ export default function TelegramScratchApp() {
               </div>
            </div>
 
-           <div className="flex flex-col items-center mt-2">
-              <span className="text-[#D946EF] font-black italic text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
-              <span className="text-[9px] text-[#FFD700] font-black uppercase mt-1 tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
+           <div className="flex flex-col items-center mt-1">
+              <span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
+              <span className="text-[9px] text-[#FFD700] font-black uppercase tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
            </div>
         </div>
 
-        <div className="w-full h-9 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0">
+        <div className="w-full h-8 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0">
           <div className="flex whitespace-nowrap animate-marquee">
             { NAMES.map((name, i) => (
               <div key={i} className="flex items-center gap-2 mx-8 text-[10px] font-black uppercase tracking-tighter"><Star size={11} className="text-[#FFD700]" fill="currentColor"/><span className="text-white/60">{name}</span><span className="text-white">REVELOU</span><span className="text-[#D946EF]">FOTO VIP</span></div>
@@ -503,9 +512,10 @@ export default function TelegramScratchApp() {
           </div>
         </div>
 
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 px-4 min-h-[380px]">
+        {/* 🔥 A TELA DO CARTÃO - AJUSTADA PARA NÃO FICAR EXPRIMIDA 🔥 */}
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-2 px-4 min-h-[340px]">
           
-          <div className="w-full max-w-[300px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
+          <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
              
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -518,18 +528,18 @@ export default function TelegramScratchApp() {
                              </div>
                          </>
                      ) : (
-                         <div className="flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
-                             <div className="w-20 h-20 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
-                               <CloseIcon size={40} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
+                         <div className="flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
+                             <div className="w-16 h-16 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-4 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
+                               <CloseIcon size={32} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
                              </div>
-                             <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter mb-3 drop-shadow-lg">Veio o X</h3>
-                             <p className="text-[10px] text-white/50 uppercase font-bold tracking-[0.2em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
+                             <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-2 drop-shadow-lg">Veio o X</h3>
+                             <p className="text-[9px] text-white/50 uppercase font-bold tracking-[0.2em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
                          </div>
                      )}
                  </div>
              ) : (
                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#151515] to-[#050505]">
-                    <ImageIcon size={50} className="text-[#D946EF]/20 mb-4" />
+                    <ImageIcon size={40} className="text-[#D946EF]/20 mb-4" />
                     <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Raspadinha VIP</h3>
                     <p className="text-[9px] font-black text-white/20 uppercase mt-2 text-center px-8">Compre um pacote abaixo para raspar</p>
                  </div>
@@ -546,22 +556,22 @@ export default function TelegramScratchApp() {
           </div>
 
           {currentScratch && !isRevealed && (
-              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-4 animate-pulse shrink-0">Raspe a tela com o dedo</p>
+              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-3 animate-pulse shrink-0">Raspe a tela com o dedo</p>
           )}
 
           {currentScratch && isRevealed && (
-              <div className="mt-4 w-full max-w-[300px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
-                  <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
+              <div className="mt-3 w-full max-w-[280px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
+                  <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-[10px] shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
               </div>
           )}
 
           {!currentScratch && (
-              <div className="mt-6 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
+              <div className="mt-4 flex flex-col items-center gap-3 w-full animate-in fade-in shrink-0">
                  <div className="px-6 py-2 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-2xl flex items-center gap-3 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
-                    <Coins size={16} className="text-[#FFD700] pointer-events-none" />
-                    <span className="text-lg font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
+                    <Coins size={14} className="text-[#FFD700] pointer-events-none" />
+                    <span className="text-sm font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
                  </div>
                  <div className="flex flex-col items-center gap-1.5 w-full max-w-[200px]">
                     <div className="h-1.5 w-full bg-[#111] rounded-full overflow-hidden border border-white/5">
@@ -569,7 +579,7 @@ export default function TelegramScratchApp() {
                             <div className="absolute inset-0 bg-white/20 animate-pulse"/>
                         </div>
                     </div>
-                    <span className="text-[9px] text-white/50 font-black uppercase tracking-widest">Coleção: <span className="text-[#FFD700]">{unlockedPhotos.length}/10 FOTOS</span></span>
+                    <span className="text-[8px] text-white/50 font-black uppercase tracking-widest">Coleção: <span className="text-[#FFD700]">{unlockedPhotos.length}/10 FOTOS</span></span>
                  </div>
               </div>
           )}
