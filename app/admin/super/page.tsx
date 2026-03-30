@@ -38,7 +38,7 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 ARQUITETURA ANTI-CORS / CARREGAMENTO SEQUENCIAL ASSÍNCRONO 🔥
+  // 🔥 ARQUITETURA ANTI-BLOQUEIO (FILA INDIANA COM RESPIRO) 🔥
   const fetchData = async () => {
     try {
       const headers = { 
@@ -47,72 +47,71 @@ export default function SuperAdmin() {
         "Cache-Control": "no-cache" 
       };
 
-      // Função de busca segura que engole os erros sem explodir a tela
-      const safeFetch = async (url: string, opts: any = {}) => {
+      const fetchSafely = async (url: string, isCount = false) => {
           try {
-              const res = await fetch(url, { headers: { ...headers, ...opts.headers } });
-              if (!res.ok) return null; 
-              if (opts.headers?.Prefer === "count=exact") {
-                 const range = res.headers.get("content-range");
-                 if (range) return { count: parseInt(range.split("/")[1], 10) };
-              }
+              const res = await fetch(url, { headers: isCount ? { ...headers, "Prefer": "count=exact" } : headers });
+              if (!res.ok) return null;
+              if (isCount) return parseInt(res.headers.get("content-range")?.split("/")[1] || "0", 10);
               return await res.json();
-          } catch (e) {
-              console.error("Falha silenciosa na rota:", url);
-              return null; 
-          }
+          } catch (e) { return null; }
       };
 
-      // PASSO 1: Carregar APENAS o essencial para a tela renderizar
-      const dataGlob = await safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`);
-      const dataMod = await safeFetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`);
-
-      if (dataGlob && dataGlob[0]) {
-        setGlobalMsg(dataGlob[0].announcement_msg);
-        setRankVisible(dataGlob[0].ranking_visible);
-        setGoalAmount(dataGlob[0].goal_amount);
-        setGoalReward(dataGlob[0].goal_reward);
+      // 1. CARREGA O ESSENCIAL (Um por vez)
+      const dataGlob = await fetchSafely(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`);
+      if (dataGlob?.[0]) {
+          setGlobalMsg(dataGlob[0].announcement_msg);
+          setRankVisible(dataGlob[0].ranking_visible);
+          setGoalAmount(dataGlob[0].goal_amount);
+          setGoalReward(dataGlob[0].goal_reward);
       }
 
+      const dataMod = await fetchSafely(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`);
       if (dataMod) setModels(dataMod);
-      
-      // TELA LIBERADA: O Spinner principal some aqui
-      setInitialLoading(false);
 
-      // PASSO 2: Carregar as listas pesadas uma a uma no background (Fila Indiana)
-      const loadBackgroundData = async () => {
-          const dataTrans = await safeFetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`);
+      // TELA LIBERADA (Tira a tela preta)
+      setInitialLoading(false); 
+
+      // 2. CARREGA AS LISTAS PESADAS COM RESPIRO (Evita erro do Supabase)
+      const loadRest = async () => {
+          const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+          await sleep(200); // Respiro
+          const dataTrans = await fetchSafely(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`);
           if (dataTrans) setTransactions(dataTrans);
 
-          const dataWith = await safeFetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`);
+          await sleep(200); // Respiro
+          const dataWith = await fetchSafely(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`);
           if (dataWith) setWithdrawals(dataWith);
 
-          const dataApp = await safeFetch(`${supabaseUrl}/rest/v1/Applications?select=*`);
+          await sleep(200); // Respiro
+          const dataApp = await fetchSafely(`${supabaseUrl}/rest/v1/Applications?select=*`);
           if (dataApp) setApplications(dataApp.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
 
-          const dataPlayersCount = await safeFetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { "Prefer": "count=exact" } });
-          if (dataPlayersCount && dataPlayersCount.count !== undefined) setTotalPlayers(dataPlayersCount.count);
+          await sleep(200); // Respiro
+          const playerCount = await fetchSafely(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, true);
+          if (playerCount !== null) setTotalPlayers(playerCount);
 
-          const dataAbandon = await safeFetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`);
+          await sleep(200); // Respiro
+          const dataAbandon = await fetchSafely(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`);
           if (dataAbandon) {
-            const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-            setAbandoned(dataAbandon.filter((c: any) => {
-              const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
-              const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
-              return isPendente && isOldEnough;
-            }));
+              const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
+              setAbandoned(dataAbandon.filter((c: any) => {
+                  const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
+                  const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
+                  return isPendente && isOldEnough;
+              }));
           }
 
-          const dataVideos = await safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`);
+          await sleep(200); // Respiro
+          const dataVideos = await fetchSafely(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`);
           if (dataVideos) setVideoRequests(dataVideos);
       };
 
-      // Dispara a fila de carregamento sem travar a navegação
-      loadBackgroundData();
+      loadRest(); // Roda no fundo sem travar
 
     } catch (err) { 
-      console.error("Erro crítico no carregamento inicial:", err); 
-      setInitialLoading(false); 
+      console.error("Erro no fetch principal", err); 
+      setInitialLoading(false);
     }
   };
 
@@ -139,14 +138,12 @@ export default function SuperAdmin() {
     setInitialLoading(true);
     try {
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-      await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers }),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers })
-      ]);
+      await fetch(`${supabaseUrl}/rest/v1/Transactions?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/SpinHistory?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/Withdrawals?id=not.is.null`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?id=not.is.null`, { method: 'DELETE', headers });
       fetchData();
-    } catch (err) { alert("Erro."); }
+    } catch (err) { alert("Erro."); setInitialLoading(false); }
   };
 
   const handleSaveGlobal = async () => {
@@ -480,7 +477,6 @@ export default function SuperAdmin() {
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Nome / Nickname</p><p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p><p className="text-[10px] text-indigo-400 uppercase font-bold">@{selectedApp.nickname}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">Contato</p><p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p></div>
                 
-                {/* 🔥 EXIBIÇÃO DE EMAIL E CPF 🔥 */}
                 <div><p className="text-[8px] text-white/40 uppercase font-black">E-mail de Cadastro</p><p className="text-[10px] font-bold text-white">{selectedApp.email || "Não informado"}</p></div>
                 <div><p className="text-[8px] text-white/40 uppercase font-black">CPF / Nasc.</p><p className="text-[10px] font-bold text-white">{selectedApp.cpf || "Não informado"} - {selectedApp.birth_date}</p></div>
 
