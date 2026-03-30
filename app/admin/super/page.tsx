@@ -248,7 +248,7 @@ export default function SuperAdmin() {
                     </div>
                   </div>
                   <h3 className="font-black uppercase text-sm mb-1 relative z-10">@{m.slug}</h3>
-                  <p className="text-[10px] text-emerald-400 font-bold mb-3 uppercase tracking-widest">Lucro: {(financialData.byMod[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  <p className="text-[10px] text-emerald-400 font-bold mb-3 uppercase tracking-widest">Lucro: {(financialData.byModel[m.id] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                   
                   {m.referred_by && (<div className="mb-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg inline-block"><span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">👑 Madrinha: {m.referred_by}</span></div>)}
                   
