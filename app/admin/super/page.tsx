@@ -37,6 +37,7 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  // 🔥 OTIMIZAÇÃO DE VELOCIDADE (ESTILO CLAUDE) 🔥
   const fetchData = async () => {
     try {
       const headers = { 
@@ -45,49 +46,60 @@ export default function SuperAdmin() {
         "Cache-Control": "no-cache" 
       };
 
-      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
+      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA (Em Paralelo)
       const [resGlob, resMod] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
       ]);
 
-      if (resGlob.ok) {
-        const dataGlob = await resGlob.json();
-        if (dataGlob[0]) {
-          setGlobalMsg(dataGlob[0].announcement_msg);
-          setRankVisible(dataGlob[0].ranking_visible);
-          setGoalAmount(dataGlob[0].goal_amount);
-          setGoalReward(dataGlob[0].goal_reward);
-        }
+      // Descompacta os JSONs essenciais ao mesmo tempo
+      const [dataGlob, dataMod] = await Promise.all([
+         resGlob.ok ? resGlob.json() : Promise.resolve([]),
+         resMod.ok ? resMod.json() : Promise.resolve([])
+      ]);
+
+      if (dataGlob && dataGlob[0]) {
+        setGlobalMsg(dataGlob[0].announcement_msg);
+        setRankVisible(dataGlob[0].ranking_visible);
+        setGoalAmount(dataGlob[0].goal_amount);
+        setGoalReward(dataGlob[0].goal_reward);
       }
 
-      if (resMod.ok) setModels(await resMod.json());
+      if (dataMod) setModels(dataMod);
       
-      setInitialLoading(false); // 🔥 TELA LIBERADA 🔥
+      setInitialLoading(false); // 🔥 TELA LIBERADA RAPIDAMENTE 🔥
 
       // 2. CARREGA OS DADOS PESADOS E LISTAS NO FUNDO
       Promise.all([
         fetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, headers: new Headers() })),
+        // 🔥 CORREÇÃO DE LENTIDÃO: limit=1 impede de baixar milhares de dados desnecessários, pega só o Header!
+        fetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, headers: new Headers() })),
         fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers })
       ]).then(async ([resTrans, resWith, resApp, resPlayers, resAbandon, resVideos]) => {
           
-          if (resTrans.ok) setTransactions(await resTrans.json());
-          if (resWith.ok) setWithdrawals(await resWith.json());
-          if (resVideos.ok) setVideoRequests(await resVideos.json()); 
+          // Descompacta todos os JSONs pesados de forma simultânea (Promise.all)
+          const [dataTrans, dataWith, dataApp, dataAbandon, dataVideos] = await Promise.all([
+             resTrans.ok ? resTrans.json() : Promise.resolve(null),
+             resWith.ok ? resWith.json() : Promise.resolve(null),
+             resApp.ok ? resApp.json() : Promise.resolve(null),
+             resAbandon.ok ? resAbandon.json() : Promise.resolve(null),
+             resVideos.ok ? resVideos.json() : Promise.resolve(null),
+          ]);
+
+          if (dataTrans) setTransactions(dataTrans);
+          if (dataWith) setWithdrawals(dataWith);
+          if (dataVideos) setVideoRequests(dataVideos); 
           
-          if (resApp.ok) {
-            const apps = await resApp.json();
-            setApplications(apps.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
+          if (dataApp) {
+            setApplications(dataApp.filter((a: any) => !a.status || a.status.toLowerCase() === 'pendente'));
           }
           
-          if (resAbandon.ok) {
-            const carts = await resAbandon.json();
+          if (dataAbandon) {
             const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).getTime();
-            setAbandoned(carts.filter((c: any) => {
+            setAbandoned(dataAbandon.filter((c: any) => {
               const isPendente = !c.status || c.status.toLowerCase() === 'pendente';
               const isOldEnough = new Date(c.created_at).getTime() < threeMinutesAgo;
               return isPendente && isOldEnough;
