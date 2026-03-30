@@ -7,6 +7,7 @@ import {
   Image as ImageIcon, Lock, CheckCircle2, Copy, Loader2, 
   LayoutGrid, Zap, Trophy, MessageCircle, Star, Home, Heart, Sparkles, AlertTriangle, Gift
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import confetti from "canvas-confetti";
 
 const NAMES = ["Tiago", "Lucas", "Ana", "Felipe", "Mariana", "João", "Beatriz", "Ricardo", "Camila", "Larissa", "Bruno", "Thiago", "Fernanda", "Rafael", "Julia", "Diego", "Amanda", "Gabriel", "Vitor"];
@@ -87,7 +88,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleStart = (e: any) => {
     if (isRevealed) return;
-    if (e.cancelable) e.preventDefault();
     setIsDrawing(true);
     const { x, y } = getPointerPos(e);
     const ctx = canvasRef.current?.getContext('2d');
@@ -99,7 +99,6 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
 
   const handleMove = (e: any) => {
     if (!isDrawing || isRevealed) return;
-    if (e.cancelable) e.preventDefault(); // 🔥 Evita que o iPhone role a página ao arrastar o dedo
     const { x, y } = getPointerPos(e);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -131,19 +130,30 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
       }
   };
 
+  // 🔥 EVENTO NATIVO PARA TRAVAR O SCROLL DO IPHONE APENAS NO CANVAS 🔥
+  useEffect(() => {
+      const canvas = canvasRef.current;
+      const preventScroll = (e: TouchEvent) => { e.preventDefault(); };
+      if (canvas) {
+          canvas.addEventListener('touchmove', preventScroll, { passive: false });
+      }
+      return () => {
+          if (canvas) canvas.removeEventListener('touchmove', preventScroll);
+      };
+  }, []);
+
   return (
     <canvas
       ref={canvasRef}
       width={400}
       height={500}
-      style={{ touchAction: 'none' }} // 🔥 Trava bruta anti-scroll no CSS
-      className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
+      style={{ touchAction: 'none' }} // Impede gestos no CSS
+      className={`absolute inset-0 w-full h-full cursor-pointer z-20 touch-none ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
       onMouseDown={handleStart}
       onMouseMove={handleMove}
       onMouseUp={handleEnd}
       onMouseLeave={handleEnd}
       onTouchStart={handleStart}
-      onTouchMove={handleMove}
       onTouchEnd={handleEnd}
     />
   );
@@ -190,7 +200,6 @@ export default function TelegramScratchApp() {
   const [isLinking, setIsLinking] = useState(false);
   const [linkSuccess, setLinkSuccess] = useState("");
 
-  // 🔥 FUNÇÃO DO RELOGINHO CORRIGIDA AQUI 🔥
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -209,6 +218,9 @@ export default function TelegramScratchApp() {
         tg.expand();
         
         const user = tg.initDataUnsafe?.user;
+        
+        // Para testes locais
+        // const user = { id: 123456789, first_name: "Rafael", last_name: "Teste" };
         
         if (user) {
           setTgUser(user);
@@ -243,7 +255,6 @@ export default function TelegramScratchApp() {
 
       const pseudoWhatsapp = `TG_${user.id}`;
       
-      // BUSCA INTELIGENTE: Pelo telegram_id real ou pelo whatsapp fantasma antigo
       let resPlayer = await fetch(`${supabaseUrl}/rest/v1/Players?telegram_id=eq.${user.id}&model_id=eq.${modelData.id}&select=*`, { headers });
       let playerData = await resPlayer.json();
 
@@ -552,41 +563,45 @@ export default function TelegramScratchApp() {
   if (errorMsg) return <div className="h-[100dvh] w-full bg-black text-white flex flex-col items-center justify-center p-6 text-center"><AlertCircle size={40} className="text-red-500 mb-4"/><p className="font-bold text-sm">{errorMsg}</p></div>;
 
   return (
-    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex items-start justify-center font-sans overflow-hidden overscroll-none touch-none">
+    <div className="h-[100dvh] w-full bg-[#0a0a0a] flex justify-center font-sans overflow-hidden">
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar pb-6 overscroll-none">
+      <div className="relative w-full h-full max-w-md bg-black flex flex-col overflow-y-auto custom-scrollbar">
         
         <div className="absolute inset-0 z-0 h-[100vh] fixed pointer-events-none">
-          <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505] fixed" />
+          <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505]" />
         </div>
 
-        <div className="relative z-10 p-3 flex flex-col gap-2 shrink-0">
-           <div className="flex justify-between items-center px-1">
-              <div className="flex gap-2">
-                 <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg"><User size={16}/></button>
-              </div>
-              <button onClick={() => setShowDeposit(true)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg"><ShoppingCart size={12} /> Recarregar</button>
-           </div>
-
-           {/* MENU DE ABAS INVERTIDO */}
-           <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-1 w-max shadow-[0_0_20px_rgba(255,215,0,0.15)] z-20">
-              <button onClick={() => router.push(`/tg-game/${slug}`)} className="px-6 py-2 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
-                 <Zap size={14} /> Roleta
-              </button>
-              <div className="px-6 py-2 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
-                 <Sparkles size={14} fill="currentColor"/> Raspadinha
-              </div>
-           </div>
-
-           <div className="flex flex-col items-center mt-1">
-              <span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
-           </div>
+        {/* HEADER TOP */}
+        <div className="relative z-10 p-4 flex justify-between items-center w-full shrink-0">
+            <div className="flex gap-2">
+               <button onClick={() => setShowProfile(true)} className="w-10 h-10 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg"><User size={18}/></button>
+            </div>
+            <button onClick={() => setShowDeposit(true)} className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase text-white/70 flex items-center gap-1.5 shadow-lg active:scale-95"><ShoppingCart size={14} /> Recarregar</button>
         </div>
 
-        <div className="w-full h-8 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center relative shrink-0 mb-2">
+        {/* MENU DE ABAS INVERTIDO */}
+        <div className="relative z-10 w-full flex justify-center shrink-0 mb-2">
+            <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 shadow-[0_0_20px_rgba(255,215,0,0.15)]">
+                <button onClick={() => router.push(`/tg-game/${slug}`)} className="px-6 py-2.5 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
+                   <Zap size={14} /> Roleta
+                </button>
+                <div className="px-6 py-2.5 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
+                   <Sparkles size={14} fill="currentColor"/> Raspadinha
+                </div>
+            </div>
+        </div>
+
+        {/* LOGO */}
+        <div className="relative z-10 flex flex-col items-center shrink-0 mb-4">
+            <span className="text-[#D946EF] font-black italic text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span>
+            <span className="text-[10px] text-[#FFD700] font-black uppercase mt-1 tracking-[0.3em] italic flex items-center gap-1"><Sparkles size={10} fill="currentColor"/> Raspadinha {modelName}</span>
+        </div>
+
+        {/* MARQUEE */}
+        <div className="relative z-10 w-full h-8 bg-[#111]/80 border-y border-[#D946EF]/20 backdrop-blur-md overflow-hidden flex items-center shrink-0 mb-2">
           <div className="flex whitespace-nowrap animate-marquee">
             { NAMES.map((name, i) => (
               <div key={i} className="flex items-center gap-2 mx-8 text-[10px] font-black uppercase tracking-tighter"><Star size={11} className="text-[#FFD700]" fill="currentColor"/><span className="text-white/60">{name}</span><span className="text-white">REVELOU</span><span className="text-[#D946EF]">FOTO VIP</span></div>
@@ -594,10 +609,10 @@ export default function TelegramScratchApp() {
           </div>
         </div>
 
-        {/* 🔥 TELA DO CARTÃO - MENOR PARA CABER TUDO (max-w-[240px]) 🔥 */}
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-2 px-4 touch-none min-h-[300px]">
+        {/* 🔥 TELA DO CARTÃO - PROPORÇÃO AJUSTADA COM ESPAÇO PARA RESPIRAR 🔥 */}
+        <div className="relative z-10 flex-1 w-full flex flex-col items-center justify-center p-4 min-h-[360px] shrink-0">
           
-          <div className="w-full max-w-[240px] aspect-[3/4] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0 touch-none">
+          <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden">
              
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -605,25 +620,25 @@ export default function TelegramScratchApp() {
                          <>
                              <img src={currentScratch.photo_url} className="absolute inset-0 w-full h-full object-cover" alt="VIP" />
                              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent" />
-                             <div className="absolute bottom-4 left-0 right-0 text-center animate-in slide-in-from-bottom-4">
-                                 <span className="bg-[#D946EF] border border-[#D946EF]/50 text-white px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-[0_10px_30px_rgba(217,70,239,0.5)] flex items-center justify-center gap-2 mx-auto w-max"><Gift size={12}/> FOTO REVELADA</span>
+                             <div className="absolute bottom-6 left-0 right-0 text-center animate-in slide-in-from-bottom-4">
+                                 <span className="bg-[#D946EF] border border-[#D946EF]/50 text-white px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-[0_10px_30px_rgba(217,70,239,0.5)] flex items-center justify-center gap-2 mx-auto w-max"><Gift size={14}/> FOTO REVELADA</span>
                              </div>
                          </>
                      ) : (
-                         <div className="flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
-                             <div className="w-14 h-14 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-3 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
-                               <CloseIcon size={24} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
+                         <div className="flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#1a0510] to-[#050505] w-full h-full animate-in zoom-in">
+                             <div className="w-16 h-16 rounded-full bg-[#D946EF]/10 border border-[#D946EF]/30 flex items-center justify-center mb-4 shadow-[0_0_40px_rgba(217,70,239,0.2)]">
+                               <CloseIcon size={32} className="text-[#FFD700] drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
                              </div>
-                             <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-1 drop-shadow-lg">Veio o X</h3>
-                             <p className="text-[9px] text-white/50 uppercase font-bold tracking-[0.1em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
+                             <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-2 drop-shadow-lg">Veio o X</h3>
+                             <p className="text-[10px] text-white/50 uppercase font-bold tracking-[0.15em] leading-relaxed">Que pena amor!<br/>Sua foto estava quase saindo.</p>
                          </div>
                      )}
                  </div>
              ) : (
                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#151515] to-[#050505]">
-                    <ImageIcon size={32} className="text-[#D946EF]/20 mb-3" />
-                    <h3 className="text-white/40 font-black uppercase italic text-xs tracking-widest">Raspadinha VIP</h3>
-                    <p className="text-[8px] font-black text-white/20 uppercase mt-2 text-center px-6">Compre um pacote abaixo para raspar</p>
+                    <ImageIcon size={40} className="text-[#D946EF]/20 mb-4" />
+                    <h3 className="text-white/40 font-black uppercase italic text-sm tracking-widest">Raspadinha VIP</h3>
+                    <p className="text-[9px] font-black text-white/20 uppercase mt-2 text-center px-8 leading-relaxed">Compre um pacote abaixo para raspar</p>
                  </div>
              )}
 
@@ -638,52 +653,53 @@ export default function TelegramScratchApp() {
           </div>
 
           {currentScratch && !isRevealed && (
-              <p className="text-[8px] text-[#FFD700] font-black uppercase tracking-widest mt-2 animate-pulse shrink-0">Raspe a tela com o dedo</p>
+              <p className="text-[9px] text-[#FFD700] font-black uppercase tracking-widest mt-4 animate-pulse">Raspe a tela com o dedo</p>
           )}
 
           {currentScratch && isRevealed && (
-              <div className="mt-3 w-full max-w-[240px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
-                  <button onClick={nextScratch} className="w-full py-3 bg-white text-black rounded-xl font-black uppercase text-[10px] shadow-xl active:scale-95 transition-all">
+              <div className="mt-4 w-full max-w-[280px] px-2 animate-in slide-in-from-bottom-4 fade-in">
+                  <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
               </div>
           )}
 
           {!currentScratch && (
-              <div className="mt-3 flex flex-col items-center gap-2 w-full animate-in fade-in shrink-0">
-                 <div className="px-5 py-1.5 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-full flex items-center gap-2 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
-                    <Coins size={12} className="text-[#FFD700] pointer-events-none" />
-                    <span className="text-sm font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
+              <div className="mt-5 flex flex-col items-center gap-3 w-full animate-in fade-in">
+                 <div className="px-6 py-2.5 bg-[#111]/80 border border-white/10 backdrop-blur-md rounded-full flex items-center gap-3 shadow-lg cursor-pointer select-none" onClick={handleDevHack}>
+                    <Coins size={14} className="text-[#FFD700] pointer-events-none" />
+                    <span className="text-base font-black italic text-white pointer-events-none">{player?.credits || 0} <span className="text-[#D946EF]">CR</span></span>
                  </div>
-                 <div className="flex flex-col items-center gap-1 w-full max-w-[180px]">
-                    <div className="h-1 w-full bg-[#111] rounded-full overflow-hidden border border-white/5">
+                 <div className="flex flex-col items-center gap-1.5 w-full max-w-[200px]">
+                    <div className="h-1.5 w-full bg-[#111] rounded-full overflow-hidden border border-white/5">
                         <div className="h-full bg-gradient-to-r from-[#D946EF] to-[#FFD700] transition-all duration-1000 relative" style={{ width: `${(unlockedPhotos.length / 10) * 100}%` }}>
                             <div className="absolute inset-0 bg-white/20 animate-pulse"/>
                         </div>
                     </div>
-                    <span className="text-[8px] text-white/50 font-black uppercase tracking-widest">Coleção: <span className="text-[#FFD700]">{unlockedPhotos.length}/10 FOTOS</span></span>
+                    <span className="text-[9px] text-white/50 font-black uppercase tracking-widest">Coleção: <span className="text-[#FFD700]">{unlockedPhotos.length}/10 FOTOS</span></span>
                  </div>
               </div>
           )}
         </div>
 
-        <div className={`relative z-10 p-3 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 mt-auto transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+        {/* BOTTOM BUTTONS (FLUI BEM NO FINAL DA TELA SEM EXPRIMIR) */}
+        <div className={`relative z-10 w-full p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 mt-auto transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
           
-          <div className="grid grid-cols-2 gap-2 mb-2">
-             <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-12 rounded-xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
-                <span className="text-[8px] font-black uppercase text-white/40 mb-0.5">1 Raspada</span>
-                <span className="text-xs font-black text-white italic">2 CR</span>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+             <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
+                <span className="text-[9px] font-black uppercase text-white/40 mb-0.5">1 Raspada</span>
+                <span className="text-sm font-black text-white italic">2 CR</span>
              </button>
-             <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-12 rounded-xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group shadow-lg">
-                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[5px] font-black px-1.5 py-0.5 rounded-bl-md">ECONOMIZE 20%</div>
-                <span className="text-[8px] font-black uppercase text-white/60 mb-0.5">Combo 5x</span>
-                <span className="text-xs font-black text-[#D946EF] italic">8 CR</span>
+             <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-2 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
+                <span className="text-[9px] font-black uppercase text-white/60 mb-0.5">Combo 5x</span>
+                <span className="text-sm font-black text-[#D946EF] italic">8 CR</span>
              </button>
           </div>
 
-          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-3 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all border border-white/20">
-             <span className="flex items-center gap-2 font-black italic text-xs"><Zap size={12} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
-             <span className="text-[7px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
+          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all border border-white/20">
+             <span className="flex items-center gap-2 font-black italic text-sm"><Zap size={14} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
+             <span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
           </button>
         </div>
 
@@ -747,23 +763,24 @@ export default function TelegramScratchApp() {
 
         {/* Modal PIX CORRIGIDO PARA O FORMATO DA ROLETA */}
         {showDeposit && (
-          <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200 overflow-y-auto">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)] my-auto">
-              <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
+          <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
+            <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
+              <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><CloseIcon size={24} /></button>
+              
               {pixPaid ? (
                  <div className="py-10 text-center animate-in zoom-in">
-                    <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle2 className="text-emerald-500" size={40} /></div>
-                    <h2 className="text-2xl font-black text-white uppercase italic mb-2 tracking-tighter">Aprovado!</h2>
-                    <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Créditos liberados.</p>
-                    <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-[11px] shadow-lg active:scale-95 transition-all">Voltar ao Jogo</button>
+                    <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle2 className="text-emerald-500" size={40} /></div>
+                    <h2 className="text-2xl font-black text-white uppercase italic mb-2">Aprovado!</h2>
+                    <p className="text-[10px] text-white/50 uppercase font-black tracking-widest mb-8">Seus créditos já caíram na conta.</p>
+                    <button onClick={() => { setShowDeposit(false); setPixData(null); setPixPaid(false); }} className="w-full bg-emerald-500 text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Voltar ao Jogo</button>
                  </div>
               ) : pixLoading ? (
-                <div className="py-20 flex flex-col items-center text-[#D946EF] font-black text-xs uppercase animate-pulse tracking-widest"><Loader2 className="animate-spin mb-4" size={40} /> Gerando Pix...</div>
+                <div className="py-20 flex flex-col justify-center items-center text-[#D946EF] font-black text-xs animate-pulse uppercase"><Loader2 className="animate-spin mb-2" /> Gerando Pix...</div>
               ) : pixData ? (
                 <div className="text-center p-2">
                   <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pagar com PIX</h2>
-                  <div className="bg-white p-4 rounded-[2rem] inline-block mb-6 shadow-[0_0_40px_rgba(255,255,255,0.15)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-52 h-52" /></div>
-                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-3xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
+                  <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]"><img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" /></div>
+                  <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">⏱ {formatTime(pixTimeLeft)}</div>
                   <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
                     <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
                  </div>
@@ -775,7 +792,7 @@ export default function TelegramScratchApp() {
                 <div className="space-y-4 pt-4">
                   <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                   
-                  {/* PACOTES IGUAIS AOS DA ROLETA */}
+                  {/* PACOTES PADRÃO: 25 por R$20, 35 por R$30, 45 por R$40, 55 por R$50 */}
                   {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
                     <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
                       <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
