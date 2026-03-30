@@ -48,6 +48,12 @@ export default function TelegramMiniApp() {
   const [isLinking, setIsLinking] = useState(false);
   const [linkSuccess, setLinkSuccess] = useState("");
 
+  // 🔥 NOVO ESTADO: PACOTES DA CENTRAL 🔥
+  const [rechargePackages, setRechargePackages] = useState<any[]>([
+    { id: 1, amount: 10, bonus: 2 },
+    { id: 2, amount: 20, bonus: 5 }
+  ]);
+
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -91,6 +97,12 @@ export default function TelegramMiniApp() {
       setLoading(true);
       const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
       
+      // 🔥 PUXA PACOTES DA CENTRAL 🔥
+      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=recharge_packages`, { headers }).then(r => r.json()).catch(() => null);
+      if (resGlob?.[0]?.recharge_packages) {
+          setRechargePackages(resGlob[0].recharge_packages);
+      }
+
       const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=*,Configs(*)`, { headers });
       const modData = await resMod.json();
       
@@ -135,7 +147,7 @@ export default function TelegramMiniApp() {
           full_name: `${user.first_name} ${user.last_name || ''}`.trim() || "Usuário Telegram",
           email: `${user.id}@tg.labzsexy.com`, 
           password: `${user.id}TgAuth!`,
-          credits: 1, // 🔥 AQUI: Começa apenas com 1 crédito
+          credits: 1,
           model_id: mId
         };
 
@@ -385,7 +397,7 @@ export default function TelegramMiniApp() {
                 </div>
              </div>
              
-             {/* MENU DE ABAS (HUB DE JOGOS) */}
+             {/* MENU DE ABAS */}
              <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 mx-auto mt-2 w-max shadow-[0_0_20px_rgba(217,70,239,0.15)] z-20">
                 <div className="px-6 py-2 bg-gradient-to-r from-[#D946EF] to-[#9b29ab] text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
                    <Zap size={14} fill="currentColor"/> Roleta VIP
@@ -447,8 +459,6 @@ export default function TelegramMiniApp() {
             <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-4 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2">
-                
-                {/* CAIXA DE VINCULAR CONTA */}
                 {player.whatsapp.startsWith('TG_') ? (
                     <div className="bg-[#050505] border border-white/10 p-5 rounded-3xl shadow-inner mb-6">
                         <h3 className="text-[11px] font-black uppercase text-[#D946EF] mb-2 flex items-center gap-2"><Lock size={14}/> Salve seu Progresso</h3>
@@ -482,7 +492,7 @@ export default function TelegramMiniApp() {
         </div>
       )}
 
-      {/* Modal PIX */}
+      {/* Modal PIX 🔥 BOTOES DINAMICOS AQUI 🔥 */}
       {showDeposit && (
         <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300 overflow-y-auto">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl my-auto">
@@ -505,18 +515,23 @@ export default function TelegramMiniApp() {
                  <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
                     <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br/>2. O saldo cai na hora aqui no Telegram!</p>
                  </div>
-                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-4 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    {copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
+                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
+                    {copied ? <CheckCircle2 size={18}/> : <Copy size={18}/>} {copied ? "Código Copiado!" : "Copia e Cola"}
                  </button>
               </div>
             ) : (
               <div className="space-y-4 pt-4">
                 <h2 className="text-2xl font-black text-white uppercase italic text-center mb-8 tracking-tighter">Recarregar <span className="text-[#D946EF]">Labz</span></h2>
                 
-                {[ { rs: 20, cr: 25 }, { rs: 30, cr: 35 }, { rs: 40, cr: 45 }, { rs: 50, cr: 55 } ].map((p) => (
-                  <button key={p.rs} onClick={() => handleGeneratePix(p.rs)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
-                    <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+5 BÔNUS</div>
-                    <div className="text-left"><span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{p.cr} CRÉDITOS</span><span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.rs},00</span></div>
+                {rechargePackages.map((p) => (
+                  <button key={p.id || p.amount} onClick={() => handleGeneratePix(p.amount)} className="w-full flex justify-between items-center p-6 bg-[#141414] border border-white/5 rounded-3xl hover:border-[#D946EF]/50 active:scale-95 transition-all relative overflow-hidden group shadow-lg">
+                    {Number(p.bonus) > 0 && (
+                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black text-[8px] font-black px-3 py-1 rounded-bl-xl shadow-md">+{p.bonus} BÔNUS</div>
+                    )}
+                    <div className="text-left">
+                      <span className="block text-xl font-black text-white italic tracking-tighter mb-0.5">{Number(p.amount) + Number(p.bonus)} CRÉDITOS</span>
+                      <span className="text-[10px] text-white/40 font-bold uppercase font-mono tracking-tighter">R$ {p.amount},00</span>
+                    </div>
                     <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                   </button>
                 ))}
