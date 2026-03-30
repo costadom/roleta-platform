@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Globe, Zap, Trash2, Loader2, Mail, Key, Megaphone, Trophy, Crown, DollarSign, CalendarDays, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2, Video } from "lucide-react";
+import PlayersManager from "./players";
 
 export default function SuperAdmin() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function SuperAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 🔥 OTIMIZAÇÃO DE VELOCIDADE (ESTILO CLAUDE) 🔥
+  // 🔥 BUSCA SEGURA E TURBINADA 🔥
   const fetchData = async () => {
     try {
       const headers = { 
@@ -46,16 +47,23 @@ export default function SuperAdmin() {
         "Cache-Control": "no-cache" 
       };
 
-      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA (Em Paralelo)
-      const [resGlob, resMod] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`, { headers }),
-      ]);
+      // Escudo Anti-Crash: Se a rede falhar, ele retorna nulo e não trava a tela!
+      const safeFetch = async (url: string, opts: any = {}) => {
+          try {
+              const res = await fetch(url, { headers: { ...headers, ...opts.headers } });
+              if (!res.ok) return null; 
+              if (opts.headers?.Prefer === "count=exact") {
+                 const range = res.headers.get("content-range");
+                 if (range) return { count: parseInt(range.split("/")[1]) };
+              }
+              return await res.json();
+          } catch (e) { return null; }
+      };
 
-      // Descompacta os JSONs essenciais ao mesmo tempo
+      // 1. CARREGA O ESSENCIAL PRIMEIRO E LIBERA A TELA
       const [dataGlob, dataMod] = await Promise.all([
-         resGlob.ok ? resGlob.json() : Promise.resolve([]),
-         resMod.ok ? resMod.json() : Promise.resolve([])
+        safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Models?select=id,slug,email,password,whatsapp,pix_key_1,pix_key_2,referred_by,created_at&order=created_at.asc`),
       ]);
 
       if (dataGlob && dataGlob[0]) {
@@ -71,24 +79,14 @@ export default function SuperAdmin() {
 
       // 2. CARREGA OS DADOS PESADOS E LISTAS NO FUNDO
       Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/Applications?select=*`, { headers }),
-        // 🔥 CORREÇÃO DE LENTIDÃO: limit=1 impede de baixar milhares de dados desnecessários, pega só o Header!
-        fetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { ...headers, "Prefer": "count=exact" } }).catch(() => ({ ok: false, headers: new Headers() })),
-        fetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`, { headers })
-      ]).then(async ([resTrans, resWith, resApp, resPlayers, resAbandon, resVideos]) => {
+        safeFetch(`${supabaseUrl}/rest/v1/Transactions?select=real_amount,platform_cut,model_cut,model_id&order=created_at.desc&limit=100`),
+        safeFetch(`${supabaseUrl}/rest/v1/Withdrawals?select=*&order=created_at.desc`),
+        safeFetch(`${supabaseUrl}/rest/v1/Applications?select=*`),
+        safeFetch(`${supabaseUrl}/rest/v1/Players?select=id&limit=1`, { headers: { "Prefer": "count=exact" } }),
+        safeFetch(`${supabaseUrl}/rest/v1/AbandonedCarts?select=*&order=created_at.desc&limit=500`),
+        safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?status=eq.pago&select=*,Models(slug,whatsapp,full_name)`)
+      ]).then(([dataTrans, dataWith, dataApp, dataPlayersCount, dataAbandon, dataVideos]) => {
           
-          // Descompacta todos os JSONs pesados de forma simultânea (Promise.all)
-          const [dataTrans, dataWith, dataApp, dataAbandon, dataVideos] = await Promise.all([
-             resTrans.ok ? resTrans.json() : Promise.resolve(null),
-             resWith.ok ? resWith.json() : Promise.resolve(null),
-             resApp.ok ? resApp.json() : Promise.resolve(null),
-             resAbandon.ok ? resAbandon.json() : Promise.resolve(null),
-             resVideos.ok ? resVideos.json() : Promise.resolve(null),
-          ]);
-
           if (dataTrans) setTransactions(dataTrans);
           if (dataWith) setWithdrawals(dataWith);
           if (dataVideos) setVideoRequests(dataVideos); 
@@ -106,18 +104,14 @@ export default function SuperAdmin() {
             }));
           }
 
-          if (resPlayers && resPlayers.headers) {
-             const range = resPlayers.headers.get("content-range");
-             if (range) {
-               const total = range.split("/")[1];
-               setTotalPlayers(parseInt(total));
-             }
+          if (dataPlayersCount && dataPlayersCount.count !== undefined) {
+             setTotalPlayers(dataPlayersCount.count);
           }
       });
 
     } catch (err) { 
-      console.error("Erro no fetch", err); 
-      setInitialLoading(false);
+      console.error("Erro no fetch principal", err); 
+      setInitialLoading(false); // Libera a tela mesmo em caso de erro extremo
     }
   };
 
@@ -183,7 +177,6 @@ export default function SuperAdmin() {
       const now = new Date().toISOString();
       const capNick = app.nickname.charAt(0).toUpperCase() + app.nickname.slice(1);
       
-      // 🔥 CRIAÇÃO DO PERFIL: Usa o e-mail real da modelo, e gera uma senha padrão segura 🔥
       const generatedEmail = app.email || `${app.nickname.toLowerCase()}@labzsexy.com`;
       const generatedPass = `${capNick}Labz2026!`;
       
@@ -210,7 +203,6 @@ export default function SuperAdmin() {
           setSelectedApp(null); 
           fetchData();
 
-          // 🔥 MENSAGEM WHATSAPP LIMPA: Puxando os dados reais e sem emojis que quebram 🔥
           const msg = `Oii, ${app.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua Plataforma LabzSexy exclusiva já está 100% configurada e pronta pra você faturar muito!\n\nLink do seu Painel: https://labzsexyroll.vercel.app/admin\n\nLogin: ${generatedEmail}\nSenha: ${generatedPass}\n\nQualquer dúvida, é só me chamar aqui. Bora fazer muito dinheiro!`;
           window.location.href = `https://wa.me/${app.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
       }
