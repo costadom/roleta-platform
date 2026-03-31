@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://labzsexyroll.vercel.app"),
   title: "LabzSexy | Onde as Musas se destacam!",
   description: "A plataforma oficial de conteúdo das Musas. Gire e ganhe prêmios exclusivos!",
   openGraph: {
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
     siteName: "LabzSexy",
     images: [
       {
-        url: "/opengraph-image.png", // Puxa a imagem que você colocou na pasta public
+        url: "https://labzsexyroll.vercel.app/opengraph-image.png", // 🔥 Link ABSOLUTO, o WhatsApp exige isso!
         width: 1200,
         height: 630,
         alt: "LabzSexy - Onde as Musas se destacam!",
