@@ -21,14 +21,6 @@ export const metadata: Metadata = {
     description: "Gire e ganhe prêmios exclusivos!",
     url: "https://labzsexyroll.vercel.app", 
     siteName: "LabzSexy",
-    images: [
-      {
-        url: "https://labzsexyroll.vercel.app/opengraph-image.png", // 🔥 Link ABSOLUTO, o WhatsApp exige isso!
-        width: 1200,
-        height: 630,
-        alt: "LabzSexy - Onde as Musas se destacam!",
-      },
-    ],
     locale: "pt_BR",
     type: "website",
   },
