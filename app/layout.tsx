@@ -13,8 +13,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Labz Sexy Roll",
-  description: "Gire a roleta e ganhe conteúdos e prêmios exclusivos!",
+  title: "LabzSexy | Onde as Musas se destacam!",
+  description: "A plataforma oficial de conteúdo das Musas. Gire e ganhe prêmios exclusivos!",
+  openGraph: {
+    title: "LabzSexy | Onde as Musas se destacam!",
+    description: "Gire e ganhe prêmios exclusivos!",
+    url: "https://labzsexyroll.vercel.app", 
+    siteName: "LabzSexy",
+    images: [
+      {
+        url: "/opengraph-image.png", // Puxa a imagem que você colocou na pasta public
+        width: 1200,
+        height: 630,
+        alt: "LabzSexy - Onde as Musas se destacam!",
+      },
+    ],
+    locale: "pt_BR",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
