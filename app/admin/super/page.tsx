@@ -39,7 +39,9 @@ export default function SuperAdmin() {
 
   const fetchData = async () => {
     try {
+      // 🔥 Lendo como Objeto direto. Sem JSON.parse! 🔥
       const res = await getSuperAdminData();
+      
       if (!res.ok) throw new Error(res.error);
 
       const { data } = res;
@@ -79,7 +81,11 @@ export default function SuperAdmin() {
   const executeAction = async (action: string, payload?: any) => {
     setLoading(true);
     try {
-      const res = await runAdminAction(action, payload);
+      // 🔥 Proteção de Payload para o Next.js não bugar na viagem 🔥
+      const safePayload = payload ? JSON.parse(JSON.stringify(payload)) : {};
+      
+      // Lê a resposta direto como Objeto
+      const res = await runAdminAction(action, safePayload);
       
       if (!res.ok) {
         alert(`🚨 ALERTA ESPIÃO LABZ:\n\n${res.error}`);
@@ -107,7 +113,7 @@ export default function SuperAdmin() {
 
       await fetchData();
     } catch (err: any) {
-      alert("Erro Crítico de Conexão: " + err.message);
+      alert("Erro de Conexão: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -310,7 +316,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* 🔥 MODAL ANALISE CANDIDATA 🔥 */}
+      {/* 🔥 MODAL ANALISE CANDIDATA COM CPF E E-MAIL 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -325,11 +331,10 @@ export default function SuperAdmin() {
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📱 Whats: <span className="text-white">{selectedApp.whatsapp || "Não informado"}</span></p>
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📧 E-mail: <span className="text-white truncate">{selectedApp.email || "Não informado"}</span></p>
                 
-                {selectedApp.referred_by && <div className="mt-2"><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest p-1.5 bg-amber-500/10 rounded border border-amber-500/20 inline-block">👑 Indicação Ativa: {selectedApp.referred_by}</p></div>}
+                {selectedApp.referred_by && <div className="mt-2"><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest p-1.5 bg-amber-500/10 rounded border border-amber-500/20 inline-block">👑 Indicação Ativa</p></div>}
               </div>
             </div>
             
-            {/* 🔥 BURLANDO O LIMITE DE 1MB DO NEXT.JS: Envia apenas o ID da candidatura 🔥 */}
             <button onClick={() => executeAction('approveApplication', { id: selectedApp.id })} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
               {loading ? <Loader2 className="animate-spin" size={16}/> : "Aprovar e Criar Unidade"}
             </button>
