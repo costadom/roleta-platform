@@ -8,6 +8,22 @@ const getSupabase = () => {
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
+// Sanitiza o objeto para não explodir o Next.js com undefined ou datas esquisitas
+function sanitize(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitize);
+  const newObj: any = {};
+  for (const key in obj) {
+    if (obj[key] === undefined) {
+      newObj[key] = null;
+    } else {
+      newObj[key] = sanitize(obj[key]);
+    }
+  }
+  return newObj;
+}
+
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
@@ -51,32 +67,16 @@ export async function getSuperAdminData() {
       }
     };
     
-    return JSON.stringify(result);
+    return JSON.stringify(sanitize(result));
   } catch (e: any) { 
     console.error("Erro no Servidor:", e);
     return JSON.stringify({ ok: false, error: e.message }); 
   }
 }
 
-// FIX: payloadStr permanece string (correto), mas agora fazemos sanitização
-// profunda no parse para eliminar qualquer `undefined` que crashe o Flight Protocol
-function sanitize(obj: any): any {
-  if (obj === null || obj === undefined) return null;
-  if (Array.isArray(obj)) return obj.map(sanitize);
-  if (typeof obj === 'object') {
-    const clean: any = {};
-    for (const key of Object.keys(obj)) {
-      clean[key] = sanitize(obj[key]);
-    }
-    return clean;
-  }
-  return obj;
-}
-
 export async function runAdminAction(action: string, payloadStr: string) {
   try {
     const supabase = getSupabase();
-    // FIX: sanitize elimina todos os `undefined` que quebram o Flight Protocol
     const payload = sanitize(payloadStr ? JSON.parse(payloadStr) : {});
 
     if (action === "resetSystem") {
@@ -112,17 +112,33 @@ export async function runAdminAction(action: string, payloadStr: string) {
       const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
       const generatedPass = `BlackjadeLabz2026!`;
       
-      const { data: m, error: mErr } = await supabase.from('Models').insert({
+      // 🔥 CORREÇÃO DA CAUSA RAIZ: Tratamento do referred_by (Madrinha) 🔥
+      // O banco de dados exige um UUID válido na coluna referred_by ou nulo.
+      // A ficha envia o slug (ex: "raphasavanah"). Vamos buscar o UUID real!
+      let safeReferredBy = null;
+      if (payload.referred_by && typeof payload.referred_by === 'string' && payload.referred_by.trim() !== '') {
+          // Busca o ID real da madrinha usando o slug dela
+          const { data: madrinha } = await supabase.from('Models').select('id').eq('slug', payload.referred_by.trim().toLowerCase()).single();
+          if (madrinha && madrinha.id) {
+              safeReferredBy = madrinha.id;
+          }
+      }
+      
+      // Limpeza pesada de todos os dados antes de jogar pro Supabase
+      const insertData = {
         slug: safeNickname.toLowerCase(), 
         email: generatedEmail, 
         password: generatedPass,
         full_name: payload.full_name || 'Musa Labz', 
-        whatsapp: payload.whatsapp || '', 
-        referred_by: payload.referred_by || null
-      }).select().single();
+        whatsapp: payload.whatsapp ? String(payload.whatsapp).replace(/\D/g, '') : null, 
+        cpf: payload.cpf ? String(payload.cpf).replace(/\D/g, '') : null,
+        referred_by: safeReferredBy // Agora é null ou um UUID válido!
+      };
+
+      const { data: m, error: mErr } = await supabase.from('Models').insert(insertData).select().single();
 
       if (mErr || !m) {
-        throw new Error(`[ERRO TABELA MODELS]: ${mErr?.message || 'Falha ao inserir'} | Detalhes: ${mErr?.details || mErr?.hint || 'Nenhum'}`);
+        throw new Error(`[ERRO BANCO DE DADOS MODELS]: ${mErr?.message} | Dica: O slug ${safeNickname} ou e-mail ${generatedEmail} já existem?`);
       }
 
       const { error: cErr } = await supabase.from('Configs').insert({ 
@@ -135,7 +151,7 @@ export async function runAdminAction(action: string, payloadStr: string) {
 
       if (cErr) {
         await supabase.from('Models').delete().eq('id', m.id);
-        throw new Error(`[ERRO TABELA CONFIGS]: ${cErr.message}`);
+        throw new Error(`[ERRO BANCO DE DADOS CONFIGS]: ${cErr.message}`);
       }
 
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
