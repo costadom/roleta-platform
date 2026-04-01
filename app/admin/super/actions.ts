@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getSupabase = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
@@ -34,7 +34,8 @@ export async function getSuperAdminData() {
 
     const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    return {
+    // 🔥 O SEGREDO DO ERRO 500: Isso garante que o servidor não trave ao enviar dados para a tela
+    return JSON.parse(JSON.stringify({
       ok: true,
       data: {
         global: globRes || null,
@@ -49,7 +50,7 @@ export async function getSuperAdminData() {
         }),
         videoRequests: vidsRes || []
       }
-    };
+    }));
   } catch (e: any) { 
     console.error("Erro no Servidor:", e);
     return { ok: false, error: e.message }; 
@@ -89,11 +90,11 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveApplication") {
-      // 🔥 TRAVA CONTRA BUGS: Garante que o nickname exista para não quebrar os códigos
+      // Proteção: Se a modelo não colocar nick, o sistema cria um provisório para não quebrar
       const safeNickname = payload.nickname ? payload.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
       
       const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `${safeNickname.charAt(0).toUpperCase()}${safeNickname.slice(1).toLowerCase()}Labz2026!`;
+      const generatedPass = `BlackjadeLabz2026!`; // Senha padrão solicitada
       
       const { data: m, error: mErr } = await supabase.from('Models').insert({
         slug: safeNickname.toLowerCase(), 
@@ -104,17 +105,14 @@ export async function runAdminAction(action: string, payload: any) {
         referred_by: payload.referred_by || null
       }).select().single();
 
-      if (mErr || !m) {
-        console.error("ERRO SUPABASE:", mErr);
-        throw new Error("Erro ao criar modelo no banco de dados.");
-      }
+      if (mErr || !m) throw new Error(mErr?.message || "Erro ao criar modelo.");
 
       await supabase.from('Configs').insert({ 
         model_id: m.id, 
         model_name: safeNickname.toUpperCase(), 
         spin_cost: 2, 
-        bg_url: payload.bg_url, 
-        profile_url: payload.profile_url || payload.bg_url 
+        bg_url: payload.bg_url || null, 
+        profile_url: payload.profile_url || payload.bg_url || null 
       });
 
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
