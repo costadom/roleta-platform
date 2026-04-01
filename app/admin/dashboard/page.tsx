@@ -167,6 +167,7 @@ function DashboardContent() {
 
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [clearingFeed, setClearingFeed] = useState(false);
 
   const [tgGroupId, setTgGroupId] = useState("");
   const [tgMessage, setTgMessage] = useState("");
@@ -184,7 +185,6 @@ function DashboardContent() {
     if (modelSlug && typeof window !== 'undefined') setModelUrl(window.location.origin);
   }, [modelSlug]);
 
-  // 🔥 ARQUITETURA ANTI-BLOQUEIO (FILA INDIANA COM RESPIRO) 🔥
   const loadData = async () => {
     if (!modelId) {
         setDashboardLoading(false);
@@ -205,7 +205,6 @@ function DashboardContent() {
           }
       };
 
-      // PASSO 1: Carrega apenas o essencial (Perfil e Configs)
       const resGlob = await safeFetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=*`);
       const resModel = await safeFetch(`${supabaseUrl}/rest/v1/Models?id=eq.${modelId}&select=*`);
       const resConfig = await safeFetch(`${supabaseUrl}/rest/v1/Configs?model_id=eq.${modelId}&select=*`);
@@ -230,47 +229,44 @@ function DashboardContent() {
         setTgToken(resConfig[0].tg_bot_token || ""); 
       }
 
-      // TELA LIBERADA
       setDashboardLoading(false);
 
-      // PASSO 2: Carrega as listas pesadas com Respiro
       const loadBackgroundData = async () => {
           const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-          await sleep(200); // Respiro
+          await sleep(200); 
           const resTrans = await safeFetch(`${supabaseUrl}/rest/v1/Transactions?model_id=eq.${modelId}&select=model_cut`);
           if (resTrans) setAccumulatedEarnings(resTrans.reduce((acc:any, curr:any) => acc + (Number(curr.model_cut) || 0), 0));
 
-          await sleep(200); // Respiro
+          await sleep(200); 
           const resPrizes = await safeFetch(`${supabaseUrl}/rest/v1/Prize?model_id=eq.${modelId}&select=*`);
           if (resPrizes) setPrizes(resPrizes.sort((a: any, b: any) => Number(a.weight) - Number(b.weight)));
 
-          await sleep(200); // Respiro
+          await sleep(200); 
           const resVideos = await safeFetch(`${supabaseUrl}/rest/v1/VideoRequests?model_id=eq.${modelId}&order=created_at.desc`);
           if (resVideos) setVideoRequests(resVideos);
 
-          await sleep(200); // Respiro
-          const resScratch = await safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`);
-          if (resScratch) setScratchPhotos(resScratch);
-
-          await sleep(200); // Respiro
+          await sleep(200); 
           const resFollowers = await safeFetch(`${supabaseUrl}/rest/v1/Players?model_id=eq.${modelId}&order=created_at.desc`);
           const fList = resFollowers || [];
           setFollowersList(fList);
 
-          await sleep(200); // Respiro
+          await sleep(200); 
           const resSales = await safeFetch(`${supabaseUrl}/rest/v1/UnlockedMedia?select=*,Media(*)`);
           if (resSales) {
              const mySales = resSales.filter((s: any) => s.Media?.model_id === modelId);
              setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
           }
 
-          await sleep(200); // Respiro
+          // 🔥 PUXANDO GALERIA NORMAL E RASPADINHA PARA ALIMENTAR O FEED 🔥
+          await sleep(200); 
           const resMedia = await safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`);
-          if (resMedia) {
-             setMediaList(resMedia);
-             loadActivityFeed(resMedia, fList); // O feed usa essas infos
-          }
+          const resScratch = await safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`);
+          
+          if (resScratch) setScratchPhotos(resScratch);
+          if (resMedia) setMediaList(resMedia);
+          
+          loadActivityFeed(resMedia || [], resScratch || [], fList); 
       };
 
       loadBackgroundData();
@@ -282,6 +278,81 @@ function DashboardContent() {
   };
 
   useEffect(() => { loadData(); }, [modelId]);
+
+  // 🔥 O NOVO FEED DE ATIVIDADES: PUXANDO FOTOS DO FEED E DA RASPADINHA 🔥
+  const loadActivityFeed = async (medias: any[], scratches: any[], followers: any[]) => {
+      try {
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+          
+          // Combina IDs das duas galerias (Limitando para as 15 mais recentes pra não travar)
+          const recentMedias = medias.slice(0, 15); 
+          const recentScratches = scratches.slice(0, 15);
+          
+          const allMediaItems = [...recentMedias, ...recentScratches];
+          const mediaIds = allMediaItems.map(m => m.id || m.photo_url); // Usa photo_url como ID para raspadinha se não tiver ID
+          
+          let likesList: any[] = []; let commentsList: any[] = [];
+          
+          if (mediaIds.length > 0) {
+              const mediaIdsStr = mediaIds.join('","'); // Formatação segura para in.("id1","id2")
+              
+              const [likesRes, commentsRes] = await Promise.all([
+                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.("${mediaIdsStr}")&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
+                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.("${mediaIdsStr}")&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
+              ]);
+              
+              const safeLikes = Array.isArray(likesRes) ? likesRes : [];
+              const safeComments = Array.isArray(commentsRes) ? commentsRes : [];
+
+              const findImageUrl = (mId: string) => {
+                 const item = allMediaItems.find(m => m.id === mId || m.photo_url === mId);
+                 return item?.url || item?.photo_url || null;
+              }
+
+              likesList = safeLikes.map((l: any) => ({ ...l, type: 'like', media_url: findImageUrl(l.media_id) }));
+              commentsList = safeComments.map((c: any) => ({ ...c, type: 'comment', media_url: findImageUrl(c.media_id) }));
+          }
+          
+          const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
+          
+          const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
+             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+             .slice(0, 50); // Limita a 50 notificações no total
+             
+          setActivityFeed(combinedFeed);
+      } catch (e) {
+          console.error("Erro silencioso feed:", e);
+      }
+  };
+
+  // 🔥 NOVA FUNÇÃO: LIMPAR FEED 🔥
+  const clearActivityFeed = async () => {
+    if (!confirm("Isso irá apagar todas as curtidas e comentários exibidos nestas notificações. Continuar?")) return;
+    
+    setClearingFeed(true);
+    try {
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
+        
+        // Pega todos os IDs das notificações na tela
+        const likeIds = activityFeed.filter(n => n.type === 'like').map(n => n.id);
+        const commentIds = activityFeed.filter(n => n.type === 'comment').map(n => n.id);
+
+        if (likeIds.length > 0) {
+            await fetch(`${supabaseUrl}/rest/v1/Likes?id=in.(${likeIds.join(',')})`, { method: 'DELETE', headers });
+        }
+        
+        if (commentIds.length > 0) {
+            await fetch(`${supabaseUrl}/rest/v1/Comments?id=in.(${commentIds.join(',')})`, { method: 'DELETE', headers });
+        }
+        
+        // Followers não apagamos o player, apenas limpamos do visual
+        setActivityFeed([]);
+    } catch(e) {
+        alert("Erro ao limpar notificações.");
+    }
+    setClearingFeed(false);
+  };
+
 
   const handleSaveTgToken = async () => {
     setSavingToken(true);
@@ -317,8 +388,6 @@ function DashboardContent() {
     } else if (!finalChatId.startsWith("-") && !finalChatId.startsWith("@")) {
         finalChatId = "@" + finalChatId;
     }
-
-    const miniAppLink = `${modelUrl}/tg-game/${modelSlug}`;
 
     try {
       const res = await fetch("/api/tg-post", {
@@ -376,37 +445,6 @@ function DashboardContent() {
       } catch (error) {
           alert("Erro de conexão ao gerar fatias. Atualize a página.");
           setDashboardLoading(false);
-      }
-  };
-
-  const loadActivityFeed = async (medias: any[], followers: any[]) => {
-      try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          
-          const recentMedias = medias.slice(0, 3); 
-          const mediaIds = recentMedias.map(m => m.id);
-          
-          let likesList: any[] = []; let commentsList: any[] = [];
-          
-          if (mediaIds.length > 0) {
-              const mediaIdsStr = mediaIds.join(',');
-              // Esses requests aqui vão com calma porque já tem dados para mostrar na tela
-              const [likesRes, commentsRes] = await Promise.all([
-                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
-                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=15`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
-              ]);
-              
-              const safeLikes = Array.isArray(likesRes) ? likesRes : [];
-              const safeComments = Array.isArray(commentsRes) ? commentsRes : [];
-
-              likesList = safeLikes.map((l: any) => ({ ...l, type: 'like', media_url: recentMedias.find(m => m.id === l.media_id)?.url }));
-              commentsList = safeComments.map((c: any) => ({ ...c, type: 'comment', media_url: recentMedias.find(m => m.id === c.media_id)?.url }));
-          }
-          const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
-          const combinedFeed = [...followersMapped, ...likesList, ...commentsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 40);
-          setActivityFeed(combinedFeed);
-      } catch (e) {
-          console.error("Erro silencioso feed:", e);
       }
   };
 
@@ -725,15 +763,29 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative overflow-x-hidden">
       
-      {/* 🔥 CENTRAL DE NOTIFICAÇÕES (DRAWER/MODAL) 🔥 */}
+      {/* 🔥 CENTRAL DE NOTIFICAÇÕES COM O BOTÃO DE LIMPAR 🔥 */}
       {showNotificationsPanel && (
           <>
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowNotificationsPanel(false)}></div>
               <div className="fixed top-0 right-0 h-full w-full sm:w-96 bg-[#0a0a0a] border-l border-white/10 z-[210] shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-                  <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/50 shrink-0">
-                      <h2 className="text-lg font-black uppercase italic text-[#D946EF] flex items-center gap-2"><Bell size={20}/> Atividades Recentes</h2>
-                      <button onClick={() => setShowNotificationsPanel(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
+                  <div className="p-6 border-b border-white/5 flex flex-col gap-4 bg-black/50 shrink-0">
+                      <div className="flex items-center justify-between">
+                          <h2 className="text-lg font-black uppercase italic text-[#D946EF] flex items-center gap-2"><Bell size={20}/> Atividades Recentes</h2>
+                          <button onClick={() => setShowNotificationsPanel(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-all"><X size={18}/></button>
+                      </div>
+                      
+                      {activityFeed.length > 0 && (
+                          <button 
+                              onClick={clearActivityFeed} 
+                              disabled={clearingFeed}
+                              className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                          >
+                              {clearingFeed ? <Loader2 size={14} className="animate-spin"/> : <Trash2 size={14}/>}
+                              Limpar Notificações
+                          </button>
+                      )}
                   </div>
+                  
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                       {activityFeed.length === 0 ? (
                           <div className="text-center text-white/30 text-xs italic font-bold uppercase tracking-widest py-10">Nenhuma atividade recente.</div>
@@ -854,10 +906,8 @@ function DashboardContent() {
 
         {/* -------------------- CONTEÚDO DAS ABAS -------------------- */}
 
-        {/* 🔥 ABA DE MARKETING EXCLUSIVA DA MODELO 🔥 */}
         {activeTab === "marketing" && (
             <div className="animate-in fade-in space-y-6">
-                {/* CAIXA DO TOKEN DO BOT (CONFIGURAÇÃO ÚNICA) */}
                 <div className="bg-black border border-[#FFD700]/30 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
                     <div className="flex items-center gap-3 mb-6">
                         <Key size={24} className="text-[#FFD700]"/>
@@ -884,7 +934,6 @@ function DashboardContent() {
                     </div>
                 </div>
 
-                {/* CAIXA DO DISPARADOR NO GRUPO COM FILTRO MÁGICO */}
                 <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-[#00f0ff]/30 p-8 rounded-[3rem] shadow-[0_0_30px_rgba(0,240,255,0.1)] relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-[#00f0ff]/5 rounded-full blur-[50px] pointer-events-none"></div>
                     
@@ -1383,7 +1432,7 @@ function DashboardContent() {
               </button>
               
               <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
-                  <img src={showMediaStats.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
+                  <img src={showMediaStats.url || showMediaStats.photo_url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
               </div>
               
               <div className="w-full md:w-1/2 max-w-md bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] flex flex-col h-[50vh] md:h-[85vh] overflow-hidden shadow-2xl">
