@@ -32,16 +32,14 @@ export default function SuperAdmin() {
   const [goalReward, setGoalReward] = useState("");
   
   const [rechargePackages, setRechargePackages] = useState<{id: number, amount: number, bonus: number}[]>([
-    { id: 1, amount: 10, bonus: 2 } 
+    { id: 1, amount: 10, bonus: 2 }
   ]);
 
   const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
 
   const fetchData = async () => {
     try {
-      // 🔥 Lendo como Objeto direto. Sem JSON.parse! 🔥
       const res = await getSuperAdminData();
-      
       if (!res.ok) throw new Error(res.error);
 
       const { data } = res;
@@ -81,30 +79,22 @@ export default function SuperAdmin() {
   const executeAction = async (action: string, payload?: any) => {
     setLoading(true);
     try {
-      // 🔥 Proteção de Payload para o Next.js não bugar na viagem 🔥
-      const safePayload = payload ? JSON.parse(JSON.stringify(payload)) : {};
-      
-      // Lê a resposta direto como Objeto
-      const res = await runAdminAction(action, safePayload);
-      
-      if (!res.ok) {
-        alert(`🚨 ALERTA ESPIÃO LABZ:\n\n${res.error}`);
-        setLoading(false);
-        return;
-      }
+      const res = await runAdminAction(action, payload);
+      if (!res.ok) throw new Error(res.error);
       
       if (action === "saveGlobal") alert("Configurações Salvas com Sucesso!");
       
       if (action === "approveApplication") {
-          const nomeModelo = res.data.full_name ? res.data.full_name.split(' ')[0] : 'Musa';
+          const nomeModelo = payload.full_name ? payload.full_name.split(' ')[0] : (payload.nickname || 'Musa');
           
+          // 🔥 MENSAGEM DO WHATSAPP ESPAÇADA PERFEITAMENTE 🔥
           const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
           
-          const phone = res.data.whatsapp ? String(res.data.whatsapp).replace(/\D/g, '') : '';
+          const phone = payload.whatsapp ? payload.whatsapp.replace(/\D/g, '') : '';
           if (phone) {
              window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
           } else {
-             alert("Aprovada com sucesso! Sem WhatsApp registrado para notificar.");
+             alert("Aprovada com sucesso! (Não foi possível abrir o WhatsApp pois não foi informado)");
           }
           setSelectedApp(null);
       }
@@ -113,7 +103,7 @@ export default function SuperAdmin() {
 
       await fetchData();
     } catch (err: any) {
-      alert("Erro de Conexão: " + err.message);
+      alert("Erro na ação: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -131,9 +121,15 @@ export default function SuperAdmin() {
     return { totalSales, totalPlatform, totalModels, byModel };
   }, [transactions]);
 
-  const addPackage = () => { setRechargePackages([...rechargePackages, { id: Date.now(), amount: 0, bonus: 0 }]); };
-  const updatePackage = (id: number, field: 'amount' | 'bonus', value: number) => { setRechargePackages(rechargePackages.map(p => p.id === id ? { ...p, [field]: value } : p)); };
-  const removePackage = (id: number) => { setRechargePackages(rechargePackages.filter(p => p.id !== id)); };
+  const addPackage = () => {
+    setRechargePackages([...rechargePackages, { id: Date.now(), amount: 0, bonus: 0 }]);
+  };
+  const updatePackage = (id: number, field: 'amount' | 'bonus', value: number) => {
+    setRechargePackages(rechargePackages.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+  const removePackage = (id: number) => {
+    setRechargePackages(rechargePackages.filter(p => p.id !== id));
+  };
 
   if (initialLoading) return <div className="min-h-screen bg-black flex justify-center items-center"><Loader2 className="animate-spin text-[#FF1493]" size={40}/></div>;
 
@@ -327,6 +323,8 @@ export default function SuperAdmin() {
               <div className="flex-1 space-y-2">
                 <p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p>
                 <p className="text-[10px] text-indigo-400 font-bold uppercase">@{selectedApp.nickname}</p>
+                
+                {/* DADOS ADICIONADOS AQUI */}
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest mt-2 flex items-center gap-1">🪪 CPF: <span className="text-white">{selectedApp.cpf || "Não informado"}</span></p>
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📱 Whats: <span className="text-white">{selectedApp.whatsapp || "Não informado"}</span></p>
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📧 E-mail: <span className="text-white truncate">{selectedApp.email || "Não informado"}</span></p>
@@ -335,7 +333,7 @@ export default function SuperAdmin() {
               </div>
             </div>
             
-            <button onClick={() => executeAction('approveApplication', { id: selectedApp.id })} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
+            <button onClick={() => executeAction('approveApplication', selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
               {loading ? <Loader2 className="animate-spin" size={16}/> : "Aprovar e Criar Unidade"}
             </button>
             <button onClick={() => executeAction('rejectApplication', { id: selectedApp.id })} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar e Apagar</button>
