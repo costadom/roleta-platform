@@ -43,11 +43,10 @@ export default function GamePage() {
   const [wonPrizes, setWonPrizes] = useState<any[]>([]);
   const [superMsg, setSuperMsg] = useState("");
 
-  // 🔥 NOVO: Estado que guarda os pacotes dinâmicos da Central 🔥
   const [rechargePackages, setRechargePackages] = useState<any[]>([
     { id: 1, amount: 10, bonus: 2 },
     { id: 2, amount: 20, bonus: 5 }
-  ]); // Valores padrão caso o banco demore
+  ]); 
 
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
   const winAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -69,7 +68,6 @@ export default function GamePage() {
         const mId = dataMod[0]?.id;
         if (!mId) { setLoading(false); return; }
 
-        // 🔥 NOVO: Busca os pacotes da Central de Configurações Globais 🔥
         const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=recharge_packages`, { headers }).catch(() => null);
         if (resGlob && resGlob.ok) {
             const globData = await resGlob.json();
@@ -275,9 +273,17 @@ export default function GamePage() {
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase text-[10px] animate-pulse">Carregando...</div>;
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans pb-24">
-      <div className="relative w-full h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-hidden">
-        <div className="absolute inset-0 z-0">
+    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center overflow-hidden font-sans relative">
+      
+      {/* 🔥 NOVO: Fundo de Computador Desfocado 🔥 */}
+      <div className="hidden md:block absolute inset-0 z-0 pointer-events-none">
+         <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${bgUrl})` }} />
+         <div className="absolute inset-0 bg-gradient-to-b from-black/50 to-black/90" />
+      </div>
+
+      {/* Container Principal (No celular ocupa tudo, no PC fica arredondado) */}
+      <div className="relative w-full h-[100dvh] md:h-[90dvh] max-w-[430px] bg-black flex flex-col md:rounded-[2.5rem] md:border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden z-10">
+        <div className="absolute inset-0 z-0 pointer-events-none">
            <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${bgUrl})`, opacity: isAuthorized ? 0.45 : 0.25 }} />
            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
         </div>
@@ -285,10 +291,14 @@ export default function GamePage() {
         <div className="relative z-10 flex flex-col h-full overflow-hidden">
           <div className="p-4 flex flex-col gap-3 shrink-0">
              <div className="flex justify-between items-center px-1">
-                <button onClick={() => router.push('/vitrine')} className="px-3 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase text-white/70 flex items-center gap-1.5"><LayoutGrid size={12} /> Vitrine</button>
+                {/* 🔥 BOTÃO ALTERADO PARA VOLTAR AO PERFIL 🔥 */}
+                <div className="flex gap-2">
+                   <button onClick={() => router.push(`/profile/${slug}`)} className="p-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={16}/></button>
+                   <button onClick={() => router.push(`/profile/${slug}`)} className="px-4 py-2 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all"><User size={14}/> Voltar ao Perfil</button>
+                </div>
                 <div className="flex gap-2">
                    <button onClick={() => setSoundEnabled(!soundEnabled)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
-                   <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all"><User size={18}/></button>
+                   <button onClick={() => isAuthorized ? setShowProfile(true) : setShowAuthModal(true)} className="w-9 h-9 bg-black/40 border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all"><LayoutGrid size={16}/></button>
                 </div>
              </div>
              <div className="flex flex-col items-center"><span className="text-[#D946EF] font-black italic text-xl tracking-tighter drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]">Savanah <span className="text-white">Labz</span></span><span className="text-[10px] text-[#FFD700] font-black uppercase mt-0.5 tracking-widest italic">Musa {modelName}</span></div>
@@ -336,26 +346,18 @@ export default function GamePage() {
         {showAuthModal && <AuthModal isOpen={true} onClose={() => setShowAuthModal(false)} />}
       </div>
 
+      {/* 🔥 MODAL DE PERFIL LIMPO 🔥 */}
       {showProfile && player && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-300">
           <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl flex flex-col max-h-[90vh]">
             <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><X size={24} /></button>
             <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
             <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center">{player.nickname}</h2>
-            
-            <div className="mt-8 text-left space-y-3 shrink-0">
-               <h3 className="text-[10px] text-white/40 uppercase font-black mb-1 flex items-center gap-2 tracking-widest"><Coins size={12} className="text-[#FFD700]"/> Seus Saldos</h3>
-                  {allAssociations.map((assoc: any) => (
-                    <div key={assoc.id} className="bg-white/5 border border-white/5 p-4 rounded-xl flex justify-between items-center">
-                       <span className="text-[11px] font-black uppercase text-white/80">{assoc.Models?.slug}</span>
-                       <span className="text-xs font-black text-[#D946EF]">{assoc.credits} CR</span>
-                    </div>
-                  ))}
-            </div>
+            <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-2 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
 
-            {wonPrizes && wonPrizes.length > 0 && (
-                <div className="mt-8 border-t border-white/10 pt-6 text-left flex-1 overflow-hidden flex flex-col">
-                    <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest shrink-0"><Trophy size={14} className="text-[#FFD700]"/> Prêmios Ganhos</h3>
+            {wonPrizes && wonPrizes.length > 0 ? (
+                <div className="mt-4 border-t border-white/10 pt-6 text-left flex-1 overflow-hidden flex flex-col">
+                    <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest shrink-0"><Trophy size={14} className="text-[#FFD700]"/> Seus Prêmios</h3>
                     <div className="space-y-3 overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
                         {wonPrizes.map((p, idx) => {
                             const { icon: Icon, action, text } = getPrizeAction(p);
@@ -371,6 +373,11 @@ export default function GamePage() {
                             )
                         })}
                     </div>
+                </div>
+            ) : (
+                <div className="mt-8 border-t border-white/10 pt-8 text-center">
+                    <Trophy size={30} className="text-white/10 mx-auto mb-3" />
+                    <p className="text-[10px] text-white/40 uppercase font-black tracking-widest">Nenhum prêmio ganho ainda.</p>
                 </div>
             )}
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-6 text-white/20 text-[10px] font-black uppercase hover:text-red-500 transition-colors text-center w-full shrink-0">Sair da Conta</button>
@@ -408,7 +415,6 @@ export default function GamePage() {
               <div className="space-y-3">
                 <h2 className="text-xl font-black text-white uppercase italic text-center mb-6">Recarregar <span className="text-[#D946EF]">{modelName}</span></h2>
                 
-                {/* 🔥 NOVO: MAPEANDO OS PACOTES DINÂMICOS DO SUPER ADMIN 🔥 */}
                 {rechargePackages.map((p) => (
                   <button key={p.id || p.amount} onClick={() => handleGeneratePix(p.amount)} className="w-full flex justify-between items-center p-5 bg-[#141414] border border-white/5 rounded-2xl hover:border-[#D946EF]/50 relative transition-all active:scale-95 group shadow-inner">
                     {Number(p.bonus) > 0 && (
@@ -428,7 +434,7 @@ export default function GamePage() {
         </div>
       )}
       <PrizeModal open={modalOpen} prize={selectedPrize} playerName={player?.nickname || ""} modelName={modelName} onClose={() => setModalOpen(false)} />
-      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
+      <style jsx global>{` @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { display: flex; animation: marquee 35s linear infinite; width: fit-content; } .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D946EF; }`}</style>
     </div>
   );
 }
