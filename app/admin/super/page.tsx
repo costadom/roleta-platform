@@ -39,7 +39,9 @@ export default function SuperAdmin() {
 
   const fetchData = async () => {
     try {
-      const res = await getSuperAdminData();
+      const resStr = await getSuperAdminData();
+      const res = JSON.parse(resStr); // Traduz a string de volta pra objeto
+      
       if (!res.ok) throw new Error(res.error);
 
       const { data } = res;
@@ -79,25 +81,30 @@ export default function SuperAdmin() {
   const executeAction = async (action: string, payload?: any) => {
     setLoading(true);
     try {
-      // 🔥 TRAVA ANTI-ERRO 500 🔥 Limpa o payload antes de mandar pro servidor
-      const safePayload = payload ? JSON.parse(JSON.stringify(payload)) : undefined;
-      const res = await runAdminAction(action, safePayload);
+      // 🔥 BURLANDO O NEXT.JS: Converte os dados em string para a rota não travar
+      const payloadStr = payload ? JSON.stringify(payload) : "{}";
+      const resStr = await runAdminAction(action, payloadStr);
+      const res = JSON.parse(resStr);
       
-      if (!res.ok) throw new Error(res.error);
+      if (!res.ok) {
+        // 🔥 ESPIÃO LABZ MOSTRANDO O ERRO EXATO NA TELA 🔥
+        alert(`🚨 ESPIÃO LABZ DETECTOU FALHA:\n\n${res.error}\n\n(Dica: Se falar de violação de chave única, a modelo, slug ou e-mail já existe)`);
+        setLoading(false);
+        return;
+      }
       
       if (action === "saveGlobal") alert("Configurações Salvas com Sucesso!");
       
       if (action === "approveApplication") {
           const nomeModelo = payload.full_name ? payload.full_name.split(' ')[0] : (payload.nickname || 'Musa');
           
-          // 🔥 MENSAGEM DO WHATSAPP IDÊNTICA AO SEU PEDIDO 🔥
           const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
           
           const phone = payload.whatsapp ? payload.whatsapp.replace(/\D/g, '') : '';
           if (phone) {
              window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
           } else {
-             alert("Aprovada com sucesso! (Não foi possível abrir o WhatsApp pois não foi informado)");
+             alert("Aprovada com sucesso! (Não abriu o WhatsApp pois a candidata não informou o número)");
           }
           setSelectedApp(null);
       }
@@ -106,7 +113,7 @@ export default function SuperAdmin() {
 
       await fetchData();
     } catch (err: any) {
-      alert("Erro na ação: " + err.message);
+      alert("Erro Crítico de Conexão: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -331,7 +338,7 @@ export default function SuperAdmin() {
             <button onClick={() => executeAction('approveApplication', selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
               {loading ? <Loader2 className="animate-spin" size={16}/> : "Aprovar e Criar Unidade"}
             </button>
-            <button onClick={() => executeAction('rejectApplication', { id: selectedApp.id })} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar</button>
+            <button onClick={() => executeAction('rejectApplication', { id: selectedApp.id })} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar e Apagar</button>
           </div>
         </div>
       )}
