@@ -3,14 +3,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getSupabase = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, { auth: { persistSession: false } });
-};
-
-// 🔥 LIMPEZA SÊNIOR (Dica do Claude): Remove undefined sem quebrar a estrutura de Objeto
-const sanitizeForNext = (obj: any): any => {
-  return JSON.parse(JSON.stringify(obj, (key, value) => (value === undefined ? null : value)));
 };
 
 export async function getSuperAdminData() {
@@ -39,7 +34,7 @@ export async function getSuperAdminData() {
 
     const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    return sanitizeForNext({
+    return {
       ok: true,
       data: {
         global: globRes || null,
@@ -54,10 +49,10 @@ export async function getSuperAdminData() {
         }),
         videoRequests: vidsRes || []
       }
-    });
+    };
   } catch (e: any) { 
     console.error("Erro no Servidor:", e);
-    return sanitizeForNext({ ok: false, error: e.message }); 
+    return { ok: false, error: e.message }; 
   }
 }
 
@@ -94,53 +89,33 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveApplication") {
-      // 🔥 BURLA O LIMITE DE 1MB: Busca a ficha no banco em vez de receber pela rede 🔥
-      const { data: appData } = await supabase.from('Applications').select('*').eq('id', payload.id).single();
-      if (!appData) throw new Error("Candidatura não encontrada.");
-
-      const safeNickname = appData.nickname ? appData.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
-      const generatedEmail = appData.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
+      const safeNickname = payload.nickname ? payload.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
+      const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
       
-      // 🔥 SENHA DINÂMICA: Primeira letra maiúscula + Labz2026!
+      // 🔥 SENHA DINÂMICA: Primeira letra maiúscula + resto minúsculo + Labz2026!
       const generatedPass = `${safeNickname.charAt(0).toUpperCase()}${safeNickname.slice(1).toLowerCase()}Labz2026!`;
-
-      // 🔥 CORREÇÃO DA MADRINHA: Pega o UUID pelo slug
-      let safeReferredBy = null;
-      if (appData.referred_by && typeof appData.referred_by === 'string' && appData.referred_by.trim() !== '') {
-          const { data: madrinha } = await supabase.from('Models').select('id').eq('slug', appData.referred_by.trim().toLowerCase()).single();
-          if (madrinha && madrinha.id) safeReferredBy = madrinha.id;
-      }
-
+      
       const { data: m, error: mErr } = await supabase.from('Models').insert({
         slug: safeNickname.toLowerCase(), 
         email: generatedEmail, 
         password: generatedPass,
-        full_name: appData.full_name || 'Musa Labz', 
-        whatsapp: appData.whatsapp ? String(appData.whatsapp).replace(/\D/g, '') : null, 
-        cpf: appData.cpf ? String(appData.cpf).replace(/\D/g, '') : null,
-        referred_by: safeReferredBy
+        full_name: payload.full_name || 'Musa', 
+        whatsapp: payload.whatsapp || '', 
+        referred_by: payload.referred_by || null
       }).select().single();
 
-      if (mErr || !m) throw new Error(`[ERRO MODELS]: ${mErr?.message}`);
+      if (mErr || !m) throw new Error("Erro ao criar modelo no banco.");
 
-      // 🔥 CORREÇÃO DO CREATED_AT: Adicionada a data forçada
-      const { error: cErr } = await supabase.from('Configs').insert({ 
+      await supabase.from('Configs').insert({ 
         model_id: m.id, 
         model_name: safeNickname.toUpperCase(), 
         spin_cost: 2, 
-        bg_url: appData.bg_url || null, 
-        profile_url: appData.profile_url || appData.bg_url || null,
-        created_at: new Date().toISOString()
+        bg_url: payload.bg_url, 
+        profile_url: payload.profile_url || payload.bg_url 
       });
 
-      if (cErr) {
-        await supabase.from('Models').delete().eq('id', m.id);
-        throw new Error(`[ERRO CONFIGS]: ${cErr.message}`);
-      }
-
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
-      
-      return sanitizeForNext({ ok: true, data: { generatedEmail, generatedPass, full_name: appData.full_name, whatsapp: appData.whatsapp } });
+      return { ok: true, data: { generatedEmail, generatedPass } };
     }
 
     if (action === "rejectApplication") {
@@ -151,15 +126,8 @@ export async function runAdminAction(action: string, payload: any) {
       const { data: m, error: mErr } = await supabase.from('Models').insert({
         slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
       }).select().single();
-      
-      if (mErr || !m) throw new Error(`Erro ao criar modelo: ${mErr?.message}`);
-      
-      await supabase.from('Configs').insert({ 
-        model_id: m.id, 
-        model_name: payload.slug.toUpperCase(), 
-        spin_cost: 2,
-        created_at: new Date().toISOString()
-      });
+      if (mErr || !m) throw new Error("Erro ao criar modelo manual.");
+      await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
     }
 
     if (action === "deleteModel") {
@@ -168,8 +136,8 @@ export async function runAdminAction(action: string, payload: any) {
       await supabase.from('Models').delete().eq('id', payload.id);
     }
 
-    return sanitizeForNext({ ok: true });
+    return { ok: true };
   } catch (e: any) { 
-    return sanitizeForNext({ ok: false, error: e.message || String(e) }); 
+    return { ok: false, error: e.message }; 
   }
 }
