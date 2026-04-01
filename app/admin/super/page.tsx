@@ -81,13 +81,31 @@ export default function SuperAdmin() {
   const executeAction = async (action: string, payload?: any) => {
     setLoading(true);
     try {
-      const res = await runAdminAction(action, payload);
+      // 🔥 O SEGREDO PRA PARAR O ERRO DO SERVIDOR: Serializar os dados antes de enviar! 🔥
+      const safePayload = payload ? JSON.parse(JSON.stringify(payload)) : undefined;
+      const res = await runAdminAction(action, safePayload);
+      
       if (!res.ok) throw new Error(res.error);
+      
       if (action === "saveGlobal") alert("Configurações Salvas com Sucesso!");
+      
       if (action === "approveApplication") {
-          const msg = `Oii, ${payload.full_name.split(' ')[0]}! Que alegria ter você com a gente!\n\nA sua plataforma LabzSexy está pronta!\n\nLink: https://labzsexyroll.vercel.app/admin\nLogin: ${res.data.generatedEmail}\nSenha: ${res.data.generatedPass}`;
-          window.open(`https://wa.me/${payload.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+          const nomeModelo = payload.full_name ? payload.full_name.split(' ')[0] : (payload.nickname || 'Musa');
+          
+          // 🔥 MENSAGEM DO WHATSAPP ATUALIZADA EXATAMENTE COMO VOCÊ PEDIU 🔥
+          const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+          
+          const phone = payload.whatsapp ? payload.whatsapp.replace(/\D/g, '') : '';
+          if (phone) {
+             window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+          } else {
+             alert("Musa aprovada! Mas o WhatsApp dela parece inválido para redirecionar.");
+          }
+          setSelectedApp(null); // Fecha o modal após aprovar
       }
+      
+      if (action === "rejectApplication") setSelectedApp(null); // Fecha o modal após rejeitar
+
       await fetchData();
     } catch (err: any) {
       alert("Erro na ação: " + err.message);
@@ -303,7 +321,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* MODAL ANALISE CANDIDATA */}
+      {/* 🔥 MODAL ANALISE CANDIDATA ARRUMADO (AGORA COM CPF E EMAIL) 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -314,12 +332,20 @@ export default function SuperAdmin() {
               <div className="flex-1 space-y-2">
                 <p className="text-sm font-black text-white uppercase">{selectedApp.full_name}</p>
                 <p className="text-[10px] text-indigo-400 font-bold uppercase">@{selectedApp.nickname}</p>
-                <p className="text-[10px] font-bold text-white uppercase">{selectedApp.whatsapp}</p>
-                {selectedApp.referred_by && <div><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest mt-2">👑 Indicação Ativa</p></div>}
+                
+                {/* DADOS ADICIONADOS AQUI */}
+                <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest mt-2 flex items-center gap-1">🪪 CPF: <span className="text-white">{selectedApp.cpf || "Não informado"}</span></p>
+                <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📱 Whats: <span className="text-white">{selectedApp.whatsapp || "Não informado"}</span></p>
+                <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📧 E-mail: <span className="text-white truncate">{selectedApp.email || "Não informado"}</span></p>
+                
+                {selectedApp.referred_by && <div className="mt-2"><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest p-1.5 bg-amber-500/10 rounded border border-amber-500/20 inline-block">👑 Indicação: {selectedApp.referred_by}</p></div>}
               </div>
             </div>
-            <button onClick={() => executeAction('approveApplication', selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">{loading ? <Loader2 className="animate-spin" size={16}/> : "Aprovar e Criar Unidade"}</button>
-            <button onClick={() => executeAction('rejectApplication', { id: selectedApp.id })} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar</button>
+            
+            <button onClick={() => executeAction('approveApplication', selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
+              {loading ? <Loader2 className="animate-spin" size={16}/> : "Aprovar e Criar Unidade"}
+            </button>
+            <button onClick={() => executeAction('rejectApplication', { id: selectedApp.id })} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar e Apagar</button>
           </div>
         </div>
       )}
