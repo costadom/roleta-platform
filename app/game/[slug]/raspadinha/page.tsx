@@ -27,135 +27,182 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
-// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false); 
+  const isRevealedRef = useRef(isRevealed);
+
+  useEffect(() => {
+    isRevealedRef.current = isRevealed;
+  }, [isRevealed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
-    
+    const { width, height } = canvas;
+
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, "#888");
     gradient.addColorStop(0.5, "#ccc");
     gradient.addColorStop(1, "#666");
-    
+    ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
     ctx.fillStyle = "rgba(255,255,255,0.15)";
-    for(let i=0; i<3000; i++) {
-        ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
+    for (let i = 0; i < 3000; i++) {
+      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
     }
 
     ctx.fillStyle = "#333";
-    ctx.font = "900 28px sans-serif";
+    ctx.font = "900 24px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
-    
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = 50; 
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.lineWidth = 45;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
   }, [coverText]);
 
   useEffect(() => {
     if (isRevealed && canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        if(ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
   }, [isRevealed]);
 
-  const getPointerPos = (e: any) => {
+  const getPos = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
     return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height),
     };
-  };
+  }, []);
 
-  const handleStart = (e: any) => {
-    if (isRevealed) return;
-    if (e.cancelable) e.preventDefault();
-    setIsDrawing(true);
-    const { x, y } = getPointerPos(e);
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) {
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-  };
-
-  const handleMove = (e: any) => {
-    if (!isDrawing || isRevealed) return;
-    if (e.cancelable) e.preventDefault();
-    const { x, y } = getPointerPos(e);
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
-    if (ctx && canvas) {
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      checkReveal(ctx, canvas);
-    }
-  };
-
-  const handleEnd = () => setIsDrawing(false);
-
-  const checkReveal = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+  const checkReveal = useCallback(
+    (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+      if (isRevealedRef.current) return;
       if (Math.random() > 0.1) return; 
-      
+
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
-      const totalPixels = pixels.length / 4;
-      
+      const totalSamples = pixels.length / 4 / 32;
+
       for (let i = 3; i < pixels.length; i += 128) {
-          if (pixels[i] === 0) transparent++;
+        if (pixels[i] === 0) transparent++;
       }
-      
-      const percent = (transparent / (totalPixels / 32)) * 100;
-      
-      if (percent > 40 && !isRevealed) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height); 
-          onReveal();
+
+      if (transparent / totalSamples > 0.4) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        onReveal();
       }
+    },
+    [onReveal]
+  );
+
+  const startDraw = useCallback(
+    (x: number, y: number) => {
+      if (isRevealedRef.current) return;
+      isDrawingRef.current = true;
+      const ctx = canvasRef.current?.getContext("2d", { willReadFrequently: true });
+      if (ctx) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      }
+    },
+    []
+  );
+
+  const draw = useCallback(
+    (x: number, y: number) => {
+      if (!isDrawingRef.current || isRevealedRef.current) return;
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d", { willReadFrequently: true });
+      if (ctx && canvas) {
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        checkReveal(ctx, canvas);
+      }
+    },
+    [checkReveal]
+  );
+
+  const endDraw = useCallback(() => {
+    isDrawingRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault(); 
+      const touch = e.touches[0];
+      const { x, y } = getPos(touch.clientX, touch.clientY);
+      startDraw(x, y);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault(); 
+      const touch = e.touches[0];
+      const { x, y } = getPos(touch.clientX, touch.clientY);
+      draw(x, y);
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      endDraw();
+    };
+
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [getPos, startDraw, draw, endDraw]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const { x, y } = getPos(e.clientX, e.clientY);
+    startDraw(x, y);
   };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const { x, y } = getPos(e.clientX, e.clientY);
+    draw(x, y);
+  };
+  const handleMouseUp = () => endDraw();
+  const handleMouseLeave = () => endDraw();
 
   return (
     <canvas
       ref={canvasRef}
       width={400}
       height={500}
-      className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
-      onMouseDown={handleStart}
-      onMouseMove={handleMove}
-      onMouseUp={handleEnd}
-      onMouseLeave={handleEnd}
-      onTouchStart={handleStart}
-      onTouchMove={handleMove}
-      onTouchEnd={handleEnd}
+      style={{ touchAction: "none" }}
+      className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${
+        isRevealed ? "pointer-events-none opacity-0 transition-opacity duration-500" : ""
+      }`}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
     />
   );
 };
 
-
-// --- PÁGINA PRINCIPAL ---
-
-export default function RaspadinhaPage() {
+export default function RaspadinhaWebPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
@@ -272,28 +319,26 @@ export default function RaspadinhaPage() {
 
   const handleToggleLike = async () => {
     const phone = player?.whatsapp || localStorage.getItem("labz_player_phone");
-    if (!phone) return;
+    if (!phone || !viewingMedia?.id) return;
 
     try {
         const isCurrentlyLiked = liked;
         
-        // Atualização Otimista para não travar a tela
+        // Atualização Otimista
         setLiked(!isCurrentlyLiked);
         setLikesCount(prev => isCurrentlyLiked ? prev - 1 : prev + 1);
 
-        const mediaId = (viewingMedia.id && !viewingMedia.id.startsWith('http')) ? viewingMedia.id : '00000000-0000-0000-0000-000000000000';
-
         if (isCurrentlyLiked) {
-            await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${mediaId}&player_phone=eq.${encodeURIComponent(phone)}`, { method: 'DELETE', headers });
+            await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${viewingMedia.id}&player_phone=eq.${encodeURIComponent(phone)}`, { method: 'DELETE', headers });
         } else {
-            await fetch(`${supabaseUrl}/rest/v1/Likes`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, player_phone: phone }) });
+            await fetch(`${supabaseUrl}/rest/v1/Likes`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: viewingMedia.id, player_phone: phone }) });
         }
     } catch (e) {}
   };
 
   const handlePostComment = async () => {
     const phone = player?.whatsapp || localStorage.getItem("labz_player_phone");
-    if (!phone || !newComment.trim()) return;
+    if (!phone || !newComment.trim() || !viewingMedia?.id) return;
     
     setLoadingComment(true);
 
@@ -301,13 +346,12 @@ export default function RaspadinhaPage() {
         const playerName = player?.nickname || player?.full_name || 'Fã VIP';
         const commentText = newComment;
         
-        // Atualização Otimista (Exibe na hora, limpa o input na hora)
+        // Atualização Otimista
         const tempComment = { id: Date.now().toString(), player_name: playerName, content: commentText, created_at: new Date().toISOString() };
         setComments(prev => [...prev, tempComment]);
         setNewComment(""); 
 
-        const mediaId = (viewingMedia.id && !viewingMedia.id.startsWith('http')) ? viewingMedia.id : '00000000-0000-0000-0000-000000000000';
-        const payload = { media_id: mediaId, player_phone: phone, player_name: playerName, content: commentText };
+        const payload = { media_id: viewingMedia.id, player_phone: phone, player_name: playerName, content: commentText };
         
         const res = await fetch(`${supabaseUrl}/rest/v1/Comments`, { 
             method: 'POST', 
@@ -327,6 +371,7 @@ export default function RaspadinhaPage() {
     if (mediaItem) {
         setViewingMedia({ ...mediaItem, url: photoUrl });
     } else {
+        // Fallback de segurança se a foto não for achada no array
         setViewingMedia({ id: photoUrl, url: photoUrl, caption: "Foto VIP Raspadinha" });
     }
   };
@@ -502,7 +547,7 @@ export default function RaspadinhaPage() {
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      {/* 🔥 Fundo de Computador Desfocado 🔥 */}
+      {/* 🔥 Fundo de Computador Desfocado IDÊNTICO à Roleta 🔥 */}
       <div className="hidden md:block absolute inset-0 z-0 pointer-events-none">
          <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${backgroundUrl})` }} />
          <div className="absolute inset-0 bg-gradient-to-b from-black/50 to-black/90" />
@@ -513,13 +558,14 @@ export default function RaspadinhaPage() {
         
         <div className="relative flex flex-col w-full h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
           
-          <div className="absolute inset-0 z-0 h-[100vh] fixed pointer-events-none">
-            <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000" style={{ backgroundImage: `url(${backgroundUrl})` }} />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/95 via-transparent to-[#050505]" />
+          {/* 🔥 Fundo Interno Mobile IDÊNTICO à Roleta 🔥 */}
+          <div className="absolute inset-0 z-0 pointer-events-none fixed">
+            <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${backgroundUrl})`, opacity: player ? 0.45 : 0.25 }} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
           </div>
 
           <div className="relative z-10 p-4 flex justify-between items-center w-full shrink-0">
-            {/* 🔥 CABEÇALHO PADRÃO DA ROLETA 🔥 */}
+            {/* CABEÇALHO IDÊNTICO À ROLETA */}
             <div className="flex gap-2">
                <button onClick={() => router.push(`/profile/${slug}`)} className="p-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all shadow-lg"><ArrowLeft size={16}/></button>
                <button onClick={() => router.push(`/profile/${slug}`)} className="px-4 py-2 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all shadow-lg"><User size={14}/> Voltar ao Perfil</button>
@@ -659,7 +705,7 @@ export default function RaspadinhaPage() {
             </div>
 
             <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">
-              {player.nickname || player.full_name || 'Jogador'}
+              {player.nickname || "Visitante VIP"}
             </h2>
             <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-4 tracking-widest">
               {player.credits} CRÉDITOS DISPONÍVEIS
