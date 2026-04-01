@@ -8,6 +8,7 @@ const getSupabase = () => {
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
+// ESPIÃO: Transformamos as respostas em STRING para o Next.js nunca mais engasgar na tela
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
@@ -34,8 +35,7 @@ export async function getSuperAdminData() {
 
     const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    // 🔥 O SEGREDO DO ERRO 500: Isso garante que o servidor não trave ao enviar dados para a tela
-    return JSON.parse(JSON.stringify({
+    const result = {
       ok: true,
       data: {
         global: globRes || null,
@@ -50,16 +50,22 @@ export async function getSuperAdminData() {
         }),
         videoRequests: vidsRes || []
       }
-    }));
+    };
+    
+    // Retorna stringificado para burlar o erro do Server Component
+    return JSON.stringify(result);
   } catch (e: any) { 
     console.error("Erro no Servidor:", e);
-    return { ok: false, error: e.message }; 
+    return JSON.stringify({ ok: false, error: e.message }); 
   }
 }
 
-export async function runAdminAction(action: string, payload: any) {
+// O payload agora é uma string para evitar o erro 500 do Next.js
+export async function runAdminAction(action: string, payloadStr: string) {
   try {
     const supabase = getSupabase();
+    // Transforma a string de volta em objeto de forma segura
+    const payload = payloadStr ? JSON.parse(payloadStr) : {};
 
     if (action === "resetSystem") {
       await Promise.all([
@@ -90,11 +96,10 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveApplication") {
-      // Proteção: Se a modelo não colocar nick, o sistema cria um provisório para não quebrar
+      // Criação segura de dados mesmo se a modelo não preencheu direito
       const safeNickname = payload.nickname ? payload.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
-      
       const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `BlackjadeLabz2026!`; // Senha padrão solicitada
+      const generatedPass = `BlackjadeLabz2026!`;
       
       const { data: m, error: mErr } = await supabase.from('Models').insert({
         slug: safeNickname.toLowerCase(), 
@@ -105,9 +110,12 @@ export async function runAdminAction(action: string, payload: any) {
         referred_by: payload.referred_by || null
       }).select().single();
 
-      if (mErr || !m) throw new Error(mErr?.message || "Erro ao criar modelo.");
+      // ESPIÃO LABZ: Se o banco de dados recusar, ele vai gritar o motivo exato
+      if (mErr || !m) {
+        throw new Error(`[ERRO TABELA MODELS]: ${mErr?.message || 'Falha ao inserir'} | Detalhes: ${mErr?.details || mErr?.hint || 'Nenhum'}`);
+      }
 
-      await supabase.from('Configs').insert({ 
+      const { error: cErr } = await supabase.from('Configs').insert({ 
         model_id: m.id, 
         model_name: safeNickname.toUpperCase(), 
         spin_cost: 2, 
@@ -115,8 +123,15 @@ export async function runAdminAction(action: string, payload: any) {
         profile_url: payload.profile_url || payload.bg_url || null 
       });
 
+      // ESPIÃO LABZ: Se as configurações falharem, ele apaga a modelo pra não deixar "fantasma" e avisa
+      if (cErr) {
+        await supabase.from('Models').delete().eq('id', m.id);
+        throw new Error(`[ERRO TABELA CONFIGS]: ${cErr.message}`);
+      }
+
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
-      return { ok: true, data: { generatedEmail, generatedPass } };
+      
+      return JSON.stringify({ ok: true, data: { generatedEmail, generatedPass } });
     }
 
     if (action === "rejectApplication") {
@@ -127,7 +142,9 @@ export async function runAdminAction(action: string, payload: any) {
       const { data: m, error: mErr } = await supabase.from('Models').insert({
         slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
       }).select().single();
-      if (mErr || !m) throw new Error("Erro ao criar modelo manual.");
+      
+      if (mErr || !m) throw new Error(`[ERRO CRIAR MANUAL]: ${mErr?.message}`);
+      
       await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
     }
 
@@ -137,8 +154,9 @@ export async function runAdminAction(action: string, payload: any) {
       await supabase.from('Models').delete().eq('id', payload.id);
     }
 
-    return { ok: true };
+    return JSON.stringify({ ok: true });
   } catch (e: any) { 
-    return { ok: false, error: e.message }; 
+    // Retorna o erro exato como texto pro front-end ler
+    return JSON.stringify({ ok: false, error: e.message || String(e) }); 
   }
 }
