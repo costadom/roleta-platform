@@ -547,10 +547,10 @@ export default function RaspadinhaWebPage() {
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      {/* 🔥 Fundo de Computador Desfocado IDÊNTICO à Roleta 🔥 */}
+      {/* 🔥 Fundo de Computador Desfocado TOTALMENTE Escuro e Premium (Rigorosamente Roleta) 🔥 */}
       <div className="hidden md:block absolute inset-0 z-0 pointer-events-none">
-         <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${backgroundUrl})` }} />
-         <div className="absolute inset-0 bg-gradient-to-b from-black/50 to-black/90" />
+         <div className="absolute inset-0 bg-cover bg-center blur-3xl scale-110 opacity-20" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+         <div className="absolute inset-0 bg-black/90" />
       </div>
 
       {/* Container Principal */}
@@ -558,14 +558,16 @@ export default function RaspadinhaWebPage() {
         
         <div className="relative flex flex-col w-full h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
           
-          {/* 🔥 Fundo Interno Mobile IDÊNTICO à Roleta 🔥 */}
-          <div className="absolute inset-0 z-0 pointer-events-none fixed">
-            <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${backgroundUrl})`, opacity: player ? 0.45 : 0.25 }} />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
+          {/* 🔥 Fundo Interno Mobile/Desktop TOTALMENTE Escuro e Premium (Sem Imagem Nítida Distraindo) 🔥 */}
+          <div className="absolute inset-0 z-0 pointer-events-none fixed bg-black">
+            {/* Imagem desfocada e escura ao extremo, só pra dar o tom da cor */}
+            <div className="absolute inset-0 bg-cover bg-center blur-3xl opacity-15 scale-110" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+            {/* Camada de preto puro e pesado por cima pra garatir o breu chique */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/90" />
           </div>
 
           <div className="relative z-10 p-4 flex justify-between items-center w-full shrink-0">
-            {/* CABEÇALHO IDÊNTICO À ROLETA */}
+            {/* CABEÇALHO PADRÃO À ROLETA */}
             <div className="flex gap-2">
                <button onClick={() => router.push(`/profile/${slug}`)} className="p-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all shadow-lg"><ArrowLeft size={16}/></button>
                <button onClick={() => router.push(`/profile/${slug}`)} className="px-4 py-2 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all shadow-lg"><User size={14}/> Voltar ao Perfil</button>
@@ -705,7 +707,7 @@ export default function RaspadinhaWebPage() {
             </div>
 
             <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">
-              {player.nickname || "Visitante VIP"}
+              {player.nickname || player.full_name || 'Jogador'}
             </h2>
             <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-4 tracking-widest">
               {player.credits} CRÉDITOS DISPONÍVEIS
@@ -713,7 +715,7 @@ export default function RaspadinhaWebPage() {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2 border-t border-white/10 mt-2">
               <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest mt-4">
-                <Trophy size={14} className="text-[#FFD700]" /> Galeria ({unlockedPhotos.length}/10)
+                < Trophy size={14} className="text-[#FFD700]" /> Galeria ({unlockedPhotos.length}/10)
               </h3>
               {unlockedPhotos.length === 0 ? (
                 <div className="py-10 text-center opacity-20">
