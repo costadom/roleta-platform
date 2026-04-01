@@ -27,180 +27,133 @@ const NoticeModal = ({ message, onClose }: { message: string, onClose: () => voi
   </div>
 );
 
+// Motor da Raspadinha Real (Canvas)
 const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => void, isRevealed: boolean, coverText: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawingRef = useRef(false); 
-  const isRevealedRef = useRef(isRevealed);
-
-  useEffect(() => {
-    isRevealedRef.current = isRevealed;
-  }, [isRevealed]);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    const { width, height } = canvas;
-
+    const width = canvas.width;
+    const height = canvas.height;
+    
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, "#888");
     gradient.addColorStop(0.5, "#ccc");
     gradient.addColorStop(1, "#666");
-    ctx.globalCompositeOperation = "source-over";
+    
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
     ctx.fillStyle = "rgba(255,255,255,0.15)";
-    for (let i = 0; i < 3000; i++) {
-      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
+    for(let i=0; i<3000; i++) {
+        ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
     }
 
     ctx.fillStyle = "#333";
-    ctx.font = "900 24px sans-serif";
+    ctx.font = "900 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(coverText, width / 2, height / 2);
-
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.lineWidth = 45;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = 50; 
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
   }, [coverText]);
 
   useEffect(() => {
     if (isRevealed && canvasRef.current) {
-      const ctx = canvasRef.current.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        const ctx = canvasRef.current.getContext('2d');
+        if(ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
   }, [isRevealed]);
 
-  const getPos = useCallback((clientX: number, clientY: number) => {
+  const getPointerPos = (e: any) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
     return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height),
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
     };
-  }, []);
+  };
 
-  const checkReveal = useCallback(
-    (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-      if (isRevealedRef.current) return;
+  const handleStart = (e: any) => {
+    if (isRevealed) return;
+    if (e.cancelable) e.preventDefault();
+    setIsDrawing(true);
+    const { x, y } = getPointerPos(e);
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  };
+
+  const handleMove = (e: any) => {
+    if (!isDrawing || isRevealed) return;
+    if (e.cancelable) e.preventDefault();
+    const { x, y } = getPointerPos(e);
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    if (ctx && canvas) {
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      checkReveal(ctx, canvas);
+    }
+  };
+
+  const handleEnd = () => setIsDrawing(false);
+
+  const checkReveal = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
       if (Math.random() > 0.1) return; 
-
+      
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let transparent = 0;
-      const totalSamples = pixels.length / 4 / 32;
-
+      const totalPixels = pixels.length / 4;
+      
       for (let i = 3; i < pixels.length; i += 128) {
-        if (pixels[i] === 0) transparent++;
+          if (pixels[i] === 0) transparent++;
       }
-
-      if (transparent / totalSamples > 0.4) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        onReveal();
+      
+      const percent = (transparent / (totalPixels / 32)) * 100;
+      
+      if (percent > 40 && !isRevealed) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height); 
+          onReveal();
       }
-    },
-    [onReveal]
-  );
-
-  const startDraw = useCallback(
-    (x: number, y: number) => {
-      if (isRevealedRef.current) return;
-      isDrawingRef.current = true;
-      const ctx = canvasRef.current?.getContext("2d", { willReadFrequently: true });
-      if (ctx) {
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-      }
-    },
-    []
-  );
-
-  const draw = useCallback(
-    (x: number, y: number) => {
-      if (!isDrawingRef.current || isRevealedRef.current) return;
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext("2d", { willReadFrequently: true });
-      if (ctx && canvas) {
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        checkReveal(ctx, canvas);
-      }
-    },
-    [checkReveal]
-  );
-
-  const endDraw = useCallback(() => {
-    isDrawingRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault(); 
-      const touch = e.touches[0];
-      const { x, y } = getPos(touch.clientX, touch.clientY);
-      startDraw(x, y);
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); 
-      const touch = e.touches[0];
-      const { x, y } = getPos(touch.clientX, touch.clientY);
-      draw(x, y);
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
-      endDraw();
-    };
-
-    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
-    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
-
-    return () => {
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchmove", onTouchMove);
-      canvas.removeEventListener("touchend", onTouchEnd);
-      canvas.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [getPos, startDraw, draw, endDraw]);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    const { x, y } = getPos(e.clientX, e.clientY);
-    startDraw(x, y);
   };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const { x, y } = getPos(e.clientX, e.clientY);
-    draw(x, y);
-  };
-  const handleMouseUp = () => endDraw();
-  const handleMouseLeave = () => endDraw();
 
   return (
     <canvas
       ref={canvasRef}
       width={400}
       height={500}
-      style={{ touchAction: "none" }}
-      className={`absolute inset-0 w-full h-full cursor-pointer z-20 ${
-        isRevealed ? "pointer-events-none opacity-0 transition-opacity duration-500" : ""
-      }`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
+      className={`absolute inset-0 w-full h-full cursor-pointer touch-none z-20 ${isRevealed ? 'pointer-events-none opacity-0 transition-opacity duration-500' : ''}`}
+      onMouseDown={handleStart}
+      onMouseMove={handleMove}
+      onMouseUp={handleEnd}
+      onMouseLeave={handleEnd}
+      onTouchStart={handleStart}
+      onTouchMove={handleMove}
+      onTouchEnd={handleEnd}
     />
   );
 };
+
+
+// --- PÁGINA PRINCIPAL ---
 
 export default function RaspadinhaPage() {
   const params = useParams();
@@ -258,9 +211,9 @@ export default function RaspadinhaPage() {
       setLoading(true);
       const phone = localStorage.getItem("labz_player_phone");
       
-      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=recharge_packages`, { headers }).then(r => r.json()).catch(() => null);
-      if (resGlob?.[0]?.recharge_packages) {
-          setRechargePackages(resGlob[0].recharge_packages);
+      const { data: globData } = await supabase.from('GlobalSettings').select('recharge_packages').eq('id', 'main').single();
+      if (globData?.recharge_packages) {
+          setRechargePackages(globData.recharge_packages);
       }
 
       const { data: modelData, error: modErr } = await supabase.from('Models').select('*, Configs(*)').eq('slug', slug).single();
@@ -293,7 +246,7 @@ export default function RaspadinhaPage() {
     }
   }
 
-  // 🔥 INTEGRAÇÃO DE LIKES E COMENTÁRIOS PARA A FOTO EXPANDIDA 🔥
+  // 🔥 INTEGRAÇÃO OTIMIZADA DE LIKES E COMENTÁRIOS 🔥
   useEffect(() => {
     if (!viewingMedia) return;
     
@@ -318,36 +271,53 @@ export default function RaspadinhaPage() {
   }, [viewingMedia, supabaseUrl, player]);
 
   const handleToggleLike = async () => {
-    if (!player) return;
-    const phone = player.whatsapp;
+    const phone = player?.whatsapp || localStorage.getItem("labz_player_phone");
+    if (!phone) return;
 
     try {
-        if (liked) {
-            await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${viewingMedia.id}&player_phone=eq.${encodeURIComponent(phone)}`, { method: 'DELETE', headers });
-            setLiked(false);
-            setLikesCount(prev => prev - 1);
+        const isCurrentlyLiked = liked;
+        
+        // Atualização Otimista para não travar a tela
+        setLiked(!isCurrentlyLiked);
+        setLikesCount(prev => isCurrentlyLiked ? prev - 1 : prev + 1);
+
+        const mediaId = (viewingMedia.id && !viewingMedia.id.startsWith('http')) ? viewingMedia.id : '00000000-0000-0000-0000-000000000000';
+
+        if (isCurrentlyLiked) {
+            await fetch(`${supabaseUrl}/rest/v1/Likes?media_id=eq.${mediaId}&player_phone=eq.${encodeURIComponent(phone)}`, { method: 'DELETE', headers });
         } else {
-            await fetch(`${supabaseUrl}/rest/v1/Likes`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: viewingMedia.id, player_phone: phone }) });
-            setLiked(true);
-            setLikesCount(prev => prev + 1);
+            await fetch(`${supabaseUrl}/rest/v1/Likes`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, player_phone: phone }) });
         }
     } catch (e) {}
   };
 
   const handlePostComment = async () => {
-    if (!player || !newComment.trim()) return;
+    const phone = player?.whatsapp || localStorage.getItem("labz_player_phone");
+    if (!phone || !newComment.trim()) return;
+    
     setLoadingComment(true);
-    const phone = player.whatsapp;
 
     try {
-        const playerName = player.nickname || 'Fã VIP';
-        const payload = { media_id: viewingMedia.id, player_phone: phone, player_name: playerName, content: newComment };
+        const playerName = player?.nickname || player?.full_name || 'Fã VIP';
+        const commentText = newComment;
         
-        const res = await fetch(`${supabaseUrl}/rest/v1/Comments`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify(payload) });
+        // Atualização Otimista (Exibe na hora, limpa o input na hora)
+        const tempComment = { id: Date.now().toString(), player_name: playerName, content: commentText, created_at: new Date().toISOString() };
+        setComments(prev => [...prev, tempComment]);
+        setNewComment(""); 
+
+        const mediaId = (viewingMedia.id && !viewingMedia.id.startsWith('http')) ? viewingMedia.id : '00000000-0000-0000-0000-000000000000';
+        const payload = { media_id: mediaId, player_phone: phone, player_name: playerName, content: commentText };
+        
+        const res = await fetch(`${supabaseUrl}/rest/v1/Comments`, { 
+            method: 'POST', 
+            headers: { ...headers, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, 
+            body: JSON.stringify(payload) 
+        });
+        
         if (res.ok) {
             const inserted = await res.json();
-            setComments(prev => [...prev, inserted[0]]);
-            setNewComment("");
+            setComments(prev => prev.map(c => c.id === tempComment.id ? inserted[0] : c));
         }
     } catch (e) {} finally { setLoadingComment(false); }
   };
@@ -360,6 +330,15 @@ export default function RaspadinhaPage() {
         setViewingMedia({ id: photoUrl, url: photoUrl, caption: "Foto VIP Raspadinha" });
     }
   };
+
+  const shuffleArray = (array: any[]) => {
+    let newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  }
 
   const buyPackage = async (bundleSize: number) => {
     if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
@@ -387,14 +366,6 @@ export default function RaspadinhaPage() {
         setPlayer({...player, credits: currentCredits});
 
         const availablePhotos = modelPhotos.filter(mp => !unlockedPhotos.find(up => up.photo_url === mp.photo_url));
-        const shuffleArray = (array: any[]) => {
-            let newArray = [...array];
-            for (let i = newArray.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-            }
-            return newArray;
-        }
         let pool = [...availablePhotos]; 
         let generatedQueue = [];
 
@@ -548,7 +519,7 @@ export default function RaspadinhaPage() {
           </div>
 
           <div className="relative z-10 p-4 flex justify-between items-center w-full shrink-0">
-            {/* 🔥 CABEÇALHO IDÊNTICO À ROLETA 🔥 */}
+            {/* 🔥 CABEÇALHO PADRÃO DA ROLETA 🔥 */}
             <div className="flex gap-2">
                <button onClick={() => router.push(`/profile/${slug}`)} className="p-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all shadow-lg"><ArrowLeft size={16}/></button>
                <button onClick={() => router.push(`/profile/${slug}`)} className="px-4 py-2 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all shadow-lg"><User size={14}/> Voltar ao Perfil</button>
@@ -581,7 +552,6 @@ export default function RaspadinhaPage() {
           </div>
 
           <div className="relative z-10 flex-1 w-full flex flex-col items-center justify-center p-4 min-h-[360px] shrink-0">
-            {/* 🔥 CARTELA COMPACTA (Estilo Roleta) 🔥 */}
             <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden">
               {currentScratch ? (
                 <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -662,7 +632,7 @@ export default function RaspadinhaPage() {
                 <span className="text-sm font-black text-white italic">2 CR</span>
               </button>
               <button onClick={() => buyPackage(5)} disabled={isProcessingBuy} className="bg-gradient-to-br from-[#1a0510] to-[#111] border border-[#D946EF]/40 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden shadow-lg">
-                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-2 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
+                <div className="absolute top-0 right-0 bg-[#D946EF] text-white text-[6px] font-black px-1.5 py-0.5 rounded-bl-lg">ECONOMIZE 20%</div>
                 <span className="text-[9px] font-black uppercase text-white/60 mb-0.5">Combo 5x</span>
                 <span className="text-sm font-black text-[#D946EF] italic">8 CR</span>
               </button>
@@ -676,7 +646,7 @@ export default function RaspadinhaPage() {
         </div>
       </div>
 
-      {/* 🔥 MODAL DE PERFIL LIMPO (Estilo Roleta) 🔥 */}
+      {/* 🔥 MODAL DE PERFIL LIMPO 🔥 */}
       {showProfile && player && (
         <div className="fixed inset-0 z-[400] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
           <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-2xl">
@@ -689,7 +659,7 @@ export default function RaspadinhaPage() {
             </div>
 
             <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">
-              {player.nickname || "Visitante VIP"}
+              {player.nickname || player.full_name || 'Jogador'}
             </h2>
             <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-4 tracking-widest">
               {player.credits} CRÉDITOS DISPONÍVEIS
@@ -729,7 +699,7 @@ export default function RaspadinhaPage() {
         </div>
       )}
 
-      {/* 🔥 MODAL DA FOTO EXPANDIDA COM CHAT E LIKES (A Mágica) 🔥 */}
+      {/* 🔥 MODAL DA FOTO EXPANDIDA COM CHAT E LIKES 🔥 */}
       {viewingMedia && (
         <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
            <button onClick={() => setViewingMedia(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
@@ -797,7 +767,7 @@ export default function RaspadinhaPage() {
             ) : pixData ? (
               <div className="text-center p-2">
                 <h2 className="text-2xl font-black text-white uppercase italic mb-6 tracking-tighter">Pague com PIX</h2>
-                <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+                <div className="bg-white p-4 rounded-3xl inline-block mb-4 shadow-[0_0_30px_rgba(255,255,255,0.15)]">
                   <img src={pixData.qr_code_base64} alt="QR Code" className="w-48 h-48" />
                 </div>
                 <div className="mb-6 flex items-center justify-center gap-2 text-[#FFD700] font-black font-mono text-xl animate-pulse drop-shadow-[0_0_10px_rgba(255,215,0,0.3)]">
