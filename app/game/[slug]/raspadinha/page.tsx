@@ -202,7 +202,7 @@ const ScratchCanvas = ({ onReveal, isRevealed, coverText }: { onReveal: () => vo
   );
 };
 
-export default function RaspadinhaWebPage() {
+export default function RaspadinhaPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
@@ -258,9 +258,9 @@ export default function RaspadinhaWebPage() {
       setLoading(true);
       const phone = localStorage.getItem("labz_player_phone");
       
-      const { data: globData } = await supabase.from('GlobalSettings').select('recharge_packages').eq('id', 'main').single();
-      if (globData?.recharge_packages) {
-          setRechargePackages(globData.recharge_packages);
+      const resGlob = await fetch(`${supabaseUrl}/rest/v1/GlobalSettings?id=eq.main&select=recharge_packages`, { headers }).then(r => r.json()).catch(() => null);
+      if (resGlob?.[0]?.recharge_packages) {
+          setRechargePackages(resGlob[0].recharge_packages);
       }
 
       const { data: modelData, error: modErr } = await supabase.from('Models').select('*, Configs(*)').eq('slug', slug).single();
@@ -361,15 +361,6 @@ export default function RaspadinhaWebPage() {
     }
   };
 
-  const shuffleArray = (array: any[]) => {
-    let newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
-  }
-
   const buyPackage = async (bundleSize: number) => {
     if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
     if (!player) return setNotice("Faça login para jogar.");
@@ -396,6 +387,14 @@ export default function RaspadinhaWebPage() {
         setPlayer({...player, credits: currentCredits});
 
         const availablePhotos = modelPhotos.filter(mp => !unlockedPhotos.find(up => up.photo_url === mp.photo_url));
+        const shuffleArray = (array: any[]) => {
+            let newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        }
         let pool = [...availablePhotos]; 
         let generatedQueue = [];
 
@@ -549,6 +548,7 @@ export default function RaspadinhaWebPage() {
           </div>
 
           <div className="relative z-10 p-4 flex justify-between items-center w-full shrink-0">
+            {/* 🔥 CABEÇALHO IDÊNTICO À ROLETA 🔥 */}
             <div className="flex gap-2">
                <button onClick={() => router.push(`/profile/${slug}`)} className="p-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all shadow-lg"><ArrowLeft size={16}/></button>
                <button onClick={() => router.push(`/profile/${slug}`)} className="px-4 py-2 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all shadow-lg"><User size={14}/> Voltar ao Perfil</button>
@@ -558,18 +558,7 @@ export default function RaspadinhaWebPage() {
             </div>
           </div>
 
-          <div className="relative z-10 w-full flex justify-center shrink-0 mb-2">
-            <div className="flex bg-black/50 border border-white/10 backdrop-blur-md rounded-full p-1 shadow-[0_0_20px_rgba(255,215,0,0.15)]">
-              <button onClick={() => router.push(`/game/${slug}`)} className="px-6 py-2.5 text-white/50 hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
-                <Zap size={14} /> Roleta
-              </button>
-              <div className="px-6 py-2.5 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
-                <Sparkles size={14} fill="currentColor" /> Raspadinha
-              </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 flex flex-col items-center shrink-0 mb-4">
+          <div className="relative z-10 flex flex-col items-center shrink-0 mb-4 mt-2">
             <span className="text-[#D946EF] font-black italic text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]">
               Savanah <span className="text-white">Labz</span>
             </span>
@@ -592,6 +581,7 @@ export default function RaspadinhaWebPage() {
           </div>
 
           <div className="relative z-10 flex-1 w-full flex flex-col items-center justify-center p-4 min-h-[360px] shrink-0">
+            {/* 🔥 CARTELA COMPACTA (Estilo Roleta) 🔥 */}
             <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden">
               {currentScratch ? (
                 <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -686,7 +676,7 @@ export default function RaspadinhaWebPage() {
         </div>
       </div>
 
-      {/* 🔥 MODAL DE PERFIL LIMPO (Sem lista de associações e puxando o chat expandido) 🔥 */}
+      {/* 🔥 MODAL DE PERFIL LIMPO (Estilo Roleta) 🔥 */}
       {showProfile && player && (
         <div className="fixed inset-0 z-[400] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
           <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-2xl">
@@ -739,14 +729,14 @@ export default function RaspadinhaWebPage() {
         </div>
       )}
 
-      {/* 🔥 NOVO: MODAL DA FOTO EXPANDIDA COM CHAT E LIKES 🔥 */}
+      {/* 🔥 MODAL DA FOTO EXPANDIDA COM CHAT E LIKES (A Mágica) 🔥 */}
       {viewingMedia && (
         <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
            <button onClick={() => setViewingMedia(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
                <CloseIcon size={20}/>
            </button>
            
-           <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center">
+           <div className="relative w-full md:w-1/2 h-[40vh] md:h-[85vh] flex items-center justify-center shrink-0">
                <img src={viewingMedia.url} className="max-w-full max-h-full object-contain rounded-[2rem] shadow-2xl border border-white/5" />
            </div>
            
@@ -814,7 +804,7 @@ export default function RaspadinhaWebPage() {
                   ⏱ {formatTime(pixTimeLeft)}
                 </div>
                 <div className="text-left bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
-                  <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br />2. O saldo cai na hora aqui no Telegram!</p>
+                  <p className="text-[10px] text-white/70 font-bold leading-relaxed italic">1. Pague o Pix Cópia e Cola.<br />2. O saldo cai na hora aqui no site!</p>
                 </div>
                 <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="w-full bg-[#D946EF] text-white py-5 rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(217,70,239,0.3)] active:scale-95 transition-all tracking-widest">
                   {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />} {copied ? "Código Copiado!" : "Copia e Cola"}
