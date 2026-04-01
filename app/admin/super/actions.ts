@@ -8,22 +8,6 @@ const getSupabase = () => {
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// Sanitiza o objeto para não explodir o Next.js com undefined ou datas esquisitas
-function sanitize(obj: any): any {
-  if (obj === null || obj === undefined) return null;
-  if (typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitize);
-  const newObj: any = {};
-  for (const key in obj) {
-    if (obj[key] === undefined) {
-      newObj[key] = null;
-    } else {
-      newObj[key] = sanitize(obj[key]);
-    }
-  }
-  return newObj;
-}
-
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
@@ -50,7 +34,7 @@ export async function getSuperAdminData() {
 
     const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    const result = {
+    return {
       ok: true,
       data: {
         global: globRes || null,
@@ -66,18 +50,14 @@ export async function getSuperAdminData() {
         videoRequests: vidsRes || []
       }
     };
-    
-    return JSON.stringify(sanitize(result));
   } catch (e: any) { 
-    console.error("Erro no Servidor:", e);
-    return JSON.stringify({ ok: false, error: e.message }); 
+    return { ok: false, error: e.message }; 
   }
 }
 
-export async function runAdminAction(action: string, payloadStr: string) {
+export async function runAdminAction(action: string, payload: any) {
   try {
     const supabase = getSupabase();
-    const payload = sanitize(payloadStr ? JSON.parse(payloadStr) : {});
 
     if (action === "resetSystem") {
       await Promise.all([
@@ -108,55 +88,51 @@ export async function runAdminAction(action: string, payloadStr: string) {
     }
 
     if (action === "approveApplication") {
-      const safeNickname = payload.nickname ? payload.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
-      const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
+      // 🔥 A MÁGICA: Puxa a ficha direto do banco para evitar o limite de 1MB de fotos em Base64 🔥
+      const { data: appData } = await supabase.from('Applications').select('*').eq('id', payload.id).single();
+      if (!appData) return { ok: false, error: "Candidatura não encontrada no banco." };
+
+      const safeNickname = appData.nickname ? appData.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
+      const generatedEmail = appData.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
       const generatedPass = `BlackjadeLabz2026!`;
-      
-      // 🔥 CORREÇÃO DA CAUSA RAIZ: Tratamento do referred_by (Madrinha) 🔥
-      // O banco de dados exige um UUID válido na coluna referred_by ou nulo.
-      // A ficha envia o slug (ex: "raphasavanah"). Vamos buscar o UUID real!
+
+      // Resolve o ID da Madrinha se existir
       let safeReferredBy = null;
-      if (payload.referred_by && typeof payload.referred_by === 'string' && payload.referred_by.trim() !== '') {
-          // Busca o ID real da madrinha usando o slug dela
-          const { data: madrinha } = await supabase.from('Models').select('id').eq('slug', payload.referred_by.trim().toLowerCase()).single();
-          if (madrinha && madrinha.id) {
-              safeReferredBy = madrinha.id;
-          }
+      if (appData.referred_by && typeof appData.referred_by === 'string' && appData.referred_by.trim() !== '') {
+          const { data: madrinha } = await supabase.from('Models').select('id').eq('slug', appData.referred_by.trim().toLowerCase()).single();
+          if (madrinha && madrinha.id) safeReferredBy = madrinha.id;
       }
-      
-      // Limpeza pesada de todos os dados antes de jogar pro Supabase
+
       const insertData = {
         slug: safeNickname.toLowerCase(), 
         email: generatedEmail, 
         password: generatedPass,
-        full_name: payload.full_name || 'Musa Labz', 
-        whatsapp: payload.whatsapp ? String(payload.whatsapp).replace(/\D/g, '') : null, 
-        cpf: payload.cpf ? String(payload.cpf).replace(/\D/g, '') : null,
-        referred_by: safeReferredBy // Agora é null ou um UUID válido!
+        full_name: appData.full_name || 'Musa Labz', 
+        whatsapp: appData.whatsapp ? String(appData.whatsapp).replace(/\D/g, '') : null, 
+        cpf: appData.cpf ? String(appData.cpf).replace(/\D/g, '') : null,
+        referred_by: safeReferredBy
       };
 
       const { data: m, error: mErr } = await supabase.from('Models').insert(insertData).select().single();
-
-      if (mErr || !m) {
-        throw new Error(`[ERRO BANCO DE DADOS MODELS]: ${mErr?.message} | Dica: O slug ${safeNickname} ou e-mail ${generatedEmail} já existem?`);
-      }
+      if (mErr || !m) return { ok: false, error: `ERRO BANCO (Models): ${mErr?.message}` };
 
       const { error: cErr } = await supabase.from('Configs').insert({ 
         model_id: m.id, 
         model_name: safeNickname.toUpperCase(), 
         spin_cost: 2, 
-        bg_url: payload.bg_url || null, 
-        profile_url: payload.profile_url || payload.bg_url || null 
+        bg_url: appData.bg_url || null, 
+        profile_url: appData.profile_url || appData.bg_url || null 
       });
 
       if (cErr) {
         await supabase.from('Models').delete().eq('id', m.id);
-        throw new Error(`[ERRO BANCO DE DADOS CONFIGS]: ${cErr.message}`);
+        return { ok: false, error: `ERRO BANCO (Configs): ${cErr.message}` };
       }
 
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
       
-      return JSON.stringify({ ok: true, data: { generatedEmail, generatedPass } });
+      // Retorna os dados para a tela criar a mensagem de WhatsApp
+      return { ok: true, data: { generatedEmail, generatedPass, full_name: appData.full_name, whatsapp: appData.whatsapp } };
     }
 
     if (action === "rejectApplication") {
@@ -168,7 +144,7 @@ export async function runAdminAction(action: string, payloadStr: string) {
         slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
       }).select().single();
       
-      if (mErr || !m) throw new Error(`[ERRO CRIAR MANUAL]: ${mErr?.message}`);
+      if (mErr || !m) return { ok: false, error: `ERRO CRIAR MANUAL: ${mErr?.message}` };
       
       await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
     }
@@ -179,8 +155,8 @@ export async function runAdminAction(action: string, payloadStr: string) {
       await supabase.from('Models').delete().eq('id', payload.id);
     }
 
-    return JSON.stringify({ ok: true });
+    return { ok: true };
   } catch (e: any) { 
-    return JSON.stringify({ ok: false, error: e.message || String(e) }); 
+    return { ok: false, error: e.message || String(e) }; 
   }
 }
