@@ -75,7 +75,7 @@ export async function runAdminAction(action: string, payload: any) {
         ranking_visible: payload.rankVisible,
         goal_amount: payload.goalAmount,
         goal_reward: payload.goalReward,
-        recharge_packages: payload.rechargePackages, // 🔥 AQUI ESTÁ A MÁGICA DOS PACOTES 🔥
+        recharge_packages: payload.rechargePackages,
         updated_at: new Date().toISOString()
       }).eq('id', 'main');
     }
@@ -89,19 +89,32 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveApplication") {
-      const generatedEmail = payload.email || `${payload.nickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `${payload.nickname.charAt(0).toUpperCase()}${payload.nickname.slice(1)}Labz2026!`;
+      // 🔥 TRAVA CONTRA BUGS: Garante que o nickname exista para não quebrar os códigos
+      const safeNickname = payload.nickname ? payload.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
+      
+      const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
+      const generatedPass = `${safeNickname.charAt(0).toUpperCase()}${safeNickname.slice(1).toLowerCase()}Labz2026!`;
       
       const { data: m, error: mErr } = await supabase.from('Models').insert({
-        slug: payload.nickname.toLowerCase(), email: generatedEmail, password: generatedPass,
-        full_name: payload.full_name, whatsapp: payload.whatsapp, referred_by: payload.referred_by || null
+        slug: safeNickname.toLowerCase(), 
+        email: generatedEmail, 
+        password: generatedPass,
+        full_name: payload.full_name || 'Musa Labz', 
+        whatsapp: payload.whatsapp || '', 
+        referred_by: payload.referred_by || null
       }).select().single();
 
-      if (mErr || !m) throw new Error("Erro ao criar modelo.");
+      if (mErr || !m) {
+        console.error("ERRO SUPABASE:", mErr);
+        throw new Error("Erro ao criar modelo no banco de dados.");
+      }
 
       await supabase.from('Configs').insert({ 
-        model_id: m.id, model_name: payload.nickname.toUpperCase(), spin_cost: 2, 
-        bg_url: payload.bg_url, profile_url: payload.profile_url || payload.bg_url 
+        model_id: m.id, 
+        model_name: safeNickname.toUpperCase(), 
+        spin_cost: 2, 
+        bg_url: payload.bg_url, 
+        profile_url: payload.profile_url || payload.bg_url 
       });
 
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
