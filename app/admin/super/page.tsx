@@ -5,15 +5,6 @@ import { useRouter } from "next/navigation";
 import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Trash2, Loader2, Mail, Key, Megaphone, DollarSign, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2, Video, Rocket } from "lucide-react";
 import { getSuperAdminData, runAdminAction } from "./actions";
 
-// FIX: Remove todos os `undefined` do objeto antes de serializar para o Server Action.
-// O React Flight Protocol (usado pelos Server Actions do Next.js 14) crasha silenciosamente
-// em produção quando recebe `undefined` em qualquer campo — mesmo dentro de um JSON.stringify.
-// A solução é passar pelo JSON.stringify/parse nativamente, pois o JSON descarta `undefined`
-// e converte para `null`, resultando num objeto 100% serializável.
-function sanitizeForServer(obj: any): string {
-  return JSON.stringify(obj, (_key, value) => (value === undefined ? null : value));
-}
-
 export default function SuperAdmin() {
   const router = useRouter();
   const [isLogged, setIsLogged] = useState(false);
@@ -48,9 +39,7 @@ export default function SuperAdmin() {
 
   const fetchData = async () => {
     try {
-      const resStr = await getSuperAdminData();
-      const res = JSON.parse(resStr);
-      
+      const res = await getSuperAdminData();
       if (!res.ok) throw new Error(res.error);
 
       const { data } = res;
@@ -90,15 +79,10 @@ export default function SuperAdmin() {
   const executeAction = async (action: string, payload?: any) => {
     setLoading(true);
     try {
-      // FIX: sanitizeForServer substitui JSON.stringify puro.
-      // Isso garante que nenhum campo `undefined` chegue ao boundary do Server Action,
-      // prevenindo o crash genérico do React Flight Protocol em produção.
-      const payloadStr = payload ? sanitizeForServer(payload) : "{}";
-      const resStr = await runAdminAction(action, payloadStr);
-      const res = JSON.parse(resStr);
+      const res = await runAdminAction(action, payload);
       
       if (!res.ok) {
-        alert(`🚨 ESPIÃO LABZ DETECTOU FALHA:\n\n${res.error}\n\n(Dica: Se falar de violação de chave única, a modelo, slug ou e-mail já existe)`);
+        alert(`🚨 ALERTA ESPIÃO LABZ:\n\n${res.error}`);
         setLoading(false);
         return;
       }
@@ -106,15 +90,15 @@ export default function SuperAdmin() {
       if (action === "saveGlobal") alert("Configurações Salvas com Sucesso!");
       
       if (action === "approveApplication") {
-          const nomeModelo = payload.full_name ? payload.full_name.split(' ')[0] : (payload.nickname || 'Musa');
+          const nomeModelo = res.data.full_name ? res.data.full_name.split(' ')[0] : 'Musa';
           
-          const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são "iscas" estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+          const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
           
-          const phone = payload.whatsapp ? payload.whatsapp.replace(/\D/g, '') : '';
+          const phone = res.data.whatsapp ? String(res.data.whatsapp).replace(/\D/g, '') : '';
           if (phone) {
              window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
           } else {
-             alert("Aprovada com sucesso! (Não abriu o WhatsApp pois a candidata não informou o número)");
+             alert("Aprovada com sucesso! Sem WhatsApp registrado para notificar.");
           }
           setSelectedApp(null);
       }
@@ -326,7 +310,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* MODAL ANALISE CANDIDATA COM CPF E E-MAIL */}
+      {/* 🔥 MODAL ANALISE CANDIDATA 🔥 */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
@@ -341,11 +325,12 @@ export default function SuperAdmin() {
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📱 Whats: <span className="text-white">{selectedApp.whatsapp || "Não informado"}</span></p>
                 <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1">📧 E-mail: <span className="text-white truncate">{selectedApp.email || "Não informado"}</span></p>
                 
-                {selectedApp.referred_by && <div className="mt-2"><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest p-1.5 bg-amber-500/10 rounded border border-amber-500/20 inline-block">👑 Indicação Ativa</p></div>}
+                {selectedApp.referred_by && <div className="mt-2"><p className="text-[8px] text-amber-500 uppercase font-black tracking-widest p-1.5 bg-amber-500/10 rounded border border-amber-500/20 inline-block">👑 Indicação Ativa: {selectedApp.referred_by}</p></div>}
               </div>
             </div>
             
-            <button onClick={() => executeAction('approveApplication', selectedApp)} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
+            {/* 🔥 BURLANDO O LIMITE DE 1MB DO NEXT.JS: Envia apenas o ID da candidatura 🔥 */}
+            <button onClick={() => executeAction('approveApplication', { id: selectedApp.id })} disabled={loading} className="w-full bg-indigo-500 text-white py-5 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:scale-[1.02] transition-all shadow-xl shadow-indigo-500/20">
               {loading ? <Loader2 className="animate-spin" size={16}/> : "Aprovar e Criar Unidade"}
             </button>
             <button onClick={() => executeAction('rejectApplication', { id: selectedApp.id })} className="w-full mt-4 py-3 text-[9px] font-black uppercase text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Rejeitar e Apagar</button>
