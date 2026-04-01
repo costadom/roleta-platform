@@ -98,7 +98,34 @@ export default function SuperAdmin() {
       if (action === "approveApplication") {
           const nomeModelo = res.data.full_name ? res.data.full_name.split(' ')[0] : 'Musa';
           
-          const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+          // 🔥 MENSAGEM DO WHATSAPP FORMATADA COM QUEBRAS REAIS PARA NÃO BUGAR 🔥
+          const msg = `Oii ${nomeModelo}!
+
+Que alegria ter você com a gente 💖
+Seu perfil já está todo configurado e pronto para uso.
+O próximo passo é configurar sua roleta, sua raspadinha e suas fotos.
+
+Tudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!
+
+🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin
+📩 Login: ${res.data.generatedEmail}
+🔑 Senha: ${res.data.generatedPass}
+
+👑 No seu painel você é a chefe! Lá você pode:
+
+✨ Copiar os seus links e divulgar
+🎁 Editar seus prêmios e formas de entrega
+💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)
+👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)
+
+🔒 Detalhe importante:
+Existem dois prêmios com cadeado que você não pode editar. Eles são "iscas" estratégicas com chance zero, pra aumentar ainda mais suas vendas.
+
+— pode ficar tranquila 😉
+
+Qualquer dúvida ou ajuda, é só me chamar aqui 💬
+
+Bora fazer muito dinheiro 🚀💖`;
           
           const phone = res.data.whatsapp ? String(res.data.whatsapp).replace(/\D/g, '') : '';
           if (phone) {
