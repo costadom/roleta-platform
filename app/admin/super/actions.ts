@@ -97,9 +97,7 @@ export async function runAdminAction(action: string, payload: any) {
 
       const safeNickname = appData.nickname ? appData.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
       const generatedEmail = appData.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
-      
-      // 🔥 SENHA DINÂMICA: Primeira letra maiúscula + resto minúsculo + Labz2026!
-      const generatedPass = `${safeNickname.charAt(0).toUpperCase()}${safeNickname.slice(1).toLowerCase()}Labz2026!`;
+      const generatedPass = `BlackjadeLabz2026!`;
 
       // 🔥 CORREÇÃO DA MADRINHA (Evita crash de chave estrangeira) 🔥
       let safeReferredBy = null;
