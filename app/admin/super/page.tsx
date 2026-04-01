@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import { Plus, Users, ShieldCheck, LayoutDashboard, Lock, Eye, EyeOff, Trash2, Loader2, Mail, Key, Megaphone, DollarSign, AlertCircle, CheckCircle2, UserPlus, X, MessageCircle, Gamepad2, Video, Rocket } from "lucide-react";
 import { getSuperAdminData, runAdminAction } from "./actions";
 
+// FIX: Remove todos os `undefined` do objeto antes de serializar para o Server Action.
+// O React Flight Protocol (usado pelos Server Actions do Next.js 14) crasha silenciosamente
+// em produção quando recebe `undefined` em qualquer campo — mesmo dentro de um JSON.stringify.
+// A solução é passar pelo JSON.stringify/parse nativamente, pois o JSON descarta `undefined`
+// e converte para `null`, resultando num objeto 100% serializável.
+function sanitizeForServer(obj: any): string {
+  return JSON.stringify(obj, (_key, value) => (value === undefined ? null : value));
+}
+
 export default function SuperAdmin() {
   const router = useRouter();
   const [isLogged, setIsLogged] = useState(false);
@@ -40,7 +49,7 @@ export default function SuperAdmin() {
   const fetchData = async () => {
     try {
       const resStr = await getSuperAdminData();
-      const res = JSON.parse(resStr); // Traduz a string de volta pra objeto
+      const res = JSON.parse(resStr);
       
       if (!res.ok) throw new Error(res.error);
 
@@ -81,13 +90,14 @@ export default function SuperAdmin() {
   const executeAction = async (action: string, payload?: any) => {
     setLoading(true);
     try {
-      // 🔥 BURLANDO O NEXT.JS: Converte os dados em string para a rota não travar
-      const payloadStr = payload ? JSON.stringify(payload) : "{}";
+      // FIX: sanitizeForServer substitui JSON.stringify puro.
+      // Isso garante que nenhum campo `undefined` chegue ao boundary do Server Action,
+      // prevenindo o crash genérico do React Flight Protocol em produção.
+      const payloadStr = payload ? sanitizeForServer(payload) : "{}";
       const resStr = await runAdminAction(action, payloadStr);
       const res = JSON.parse(resStr);
       
       if (!res.ok) {
-        // 🔥 ESPIÃO LABZ MOSTRANDO O ERRO EXATO NA TELA 🔥
         alert(`🚨 ESPIÃO LABZ DETECTOU FALHA:\n\n${res.error}\n\n(Dica: Se falar de violação de chave única, a modelo, slug ou e-mail já existe)`);
         setLoading(false);
         return;
@@ -98,7 +108,7 @@ export default function SuperAdmin() {
       if (action === "approveApplication") {
           const nomeModelo = payload.full_name ? payload.full_name.split(' ')[0] : (payload.nickname || 'Musa');
           
-          const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são “iscas” estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
+          const msg = `Oii ${nomeModelo}!\n\nQue alegria ter você com a gente 💖\nSeu perfil ja esta todo configurado e pronto para uso.\no próximo passo é configurar sua roleta, sua raspadinha e suas fotos.\n\nTudo foi preparado pra valorizar seu conteúdo e deixar seu público viciado em jogar!\n\n🔗 Link do seu Painel: https://labzsexyroll.vercel.app/admin\n\n📩 Login: ${res.data.generatedEmail}\n\n🔑 Senha: ${res.data.generatedPass}\n\n👑 No seu painel você é a chefe! Lá você pode:\n\n✨ Copiar os seus links  e divulgar\n🎁 Editar seus prêmios e formas de entrega\n💰 Acompanhar seus ganhos em tempo real (70% pra você | saque via Pix em até 1h)\n👯‍♀️ Ganhar bônus com indicações (5% por 3 meses)\n\n🔒 Detalhe importante:\nExistem dois prêmios com cadeado que você não pode editar. Eles são "iscas" estratégicas com chance zero, pra aumentar ainda mais suas vendas.\n\n— pode ficar tranquila 😉\n\nQualquer dúvida ou ajuda, é só me chamar aqui 💬\n\nBora fazer muito dinheiro 🚀💖`;
           
           const phone = payload.whatsapp ? payload.whatsapp.replace(/\D/g, '') : '';
           if (phone) {
@@ -316,7 +326,7 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* 🔥 MODAL ANALISE CANDIDATA COM CPF E E-MAIL 🔥 */}
+      {/* MODAL ANALISE CANDIDATA COM CPF E E-MAIL */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-indigo-500/30 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-[90vh]">
