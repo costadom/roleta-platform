@@ -39,7 +39,6 @@ export default function ModelProfile() {
   const [copied, setCopied] = useState(false);
   const [pixTimeLeft, setPixTimeLeft] = useState(600); 
 
-  // 🔥 NOVO: Estado para controlar o modal de chat 🔥
   const [showChatModal, setShowChatModal] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -51,9 +50,9 @@ export default function ModelProfile() {
     
     async function loadBasicProfile() {
       try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+        // 🔥 REMOVIDO O 'no-cache' PARA PARAR DE SUGAR SUA BANDA 🔥
+        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
         
-        // 🔥 CORREÇÃO DE SEGURANÇA: Buscando APENAS dados públicos (Sem senhas ou PIX)
         const resMod = await fetch(`${supabaseUrl}/rest/v1/Models?slug=eq.${slug}&select=id,slug,live_status,bio,Configs(model_name,bg_url,profile_url)`, { headers });
         if (!resMod.ok) return setLoading(false);
         const modData = await resMod.json();
@@ -76,14 +75,12 @@ export default function ModelProfile() {
           const phone = localStorage.getItem("labz_player_phone");
           let currentPlayerId = null;
 
-          // Busca galeria (Seguro, pois media não tem dados da modelo)
           fetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`, { headers })
             .then(r => r.json())
             .then(resMedia => setMedia(Array.isArray(resMedia) ? resMedia : []))
             .catch(() => {});
 
           if (logged && phone) {
-            // Busca apenas o ID do jogador
             const playerRes = await fetch(`${supabaseUrl}/rest/v1/Players?whatsapp=eq.${encodeURIComponent(phone)}&model_id=eq.${modelId}&select=id`, { headers }).then(r => r.json());
             if (playerRes && playerRes[0]) {
               currentPlayerId = playerRes[0].id;
@@ -250,7 +247,7 @@ export default function ModelProfile() {
     if (checkoutData && pixData && !paymentSuccess && playerId) {
       interval = setInterval(async () => {
         try {
-          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, 'Cache-Control': 'no-cache' };
+          const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           const phone = localStorage.getItem("labz_player_phone");
           if (checkoutData.type === 'photo') {
             const res = await fetch(`${supabaseUrl}/rest/v1/UnlockedMedia?player_phone=eq.${encodeURIComponent(phone || '')}&media_id=eq.${checkoutData.itemInfo.id}&select=id`, { headers }).then(r => r.json());
@@ -280,7 +277,6 @@ export default function ModelProfile() {
     return () => clearInterval(interval);
   }, [checkoutData, pixData, paymentSuccess, playerId, supabaseUrl, supabaseKey]);
 
-  // 🔥 ALTERADO: Agora abre o modal em vez de ir pro Hub 🔥
   const handleChatClick = () => {
     if (!isLoggedIn) return setShowAuth(true);
     setShowChatModal(true);
@@ -296,11 +292,13 @@ export default function ModelProfile() {
 
   const modelConfig = Array.isArray(model?.Configs) ? model.Configs[0] : model?.Configs;
   const isOnline = model?.live_status === 'online' || model?.live_status === 'vip';
+  
+  // 🔥 TRAVA DE SEGURANÇA: Se a profile_url falhar, ele puxa a bg_url pra garantir que aparece imagem
+  const avatarUrl = modelConfig?.profile_url || modelConfig?.bg_url;
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden animate-in fade-in duration-300">
       
-      {/* 🔥 HEADER / HERO SECTION 🔥 */}
       <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end bg-black">
         <div className="absolute inset-0 w-full h-full bg-[#0a0a0a]">
             {modelConfig?.bg_url || modelConfig?.profile_url ? (
@@ -316,7 +314,7 @@ export default function ModelProfile() {
 
         <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col md:flex-row items-center md:items-end gap-6 sm:gap-8 mt-auto pb-8">
           <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-[2.5rem] sm:rounded-[3rem] border-4 border-[#D946EF] overflow-hidden shadow-[0_0_50px_rgba(217,70,239,0.5)] shrink-0 bg-[#111] mx-auto md:mx-0 relative">
-            {modelConfig?.profile_url && <img src={modelConfig.profile_url} className="w-full h-full object-cover" />}
+            {avatarUrl && <img src={avatarUrl} className="w-full h-full object-cover" />}
             {isOnline && (
               <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 bg-black/60 backdrop-blur-md border border-[#00f0ff]/50 px-2 py-1 rounded-full flex items-center shadow-[0_0_10px_rgba(0,240,255,0.5)]">
                  <span className="w-2 h-2 bg-[#00f0ff] rounded-full animate-pulse"></span>
@@ -402,13 +400,12 @@ export default function ModelProfile() {
             );
           }) : (
              <div className="col-span-full py-16 text-center text-white/30 text-xs italic font-medium uppercase tracking-widest border border-dashed border-white/10 rounded-3xl">
-                 Carregando coleção VIP...
+                 {loading ? "Carregando..." : "Nenhuma foto disponível."}
              </div>
           )}
         </div>
       </div>
 
-      {/* 🔥 NOVO: MODAL DE CHAT VIP 🔥 */}
       {showChatModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/95 backdrop-blur-xl animate-in fade-in duration-200">
            <div className="bg-[#0a0a0a] border border-white/10 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3.5rem] w-full max-w-md shadow-2xl relative flex flex-col h-[75vh] max-h-[600px] animate-in zoom-in-95">
@@ -416,7 +413,7 @@ export default function ModelProfile() {
                
                <div className="flex items-center gap-4 mb-4 border-b border-white/10 pb-5 shrink-0">
                    <div className="w-12 h-12 rounded-full border-2 border-[#D946EF] overflow-hidden shrink-0">
-                       {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover" /> : <User className="text-[#D946EF] p-2 w-full h-full"/>}
+                       {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover" /> : <User className="text-[#D946EF] p-2 w-full h-full"/>}
                    </div>
                    <div className="flex flex-col">
                        <h2 className="text-lg font-black uppercase italic text-white leading-tight">{modelConfig?.model_name || model?.slug}</h2>
