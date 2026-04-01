@@ -8,7 +8,6 @@ const getSupabase = () => {
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// ESPIÃO: Transformamos as respostas em STRING para o Next.js nunca mais engasgar na tela
 export async function getSuperAdminData() {
   try {
     const supabase = getSupabase();
@@ -52,7 +51,6 @@ export async function getSuperAdminData() {
       }
     };
     
-    // Retorna stringificado para burlar o erro do Server Component
     return JSON.stringify(result);
   } catch (e: any) { 
     console.error("Erro no Servidor:", e);
@@ -60,12 +58,26 @@ export async function getSuperAdminData() {
   }
 }
 
-// O payload agora é uma string para evitar o erro 500 do Next.js
+// FIX: payloadStr permanece string (correto), mas agora fazemos sanitização
+// profunda no parse para eliminar qualquer `undefined` que crashe o Flight Protocol
+function sanitize(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(sanitize);
+  if (typeof obj === 'object') {
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      clean[key] = sanitize(obj[key]);
+    }
+    return clean;
+  }
+  return obj;
+}
+
 export async function runAdminAction(action: string, payloadStr: string) {
   try {
     const supabase = getSupabase();
-    // Transforma a string de volta em objeto de forma segura
-    const payload = payloadStr ? JSON.parse(payloadStr) : {};
+    // FIX: sanitize elimina todos os `undefined` que quebram o Flight Protocol
+    const payload = sanitize(payloadStr ? JSON.parse(payloadStr) : {});
 
     if (action === "resetSystem") {
       await Promise.all([
@@ -96,7 +108,6 @@ export async function runAdminAction(action: string, payloadStr: string) {
     }
 
     if (action === "approveApplication") {
-      // Criação segura de dados mesmo se a modelo não preencheu direito
       const safeNickname = payload.nickname ? payload.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
       const generatedEmail = payload.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
       const generatedPass = `BlackjadeLabz2026!`;
@@ -110,7 +121,6 @@ export async function runAdminAction(action: string, payloadStr: string) {
         referred_by: payload.referred_by || null
       }).select().single();
 
-      // ESPIÃO LABZ: Se o banco de dados recusar, ele vai gritar o motivo exato
       if (mErr || !m) {
         throw new Error(`[ERRO TABELA MODELS]: ${mErr?.message || 'Falha ao inserir'} | Detalhes: ${mErr?.details || mErr?.hint || 'Nenhum'}`);
       }
@@ -123,7 +133,6 @@ export async function runAdminAction(action: string, payloadStr: string) {
         profile_url: payload.profile_url || payload.bg_url || null 
       });
 
-      // ESPIÃO LABZ: Se as configurações falharem, ele apaga a modelo pra não deixar "fantasma" e avisa
       if (cErr) {
         await supabase.from('Models').delete().eq('id', m.id);
         throw new Error(`[ERRO TABELA CONFIGS]: ${cErr.message}`);
@@ -156,7 +165,6 @@ export async function runAdminAction(action: string, payloadStr: string) {
 
     return JSON.stringify({ ok: true });
   } catch (e: any) { 
-    // Retorna o erro exato como texto pro front-end ler
     return JSON.stringify({ ok: false, error: e.message || String(e) }); 
   }
 }
