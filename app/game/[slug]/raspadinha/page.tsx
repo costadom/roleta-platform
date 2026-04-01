@@ -188,11 +188,14 @@ export default function RaspadinhaPage() {
   const [pixTimeLeft, setPixTimeLeft] = useState(600);
   const [copied, setCopied] = useState(false);
 
-  // 🔥 NOVO ESTADO: PACOTES DA CENTRAL 🔥
+  // 🔥 ESTADO DA CENTRAL 🔥
   const [rechargePackages, setRechargePackages] = useState<any[]>([
     { id: 1, amount: 10, bonus: 2 },
     { id: 2, amount: 20, bonus: 5 }
   ]);
+
+  // 🔥 NOVO: Estado para Foto Ampliada 🔥
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchInitialData();
@@ -208,7 +211,6 @@ export default function RaspadinhaPage() {
           return;
       }
 
-      // 🔥 PUXA PACOTES DA CENTRAL 🔥
       const { data: globData } = await supabase.from('GlobalSettings').select('recharge_packages').eq('id', 'main').single();
       if (globData?.recharge_packages) {
           setRechargePackages(globData.recharge_packages);
@@ -247,7 +249,6 @@ export default function RaspadinhaPage() {
     return newArray;
   }
 
-  // 🔥 LÓGICA DE COMPRA C/ MOTOR GACHA (ESCASSEZ) 🔥
   const buyPackage = async (bundleSize: number) => {
     if (scratchQueue.length > 0) return setNotice("Termine de raspar a atual primeiro!");
     if (!player) return setNotice("Faça login para jogar.");
@@ -259,7 +260,6 @@ export default function RaspadinhaPage() {
     setIsProcessingBuy(true);
 
     try {
-        // MOTOR DE CASSINO VIP: 
         let winChance = bundleSize === 10 ? 0.25 : bundleSize === 5 ? 0.18 : 0.10;
         
         if (unlockedPhotos.length >= 8) {
@@ -332,7 +332,6 @@ export default function RaspadinhaPage() {
       }
   };
 
-  // --- MONITORAMENTO PIX ---
   useEffect(() => {
     let interval: any;
     if (pixData && !pixPaid) {
@@ -376,11 +375,17 @@ export default function RaspadinhaPage() {
   if (loading) return <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center text-[#D946EF] font-black uppercase text-xs animate-pulse tracking-widest">Carregando Labz...</div>;
 
   return (
-    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center font-sans select-none overflow-hidden">
+    <div className="min-h-[100dvh] bg-[#050505] flex items-center justify-center font-sans select-none relative overflow-hidden">
       
       {notice && <NoticeModal message={notice} onClose={() => setNotice("")} />}
 
-      <div className="relative w-full min-h-[100dvh] max-w-[430px] bg-black flex flex-col border-x border-white/5 shadow-2xl overflow-x-hidden overflow-y-auto custom-scrollbar">
+      {/* 🔥 NOVO: Fundo de Computador Desfocado 🔥 */}
+      <div className="hidden md:block absolute inset-0 z-0 pointer-events-none">
+         <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+         <div className="absolute inset-0 bg-gradient-to-b from-black/50 to-black/90" />
+      </div>
+
+      <div className="relative w-full h-[100dvh] md:h-[90dvh] max-w-[430px] bg-black flex flex-col md:rounded-[2.5rem] md:border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-y-auto overflow-x-hidden custom-scrollbar z-10">
         
         <div className="absolute inset-0 z-0 pointer-events-none fixed">
           <div className="absolute inset-0 bg-cover bg-center opacity-40 scale-105 transition-all duration-1000 fixed" style={{ backgroundImage: `url(${backgroundUrl})` }} />
@@ -389,9 +394,13 @@ export default function RaspadinhaPage() {
 
         <div className="relative z-10 p-4 flex flex-col gap-3 shrink-0">
            <div className="flex justify-between items-center px-1">
-              <button onClick={() => router.push(`/profile/${slug}`)} className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-white/70 hover:text-white transition-all"><ArrowLeft size={12} /> Voltar</button>
+              {/* 🔥 BOTÃO VOLTAR IDÊNTICO À ROLETA 🔥 */}
               <div className="flex gap-2">
-                 <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all"><User size={16}/></button>
+                 <button onClick={() => router.push(`/profile/${slug}`)} className="p-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-[#D946EF] transition-all"><ArrowLeft size={16}/></button>
+                 <button onClick={() => router.push(`/profile/${slug}`)} className="px-4 py-2 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 text-white text-[9px] font-black uppercase flex items-center gap-2 hover:bg-white/10 transition-all"><User size={14}/> Voltar ao Perfil</button>
+              </div>
+              <div className="flex gap-2">
+                 <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-black/40 border border-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-[#FFD700] active:scale-90 transition-all shadow-lg"><User size={16}/></button>
               </div>
            </div>
            <div className="flex flex-col items-center">
@@ -408,9 +417,9 @@ export default function RaspadinhaPage() {
           </div>
         </div>
 
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 px-4 min-h-[380px]">
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-4 px-4 min-h-[380px] shrink-0">
           
-          <div className="w-full max-w-[300px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
+          <div className="w-full max-w-[280px] aspect-[4/5] bg-[#0a0a0a]/80 backdrop-blur-xl border border-[#D946EF]/30 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.15)] relative overflow-hidden shrink-0">
              
              {currentScratch ? (
                  <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#111]">
@@ -455,7 +464,7 @@ export default function RaspadinhaPage() {
           )}
 
           {currentScratch && isRevealed && (
-              <div className="mt-4 w-full max-w-[300px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
+              <div className="mt-4 w-full max-w-[280px] px-2 animate-in slide-in-from-bottom-4 fade-in shrink-0">
                   <button onClick={nextScratch} className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
                       {queueIndex < totalInPackage ? `Próxima Raspada (${queueIndex}/${totalInPackage})` : "Finalizar Pacote"}
                   </button>
@@ -480,7 +489,7 @@ export default function RaspadinhaPage() {
           )}
         </div>
 
-        <div className={`relative z-10 p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`relative z-10 p-4 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent shrink-0 mt-auto transition-all duration-500 ${currentScratch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
           
           <div className="grid grid-cols-2 gap-2 mb-2">
              <button onClick={() => buyPackage(1)} disabled={isProcessingBuy} className="bg-[#111] border border-white/10 h-14 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-all shadow-lg">
@@ -494,35 +503,35 @@ export default function RaspadinhaPage() {
              </button>
           </div>
 
-          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all mb-4 border border-white/20">
+          <button onClick={() => buyPackage(10)} disabled={isProcessingBuy} className="w-full py-4 bg-gradient-to-r from-[#FFD700] to-[#e6be00] text-black rounded-2xl font-black uppercase text-xs flex flex-col items-center justify-center shadow-[0_5px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all mb-2 border border-white/20">
              <span className="flex items-center gap-2 font-black italic text-sm"><Zap size={14} fill="currentColor"/> SUPER PACK COLEÇÃO</span>
              <span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">10 RASPADAS • 14 CRÉDITOS</span>
           </button>
-          
-          <div className="w-full">
-            <button onClick={() => router.push(`/profile/${slug}`)} className="w-full py-4 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all shadow-lg"><User size={16} /> Voltar para o Perfil</button>
-          </div>
         </div>
 
-        {/* Modal Perfil/Galeria */}
+        {/* 🔥 Modal Perfil/Galeria Limpo 🔥 */}
         {showProfile && player && (
-          <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl p-4 flex items-center justify-center animate-in fade-in duration-200">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative flex flex-col max-h-[85vh] shadow-2xl">
-              <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
-              <div className="w-16 h-16 bg-[#D946EF]/10 border border-[#D946EF]/30 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3"><User size={30} className="text-[#D946EF]"/></div>
-              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center mb-1">{player.nickname || player.full_name || 'Jogador'}</h2>
-              <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-6 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
+          <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md p-4 flex items-center justify-center animate-in fade-in duration-200">
+            <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative flex flex-col max-h-[90vh] shadow-2xl">
+              <button onClick={() => setShowProfile(false)} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><CloseIcon size={24} /></button>
+              <div className="w-20 h-20 bg-[#D946EF]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#D946EF]/30"><User size={40} className="text-[#D946EF]"/></div>
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter text-center">{player.nickname || player.full_name || 'Jogador'}</h2>
+              <p className="text-[10px] text-[#FFD700] font-black uppercase text-center mb-2 tracking-widest">{player.credits} CRÉDITOS DISPONÍVEIS</p>
               
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 border-t border-white/10 pt-6">
-                <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest"><Trophy size={14} className="text-[#FFD700]"/> Galeria ({unlockedPhotos.length}/10)</h3>
+              <div className="mt-4 border-t border-white/10 pt-6 text-left flex-1 overflow-hidden flex flex-col">
+                <h3 className="text-[10px] text-white/40 uppercase font-black mb-4 flex items-center gap-2 tracking-widest shrink-0"><Trophy size={14} className="text-[#FFD700]"/> Galeria ({unlockedPhotos.length}/10)</h3>
                 {unlockedPhotos.length === 0 ? (
                   <div className="py-10 text-center opacity-20"><ImageIcon size={40} className="mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Você não tem fotos</p></div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
                     {unlockedPhotos.map((img, i) => (
-                      <div key={i} className="aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-[#111] shadow-lg relative group cursor-pointer">
+                      <div key={i} onClick={() => setExpandedImage(img.photo_url)} className="aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-[#111] shadow-lg relative group cursor-pointer">
                         <img src={img.photo_url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="Galeria" />
                         <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm p-1.5 rounded-full"><Star size={10} fill="#FFD700" className="text-[#FFD700]" /></div>
+                        
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-300">
+                            <span className="text-[8px] font-black uppercase tracking-widest text-white">Ver Ampliada</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -533,11 +542,21 @@ export default function RaspadinhaPage() {
           </div>
         )}
 
-        {/* Modal PIX 🔥 AQUI ESTÃO OS BOTOES DINÂMICOS 🔥 */}
+        {/* 🔥 Imagem Expandida 🔥 */}
+        {expandedImage && (
+            <div className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in zoom-in duration-300" onClick={() => setExpandedImage(null)}>
+               <button onClick={() => setExpandedImage(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[610]">
+                   <CloseIcon size={20}/>
+               </button>
+               <img src={expandedImage} className="max-w-full max-h-[90vh] object-contain rounded-[2rem] shadow-2xl border border-white/5" onClick={(e) => e.stopPropagation()} />
+            </div>
+        )}
+
+        {/* Modal PIX */}
         {showDeposit && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in duration-200">
-            <div className="bg-[#111] border border-[#D946EF]/30 p-8 rounded-[3rem] w-full max-w-sm relative shadow-[0_0_50px_rgba(217,70,239,0.15)]">
-              <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/20 hover:text-white"><CloseIcon size={24} /></button>
+          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-8 rounded-[2.5rem] w-full max-w-sm relative shadow-2xl">
+              <button onClick={() => { setShowDeposit(false); setPixData(null); }} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors"><CloseIcon size={24} /></button>
               {pixPaid ? (
                  <div className="py-10 text-center animate-in zoom-in">
                     <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500 animate-bounce"><CheckCircle2 className="text-emerald-500" size={40} /></div>
@@ -572,7 +591,6 @@ export default function RaspadinhaPage() {
                       <div className="bg-[#D946EF] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md">Comprar</div>
                     </button>
                   ))}
-
                 </div>
               )}
             </div>
