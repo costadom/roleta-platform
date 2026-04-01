@@ -8,8 +8,10 @@ const getSupabase = () => {
   return createClient(url, key, { auth: { persistSession: false } });
 };
 
-// 🔥 O FILTRO DE LIMPEZA MÁGICO: Remove qualquer 'undefined' e impede o Next.js de crashar o Server Component 🔥
-const cleanForNextJs = (data: any) => JSON.parse(JSON.stringify(data));
+// 🔥 LIMPEZA SÊNIOR (Dica do Claude): Remove undefined sem quebrar a estrutura de Objeto
+const sanitizeForNext = (obj: any): any => {
+  return JSON.parse(JSON.stringify(obj, (key, value) => (value === undefined ? null : value)));
+};
 
 export async function getSuperAdminData() {
   try {
@@ -37,7 +39,7 @@ export async function getSuperAdminData() {
 
     const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    return cleanForNextJs({
+    return sanitizeForNext({
       ok: true,
       data: {
         global: globRes || null,
@@ -54,7 +56,8 @@ export async function getSuperAdminData() {
       }
     });
   } catch (e: any) { 
-    return cleanForNextJs({ ok: false, error: e.message }); 
+    console.error("Erro no Servidor:", e);
+    return sanitizeForNext({ ok: false, error: e.message }); 
   }
 }
 
@@ -91,22 +94,24 @@ export async function runAdminAction(action: string, payload: any) {
     }
 
     if (action === "approveApplication") {
-      // 🔥 PUXA DO BANCO PARA EVITAR LIMITE DE 1MB DA VERCEL 🔥
+      // 🔥 BURLA O LIMITE DE 1MB: Busca a ficha no banco em vez de receber pela rede 🔥
       const { data: appData } = await supabase.from('Applications').select('*').eq('id', payload.id).single();
-      if (!appData) return cleanForNextJs({ ok: false, error: "Candidatura não encontrada no banco." });
+      if (!appData) throw new Error("Candidatura não encontrada.");
 
       const safeNickname = appData.nickname ? appData.nickname.replace(/\s+/g, '') : `musa${Date.now().toString().slice(-4)}`;
       const generatedEmail = appData.email || `${safeNickname.toLowerCase()}@labzsexy.com`;
-      const generatedPass = `BlackjadeLabz2026!`;
+      
+      // 🔥 SENHA DINÂMICA: Primeira letra maiúscula + Labz2026!
+      const generatedPass = `${safeNickname.charAt(0).toUpperCase()}${safeNickname.slice(1).toLowerCase()}Labz2026!`;
 
-      // 🔥 CORREÇÃO DA MADRINHA (Evita crash de chave estrangeira) 🔥
+      // 🔥 CORREÇÃO DA MADRINHA: Pega o UUID pelo slug
       let safeReferredBy = null;
       if (appData.referred_by && typeof appData.referred_by === 'string' && appData.referred_by.trim() !== '') {
           const { data: madrinha } = await supabase.from('Models').select('id').eq('slug', appData.referred_by.trim().toLowerCase()).single();
           if (madrinha && madrinha.id) safeReferredBy = madrinha.id;
       }
 
-      const insertData = {
+      const { data: m, error: mErr } = await supabase.from('Models').insert({
         slug: safeNickname.toLowerCase(), 
         email: generatedEmail, 
         password: generatedPass,
@@ -114,27 +119,28 @@ export async function runAdminAction(action: string, payload: any) {
         whatsapp: appData.whatsapp ? String(appData.whatsapp).replace(/\D/g, '') : null, 
         cpf: appData.cpf ? String(appData.cpf).replace(/\D/g, '') : null,
         referred_by: safeReferredBy
-      };
+      }).select().single();
 
-      const { data: m, error: mErr } = await supabase.from('Models').insert(insertData).select().single();
-      if (mErr || !m) return cleanForNextJs({ ok: false, error: `ERRO BANCO (Models): ${mErr?.message}` });
+      if (mErr || !m) throw new Error(`[ERRO MODELS]: ${mErr?.message}`);
 
+      // 🔥 CORREÇÃO DO CREATED_AT: Adicionada a data forçada
       const { error: cErr } = await supabase.from('Configs').insert({ 
         model_id: m.id, 
         model_name: safeNickname.toUpperCase(), 
         spin_cost: 2, 
         bg_url: appData.bg_url || null, 
-        profile_url: appData.profile_url || appData.bg_url || null 
+        profile_url: appData.profile_url || appData.bg_url || null,
+        created_at: new Date().toISOString()
       });
 
       if (cErr) {
         await supabase.from('Models').delete().eq('id', m.id);
-        return cleanForNextJs({ ok: false, error: `ERRO BANCO (Configs): ${cErr.message}` });
+        throw new Error(`[ERRO CONFIGS]: ${cErr.message}`);
       }
 
       await supabase.from('Applications').update({ status: 'aprovada' }).eq('id', payload.id);
       
-      return cleanForNextJs({ ok: true, data: { generatedEmail, generatedPass, full_name: appData.full_name, whatsapp: appData.whatsapp } });
+      return sanitizeForNext({ ok: true, data: { generatedEmail, generatedPass, full_name: appData.full_name, whatsapp: appData.whatsapp } });
     }
 
     if (action === "rejectApplication") {
@@ -146,9 +152,14 @@ export async function runAdminAction(action: string, payload: any) {
         slug: payload.slug.toLowerCase(), email: payload.email, password: payload.password, referred_by: payload.referred_by || null
       }).select().single();
       
-      if (mErr || !m) return cleanForNextJs({ ok: false, error: `ERRO CRIAR MANUAL: ${mErr?.message}` });
+      if (mErr || !m) throw new Error(`Erro ao criar modelo: ${mErr?.message}`);
       
-      await supabase.from('Configs').insert({ model_id: m.id, model_name: payload.slug.toUpperCase(), spin_cost: 2 });
+      await supabase.from('Configs').insert({ 
+        model_id: m.id, 
+        model_name: payload.slug.toUpperCase(), 
+        spin_cost: 2,
+        created_at: new Date().toISOString()
+      });
     }
 
     if (action === "deleteModel") {
@@ -157,8 +168,8 @@ export async function runAdminAction(action: string, payload: any) {
       await supabase.from('Models').delete().eq('id', payload.id);
     }
 
-    return cleanForNextJs({ ok: true });
+    return sanitizeForNext({ ok: true });
   } catch (e: any) { 
-    return cleanForNextJs({ ok: false, error: e.message || String(e) }); 
+    return sanitizeForNext({ ok: false, error: e.message || String(e) }); 
   }
 }
