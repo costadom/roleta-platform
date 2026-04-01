@@ -39,6 +39,9 @@ export default function ModelProfile() {
   const [copied, setCopied] = useState(false);
   const [pixTimeLeft, setPixTimeLeft] = useState(600); 
 
+  // 🔥 APENAS ISSO ADICIONADO: ESTADO DO CHAT 🔥
+  const [showChatModal, setShowChatModal] = useState(false);
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -277,9 +280,10 @@ export default function ModelProfile() {
     return () => clearInterval(interval);
   }, [checkoutData, pixData, paymentSuccess, playerId, supabaseUrl, supabaseKey]);
 
+  // 🔥 APENAS ISSO ALTERADO: Abre o Modal em vez do HUB 🔥
   const handleChatClick = () => {
     if (!isLoggedIn) return setShowAuth(true);
-    router.push('/hub');
+    setShowChatModal(true);
   };
 
   const handleJoinLive = () => {
@@ -296,7 +300,6 @@ export default function ModelProfile() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans pb-24 relative overflow-x-hidden animate-in fade-in duration-300">
       
-      {/* 🔥 HEADER / HERO SECTION 🔥 */}
       <div className="relative w-full h-[60vh] sm:h-[55vh] flex flex-col justify-end bg-black">
         <div className="absolute inset-0 w-full h-full bg-[#0a0a0a]">
             {modelConfig?.bg_url || modelConfig?.profile_url ? (
@@ -403,6 +406,40 @@ export default function ModelProfile() {
           )}
         </div>
       </div>
+
+      {/* 🔥 NOVO: MODAL DE CHAT VIP RENDERIZADO AQUI 🔥 */}
+      {showChatModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/95 backdrop-blur-xl animate-in fade-in duration-200">
+           <div className="bg-[#0a0a0a] border border-white/10 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3.5rem] w-full max-w-md shadow-2xl relative flex flex-col h-[75vh] max-h-[600px] animate-in zoom-in-95">
+               <button onClick={() => setShowChatModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/30 hover:text-white transition-colors z-10"><X size={24}/></button>
+               
+               <div className="flex items-center gap-4 mb-4 border-b border-white/10 pb-5 shrink-0">
+                   <div className="w-12 h-12 rounded-full border-2 border-[#D946EF] overflow-hidden shrink-0">
+                       {modelConfig?.profile_url ? <img src={modelConfig.profile_url} className="w-full h-full object-cover" /> : <User className="text-[#D946EF] p-2 w-full h-full"/>}
+                   </div>
+                   <div className="flex flex-col">
+                       <h2 className="text-lg font-black uppercase italic text-white leading-tight">{modelConfig?.model_name || model?.slug}</h2>
+                       <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5 mt-1">
+                           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> {isOnline ? 'Online agora' : 'Disponível'}
+                       </p>
+                   </div>
+               </div>
+
+               <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-4 py-2 mb-4">
+                   <div className="bg-white/5 border border-white/10 p-4 rounded-2xl rounded-tl-none self-start max-w-[85%] shadow-md">
+                       <p className="text-xs text-white/80 leading-relaxed">Oii amor! Que bom te ver por aqui. Quer aproveitar e já me pedir alguma coisa especial? 🔥💖</p>
+                   </div>
+               </div>
+
+               <div className="pt-4 border-t border-white/10 shrink-0">
+                   <div className="flex items-center gap-2 bg-black border border-white/10 rounded-full p-1.5 pl-5 focus-within:border-[#D946EF]/50 transition-all shadow-inner">
+                       <input type="text" placeholder="Escreva sua mensagem..." className="flex-1 bg-transparent border-none text-xs text-white outline-none placeholder:text-white/30 py-2.5" />
+                       <button className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shrink-0 shadow-lg"><Send size={14} className="-ml-0.5" /></button>
+                   </div>
+               </div>
+           </div>
+        </div>
+      )}
 
       {showVideoModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/95 backdrop-blur-xl">
