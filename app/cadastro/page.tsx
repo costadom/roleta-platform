@@ -2,9 +2,9 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, CheckCircle2, AlertTriangle, AlertOctagon, Sparkles, Mail } from "lucide-react";
+import { User, Phone, KeyRound, Image as ImageIcon, Loader2, ArrowLeft, AlertTriangle, AlertOctagon, Sparkles, Mail } from "lucide-react";
 
-// 🔥 ALGORITMO OFICIAL DE VALIDAÇÃO DE CPF 🔥
+// ALGORITMO OFICIAL DE VALIDAÇÃO DE CPF
 const isValidCPF = (cpf: string) => {
   cpf = cpf.replace(/[^\d]+/g, '');
   if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
@@ -19,7 +19,7 @@ const isValidCPF = (cpf: string) => {
   return true;
 };
 
-// MÁSCARA PARA O CPF (000.000.000-00)
+// MÁSCARAS
 const formatCPF = (v: string) => {
   v = v.replace(/\D/g, "").slice(0, 11);
   if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
@@ -28,7 +28,6 @@ const formatCPF = (v: string) => {
   return v;
 };
 
-// MÁSCARA PARA O WHATSAPP ((00) 00000-0000)
 const formatPhone = (v: string) => {
   v = v.replace(/\D/g, "").slice(0, 11);
   if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
@@ -37,7 +36,6 @@ const formatPhone = (v: string) => {
   return v;
 };
 
-// Separamos o conteúdo principal para que o Next.js não reclame do useSearchParams
 function CadastroContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -47,6 +45,10 @@ function CadastroContent() {
   const [madrinhaName, setMadrinhaName] = useState<string | null>(null);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
 
+  // Estados reais dos arquivos (Para enviar pro Storage depois)
+  const [profileFile, setProfileFile] = useState<File | null>(null);
+  const [bgFile, setBgFile] = useState<File | null>(null);
+
   const [formData, setFormData] = useState({
     full_name: "", nickname: "", email: "", whatsapp: "", cpf: "", birth_date: "", pix_1: "", bg_url: "", profile_url: "",
   });
@@ -54,7 +56,6 @@ function CadastroContent() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  // 🔥 SISTEMA DE INDICAÇÃO & BUSCA DE NOME (MOTOR GACHA) 🔥
   useEffect(() => {
     const fetchMadrinhaName = async (slug: string) => {
         try {
@@ -70,7 +71,6 @@ function CadastroContent() {
     };
 
     const refFromUrl = searchParams.get("ref");
-    
     if (refFromUrl) {
       setReferralId(refFromUrl);
       localStorage.setItem("labz_referral_slug", refFromUrl);
@@ -84,7 +84,7 @@ function CadastroContent() {
     }
   }, [searchParams, supabaseUrl, supabaseKey]);
 
-  // 🔥 SISTEMA DE UPLOAD BASE64
+  // 🔥 NOVO SISTEMA DE ARQUIVOS (Salva o arquivo e cria um link local só pra pré-visualizar) 🔥
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'bg_url' | 'profile_url') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -94,18 +94,22 @@ function CadastroContent() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData(prev => ({ ...prev, [field]: reader.result as string }));
-    };
-    reader.readAsDataURL(file);
+    // Criar um preview visual rápido
+    const objectUrl = URL.createObjectURL(file);
+
+    if (field === 'profile_url') {
+      setProfileFile(file);
+      setFormData(prev => ({ ...prev, profile_url: objectUrl }));
+    } else {
+      setBgFile(file);
+      setFormData(prev => ({ ...prev, bg_url: objectUrl }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // VERIFICAÇÕES DE SEGURANÇA ANTES DE ENVIAR
-    if (!formData.bg_url || !formData.profile_url) {
+    if (!profileFile || !bgFile) {
       alert("ATENÇÃO: Você precisa carregar as DUAS fotos (Vitrine e Fundo) para continuar!");
       return;
     }
@@ -121,12 +125,34 @@ function CadastroContent() {
     setLoading(true);
 
     try {
-      // Limpa as máscaras para mandar os números limpos pro banco
+      // 1. Função para subir a imagem no Storage (Bucket 'assets')
+      const uploadToStorage = async (file: File, prefix: string) => {
+        const ext = file.name.split('.').pop();
+        const fileName = `applications/${prefix}_${Date.now()}.${ext}`;
+        
+        const res = await fetch(`${supabaseUrl}/storage/v1/object/assets/${fileName}`, {
+          method: "POST",
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type },
+          body: file
+        });
+        
+        if (!res.ok) throw new Error("Falha ao subir imagem");
+        
+        return `${supabaseUrl}/storage/v1/object/public/assets/${fileName}`;
+      };
+
+      // 2. Fazendo o Upload e pegando as URLs Reais
+      const finalProfileUrl = await uploadToStorage(profileFile, 'vitrine');
+      const finalBgUrl = await uploadToStorage(bgFile, 'fundo');
+
+      // 3. Enviando para o Banco Relacional Leve
       const cleanCPF = formData.cpf.replace(/\D/g, '');
       const cleanPhone = formData.whatsapp.replace(/\D/g, '');
 
       const payload = {
         ...formData,
+        profile_url: finalProfileUrl, // <- AQUI SUBSTITUI O PREVIEW PELO LINK REAL
+        bg_url: finalBgUrl,           // <- AQUI SUBSTITUI O PREVIEW PELO LINK REAL
         cpf: cleanCPF,
         whatsapp: cleanPhone,
         prizes: JSON.stringify(["Pack VIP", "Foto Exclusiva", "Áudio Safadinho", "Desconto 50%", "Mimo Surpresa", "Acesso VIP"]),
@@ -138,10 +164,11 @@ function CadastroContent() {
       await fetch(`${supabaseUrl}/rest/v1/Applications`, {
         method: "POST", headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
+      
       setSuccess(true);
       localStorage.removeItem("labz_referral_slug"); 
     } catch (error) { 
-        alert("Erro ao enviar cadastro. Tente novamente."); 
+        alert("Erro ao enviar cadastro. Verifique sua conexão e tente novamente."); 
     } finally { 
         setLoading(false); 
     }
@@ -163,7 +190,6 @@ function CadastroContent() {
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 sm:p-8 font-sans relative selection:bg-[#D946EF] selection:text-white pb-20">
       
-      {/* FUNDO LIQUID GLASS */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-black to-[#050505] z-0 pointer-events-none fixed" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(217,70,239,0.1)_0%,rgba(0,0,0,0)_70%)] z-0 pointer-events-none fixed" />
 
@@ -179,7 +205,6 @@ function CadastroContent() {
 
         <form onSubmit={handleSubmit} className="bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 p-6 sm:p-10 rounded-[3rem] shadow-[0_0_50px_rgba(217,70,239,0.1)] space-y-8 relative overflow-hidden">
           
-          {/* CAIXA DE INDICAÇÃO (MADRINHA) NEON */}
           {referralId && (
               <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-[#D946EF]/20 via-[#D946EF]/10 to-[#D946EF]/20 p-4 text-white text-center border-b border-[#D946EF]/30 z-20 backdrop-blur-md">
                   <p className="text-[10px] text-[#D946EF] font-black uppercase tracking-widest flex items-center justify-center gap-2 mb-1">
@@ -310,7 +335,6 @@ function CadastroContent() {
   );
 }
 
-// A MÁGICA ACONTECE AQUI: A página principal agora é apenas o Suspense que envolve o conteúdo
 export default function CadastroModeloPage() {
   return (
     <Suspense fallback={
