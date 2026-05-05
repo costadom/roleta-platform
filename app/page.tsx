@@ -5,66 +5,73 @@ import { useRouter } from "next/navigation";
 import { Radio, Gamepad2, MessageCircle, LogIn, ShieldCheck, UserPlus } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 
-// 🔥 AS PALAVRAS QUE VÃO FLUTUAR NO FUNDO 🔥
+// 🔥 AS PALAVRAS QUE VÃO SURGIR NO FUNDO 🔥
 const THEME_WORDS = [
   "FETICHES", "DESEJO", "ORGASMOS", "VIP", "SEDUÇÃO", 
   "EXCLUSIVO", "PRAZER", "CÂMERAS", "MÍDIAS", "SEGREDOS", 
   "DOMINAÇÃO", "INTIMIDADE", "PREMIUM", "HOT"
 ];
 
-// Componente do fundo animado (Sem sobreposição)
-function FloatingWordsBackground() {
+// Componente do fundo animado (Grade Estática com Fade In/Out)
+function PulsingWordsBackground() {
   const [elements, setElements] = useState<any[]>([]);
 
   useEffect(() => {
-    // 1. Criamos um array com o número de "faixas" (pistas) baseado na quantidade de palavras
-    const lanes = Array.from({ length: THEME_WORDS.length }, (_, i) => i);
-    
-    // 2. Embaralhamos as faixas para que a ordem das palavras pareça aleatória na tela
-    for (let i = lanes.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+    // 1. Dividimos a tela em uma grade 4x4 (16 posições possíveis) para espalhar bem
+    const gridPositions = [];
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        gridPositions.push({ row, col });
+      }
     }
 
+    // 2. Embaralhamos as posições para ser aleatório a cada carregamento
+    for (let i = gridPositions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [gridPositions[i], gridPositions[j]] = [gridPositions[j], gridPositions[i]];
+    }
+
+    // 3. Pegamos as posições para as nossas 14 palavras
     const generated = THEME_WORDS.map((word, i) => {
-      const duration = Math.floor(Math.random() * 25) + 25; // Duração mais lenta: 25s a 50s
-      const lane = lanes[i];
+      const pos = gridPositions[i];
       
-      // 3. Calculamos a posição (left). Divide a tela (90%) em pistas iguais.
-      const leftPosition = 5 + (lane * (90 / THEME_WORDS.length)); 
+      // Calcula a posição na tela (Ex: coluna 0 = 0% a 25% da tela)
+      // Adicionamos um pequeno valor aleatório dentro daquele bloco pra não ficar "duro" demais
+      const topOffset = (pos.row * 25) + (Math.random() * 10 + 5); 
+      const leftOffset = (pos.col * 25) + (Math.random() * 10 + 2); 
 
       return {
         id: i,
         word,
-        left: leftPosition, 
-        delay: -(Math.random() * duration), // Delay negativo pra já começar na tela
-        duration: duration, 
-        size: Math.random() * 1.5 + 1.2, // Tamanho menor e controlado: 1.2rem a 2.7rem
+        top: topOffset,
+        left: leftOffset,
+        duration: Math.floor(Math.random() * 10) + 10, // Tempo do pulso (10s a 20s)
+        delay: Math.random() * 10, // Atraso de 0s a 10s pra não piscarem juntas
+        size: Math.random() * 0.8 + 1.2, // Tamanho nítido e elegante (1.2 a 2.0 rem)
       };
     });
+    
     setElements(generated);
   }, []);
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-[#050505] pointer-events-none select-none">
       {/* Luz Neon centralizada no fundo */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(217,70,239,0.15)_0%,rgba(5,5,5,1)_70%)] z-10"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(217,70,239,0.12)_0%,rgba(5,5,5,1)_70%)] z-10"></div>
 
-      {/* Palavras Flutuantes */}
+      {/* Palavras que Surgem e Somem */}
       <div className="absolute inset-0 z-0">
         {elements.map((el) => (
           <span
             key={el.id}
-            className="absolute text-[#D946EF] font-black uppercase tracking-[0.2em] whitespace-nowrap"
+            className="absolute text-[#D946EF] font-black uppercase tracking-[0.4em] whitespace-nowrap"
             style={{
+              top: `${el.top}%`,
               left: `${el.left}%`,
-              bottom: '-10%',
               fontSize: `${el.size}rem`,
               opacity: 0,
-              // Adicionamos a rotação para caber perfeitamente na pista
-              transform: `rotate(-90deg)`, 
-              transformOrigin: 'left center',
-              animation: `floatUp ${el.duration}s infinite linear ${el.delay}s`,
+              // Animação de pulso (Fade in / Fade out)
+              animation: `pulseFade ${el.duration}s infinite ease-in-out ${el.delay}s`,
             }}
           >
             {el.word}
@@ -72,13 +79,13 @@ function FloatingWordsBackground() {
         ))}
       </div>
 
-      {/* CSS da Animação */}
+      {/* CSS da Animação (Surge nítido, brilha levemente, e some) */}
       <style jsx>{`
-        @keyframes floatUp {
-          0% { transform: translateY(0) rotate(-90deg); opacity: 0; filter: blur(8px); }
-          15% { opacity: 0.06; filter: blur(3px); }
-          85% { opacity: 0.06; filter: blur(3px); }
-          100% { transform: translateY(-120vh) rotate(-90deg); opacity: 0; filter: blur(8px); }
+        @keyframes pulseFade {
+          0% { opacity: 0; transform: scale(0.95); filter: blur(4px); }
+          30% { opacity: 0.15; transform: scale(1); filter: blur(0px); text-shadow: 0 0 15px rgba(217,70,239,0.4); }
+          70% { opacity: 0.15; transform: scale(1); filter: blur(0px); text-shadow: 0 0 15px rgba(217,70,239,0.4); }
+          100% { opacity: 0; transform: scale(0.95); filter: blur(4px); }
         }
       `}</style>
     </div>
@@ -99,8 +106,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
       
-      {/* 🔥 O NOVO FUNDO ANIMADO SEM SOBREPOSIÇÃO 🔥 */}
-      <FloatingWordsBackground />
+      {/* 🔥 O NOVO FUNDO PULSANTE ESPALHADO E NÍTIDO 🔥 */}
+      <PulsingWordsBackground />
 
       {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
       <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
