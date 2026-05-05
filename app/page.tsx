@@ -12,24 +12,20 @@ const THEME_WORDS = [
   "DOMINAÇÃO", "INTIMIDADE", "PREMIUM", "HOT"
 ];
 
-// Doblamos a lista para preencher bem até telas grandes de Notebook
 const ALL_WORDS = [...THEME_WORDS, ...THEME_WORDS];
 
-// Componente do fundo animado (Nítido, Rápido e Espalhado)
+// Componente do fundo animado (Agora Misterioso, com Blur e Spotlight)
 function PulsingWordsBackground() {
   const [elements, setElements] = useState<any[]>([]);
 
   useEffect(() => {
     const generated = ALL_WORDS.map((word, i) => {
-      // Divide a tela em 4 colunas verticais e 7 linhas horizontais
-      const col = i % 4; // 0, 1, 2, 3
-      const row = Math.floor(i / 4); // 0 até 6
+      const col = i % 4; 
+      const row = Math.floor(i / 4);
 
-      // Calcula a posição garantindo que cubra de ponta a ponta (0% a 90%)
       const leftBase = col * 24; 
       const topBase = row * 14; 
 
-      // Adiciona uma leve aleatoriedade dentro da própria área para ficar natural
       const left = leftBase + (Math.random() * 8);
       const top = topBase + (Math.random() * 8);
 
@@ -38,11 +34,9 @@ function PulsingWordsBackground() {
         word,
         left: left,
         top: top,
-        // Duração bem mais rápida: 5s a 10s (Antes estava 10s a 20s)
-        duration: Math.random() * 5 + 5, 
-        // Delay negativo! Faz com que as palavras já comecem na tela sem você ter que esperar.
+        duration: Math.random() * 6 + 6, // 6s a 12s
         delay: -(Math.random() * 10), 
-        size: Math.random() * 0.7 + 1.0, // Fonte controlada (1.0rem a 1.7rem)
+        size: Math.random() * 0.5 + 1.2, // Um pouco menores (1.2 a 1.7)
       };
     });
     
@@ -50,20 +44,19 @@ function PulsingWordsBackground() {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden bg-[#050505] pointer-events-none select-none">
+    <div className="fixed inset-0 z-0 overflow-hidden bg-[#030303] pointer-events-none select-none">
       
-      {/* Palavras que Surgem e Somem (Agora na camada certa, bem visíveis) */}
-      <div className="absolute inset-0 z-10">
+      {/* 1. Camada das Palavras Neon com Blur */}
+      <div className="absolute inset-0 z-0">
         {elements.map((el) => (
           <span
             key={el.id}
-            className="absolute text-[#D946EF] font-black uppercase tracking-[0.3em] whitespace-nowrap"
+            className="absolute text-[#D946EF] font-black uppercase tracking-[0.4em] whitespace-nowrap"
             style={{
               top: `${el.top}%`,
               left: `${el.left}%`,
               fontSize: `${el.size}rem`,
               opacity: 0,
-              // Animação de pulso (Surgir e Sumir sem sair do lugar)
               animation: `pulsePop ${el.duration}s infinite ease-in-out ${el.delay}s`,
             }}
           >
@@ -72,16 +65,20 @@ function PulsingWordsBackground() {
         ))}
       </div>
 
-      {/* Sombreamento das bordas beeeem mais fraco para não engolir as palavras da ponta */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(5,5,5,0.7)_100%)] z-20"></div>
+      {/* 2. O "Pano Preto" semi-transparente por cima das letras */}
+      <div className="absolute inset-0 bg-black/50 z-10"></div>
 
-      {/* CSS da Animação (Nítido e Brilhante) */}
+      {/* 3. O Spotlight (Holofote) no centro para dar ênfase total ao Logo */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(217,70,239,0.15)_0%,rgba(0,0,0,0.6)_50%,rgba(0,0,0,0.95)_100%)] z-20"></div>
+
+      {/* CSS da Animação (Agora com Blur e Opacidade controlada) */}
       <style jsx>{`
         @keyframes pulsePop {
-          0% { opacity: 0; transform: scale(0.95); }
-          20% { opacity: 0.35; transform: scale(1); text-shadow: 0 0 15px rgba(217,70,239,0.8); }
-          80% { opacity: 0.35; transform: scale(1); text-shadow: 0 0 15px rgba(217,70,239,0.8); }
-          100% { opacity: 0; transform: scale(0.95); }
+          0% { opacity: 0; transform: scale(0.9); filter: blur(8px); }
+          /* Pica em apenas 15% de opacidade, com blur de 2.5px e muito neon */
+          20% { opacity: 0.15; transform: scale(1); filter: blur(2.5px); text-shadow: 0 0 25px rgba(217,70,239,1); }
+          80% { opacity: 0.15; transform: scale(1); filter: blur(2.5px); text-shadow: 0 0 25px rgba(217,70,239,1); }
+          100% { opacity: 0; transform: scale(0.9); filter: blur(8px); }
         }
       `}</style>
     </div>
@@ -102,25 +99,28 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans relative pb-20 overflow-x-hidden">
       
-      {/* 🔥 O NOVO FUNDO PULSANTE ESPALHADO E NÍTIDO 🔥 */}
+      {/* 🔥 FUNDO PULSANTE 🔥 */}
       <PulsingWordsBackground />
 
       {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
       <div className="relative z-30 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
         
         {/* LOGO CENTRALIZADO */}
-        <div className="flex flex-col items-center justify-center mb-8 pointer-events-none">
-            <span className="text-6xl sm:text-7xl mb-2 text-[#D946EF] drop-shadow-[0_0_20px_rgba(217,70,239,0.5)]">
+        <div className="flex flex-col items-center justify-center mb-8 pointer-events-none relative">
+            {/* Brilho extra específico atrás do logo para estourar o contraste */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#D946EF]/20 rounded-full blur-[80px] z-[-1]"></div>
+            
+            <span className="text-6xl sm:text-7xl mb-2 text-[#D946EF] drop-shadow-[0_0_20px_rgba(217,70,239,0.8)] relative z-10">
                 🔱
             </span>
-            <h1 className="text-5xl sm:text-6xl font-black italic uppercase tracking-tighter text-white drop-shadow-2xl">
+            <h1 className="text-5xl sm:text-6xl font-black italic uppercase tracking-tighter text-white drop-shadow-2xl relative z-10">
                 Labz<span className="text-[#D946EF]">Sexy</span>
             </h1>
         </div>
 
         {/* BOTÃO ÚNICO DE ENTRAR/CADASTRAR */}
-        <div className="w-full max-w-sm mb-16">
-            <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(217,70,239,0.6)] hover:scale-[1.02] active:scale-95 cursor-pointer">
+        <div className="w-full max-w-sm mb-16 relative z-10">
+            <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_40px_rgba(217,70,239,0.5)] hover:scale-[1.02] active:scale-95 cursor-pointer">
                 <LogIn size={18} className="pointer-events-none" /> 
                 <span className="pointer-events-none">Entre ou Cadastre-se</span>
             </button>
@@ -134,24 +134,24 @@ export default function LandingPage() {
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-12 pointer-events-none">
                 <div className="flex flex-col items-start text-left">
-                    <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5">
-                        <Radio size={20} className="text-white/80" />
+                    <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5 shadow-lg">
+                        <Radio size={20} className="text-[#D946EF]" />
                     </div>
                     <h3 className="font-black text-white uppercase text-sm mb-3">Câmeras Ao Vivo</h3>
                     <p className="text-xs text-white/50 leading-relaxed font-medium">Shows públicos ou convide sua musa favorita para uma sessão VIP trancada a sete chaves, cobrada por minuto.</p>
                 </div>
 
                 <div className="flex flex-col items-start text-left">
-                    <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5">
-                        <Gamepad2 size={20} className="text-white/80" />
+                    <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5 shadow-lg">
+                        <Gamepad2 size={20} className="text-[#D946EF]" />
                     </div>
                     <h3 className="font-black text-white uppercase text-sm mb-3">Jogos Picantes</h3>
                     <p className="text-xs text-white/50 leading-relaxed font-medium">Gire a Roleta ou raspe as cartelas premiadas para ganhar vídeos exclusivos, áudios e chamadas de vídeo na hora.</p>
                 </div>
 
                 <div className="flex flex-col items-start text-left">
-                    <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5">
-                        <MessageCircle size={20} className="text-white/80" />
+                    <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5 shadow-lg">
+                        <MessageCircle size={20} className="text-[#D946EF]" />
                     </div>
                     <h3 className="font-black text-white uppercase text-sm mb-3">Chat Desbloqueado</h3>
                     <p className="text-xs text-white/50 leading-relaxed font-medium">Converse diretamente com as modelos. Compre mídias trancadas ou envie mimos e presentes virtuais pelo chat.</p>
@@ -160,7 +160,7 @@ export default function LandingPage() {
         </div>
 
         {/* SEÇÃO PARA MODELOS */}
-        <div className="w-full max-w-5xl bg-black/60 backdrop-blur-md border border-white/5 rounded-[3rem] p-8 sm:p-12 shadow-xl flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="w-full max-w-5xl bg-[#111]/90 backdrop-blur-md border border-white/5 rounded-[3rem] p-8 sm:p-12 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex-1 text-center md:text-left pointer-events-none">
                 <h2 className="text-xl sm:text-2xl font-black uppercase italic text-white mb-3 tracking-tighter">
                     É Criadora de <span className="text-[#D946EF]">Conteúdo?</span>
