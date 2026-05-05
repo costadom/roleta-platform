@@ -2,75 +2,86 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Radio, Gamepad2, MessageCircle, LogIn, ShieldCheck, UserPlus } from "lucide-react";
+import { Radio, Gamepad2, MessageCircle, LogIn, ShieldCheck, UserPlus } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
+
+// 🔥 AS PALAVRAS QUE VÃO FLUTUAR NO FUNDO 🔥
+const THEME_WORDS = [
+  "FETICHES", "DESEJO", "ORGASMOS", "VIP", "SEDUÇÃO", 
+  "EXCLUSIVO", "PRAZER", "CÂMERAS", "MÍDIAS", "SEGREDOS", 
+  "DOMINAÇÃO", "INTIMIDADE", "PREMIUM", "HOT"
+];
+
+// Componente do fundo animado (Custo Zero de Servidor)
+function FloatingWordsBackground() {
+  const [elements, setElements] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Geramos posições aleatórias apenas no lado do cliente para evitar erros de hidratação no Next.js
+    const generated = THEME_WORDS.map((word, i) => ({
+      id: i,
+      word,
+      left: Math.floor(Math.random() * 80) + 10, // 10% a 90% da tela
+      delay: Math.random() * 15, // Atraso de 0s a 15s
+      duration: Math.floor(Math.random() * 20) + 20, // Duração de 20s a 40s
+      size: Math.floor(Math.random() * 3) + 2, // Tamanho da fonte
+    }));
+    setElements(generated);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-0 overflow-hidden bg-[#050505] pointer-events-none select-none">
+      {/* Luz Neon centralizada no fundo */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(217,70,239,0.15)_0%,rgba(5,5,5,1)_70%)] z-10"></div>
+
+      {/* Palavras Flutuantes */}
+      <div className="absolute inset-0 z-0">
+        {elements.map((el) => (
+          <span
+            key={el.id}
+            className="absolute text-[#D946EF] font-black uppercase tracking-[0.3em] opacity-0"
+            style={{
+              left: `${el.left}%`,
+              bottom: '-20%',
+              fontSize: `${el.size}rem`,
+              animation: `floatUp ${el.duration}s infinite linear ${el.delay}s`,
+            }}
+          >
+            {el.word}
+          </span>
+        ))}
+      </div>
+
+      {/* CSS da Animação */}
+      <style jsx>{`
+        @keyframes floatUp {
+          0% { transform: translateY(0) scale(0.8); opacity: 0; filter: blur(8px); }
+          20% { opacity: 0.08; filter: blur(3px); }
+          80% { opacity: 0.08; filter: blur(3px); }
+          100% { transform: translateY(-130vh) scale(1.2); opacity: 0; filter: blur(8px); }
+        }
+      `}</style>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const router = useRouter();
-  // Removido o initialLoading que travava a tela toda
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [modelsBgs, setModelsBgs] = useState<string[]>([]);
-  const [bgIndex, setBgIndex] = useState(0);
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   useEffect(() => {
+    // Se já estiver logado, joga direto pra vitrine
     const logged = localStorage.getItem("labz_player_logged") === "true";
     if (logged) {
       router.push('/vitrine');
     }
-
-    async function fetchBackgrounds() {
-      try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Cache-Control": "no-cache" };
-        
-        // Reduzido para 8 imagens. Suficiente para o carrossel, muito mais rápido para baixar.
-        const resConfigs = await fetch(`${supabaseUrl}/rest/v1/Configs?select=bg_url,profile_url&limit=8`, { headers });
-        if (resConfigs.ok) {
-            const configsData = await resConfigs.json();
-            if (configsData.length > 0) {
-                const bgs = configsData.map((c:any) => c.bg_url || c.profile_url).filter(Boolean);
-                setModelsBgs(bgs);
-            }
-        }
-      } catch (err) {
-          console.error(err);
-      }
-    }
-    fetchBackgrounds(); // Busca as fotos por trás dos panos, sem travar a renderização
-  }, [router, supabaseUrl, supabaseKey]);
-
-  useEffect(() => {
-    if (modelsBgs.length === 0) return;
-    const interval = setInterval(() => {
-      setBgIndex((prevIndex) => (prevIndex + 1) % modelsBgs.length);
-    }, 6000); 
-    return () => clearInterval(interval);
-  }, [modelsBgs]);
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
       
-      {/* 🔥 FUNDO ANIMADO (Carrega de forma suave e "preguiçosa") 🔥 */}
-      <div className="fixed -inset-[10%] z-0 bg-black pointer-events-none">
-        {modelsBgs.length > 0 ? (
-            modelsBgs.map((bg, idx) => (
-                <img 
-                  key={idx} 
-                  src={bg} 
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out ${idx === bgIndex ? 'opacity-40 scale-105' : 'opacity-0 scale-100'}`} 
-                  loading="lazy" // Impede que o navegador trave baixando isso
-                />
-            ))
-        ) : (
-            // Fundo preto padrão instantâneo enquanto as imagens baixam
-            <div className="absolute inset-0 bg-[#0a0a0a]"></div>
-        )}
-        
-        {/* Película escura de vidro por cima do fundo */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/70 via-[#050505]/50 to-[#050505]/95 backdrop-blur-sm"></div>
-      </div>
+      {/* 🔥 O NOVO FUNDO ANIMADO E LEVE 🔥 */}
+      <FloatingWordsBackground />
 
       {/* CONTEÚDO PRINCIPAL DA PÁGINA (Aparece instantaneamente) */}
       <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
