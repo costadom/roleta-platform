@@ -12,42 +12,37 @@ const THEME_WORDS = [
   "DOMINAÇÃO", "INTIMIDADE", "PREMIUM", "HOT"
 ];
 
-// Componente do fundo animado (Grade Estática com Fade In/Out)
+// Doblamos a lista para preencher bem até telas grandes de Notebook
+const ALL_WORDS = [...THEME_WORDS, ...THEME_WORDS];
+
+// Componente do fundo animado (Nítido, Rápido e Espalhado)
 function PulsingWordsBackground() {
   const [elements, setElements] = useState<any[]>([]);
 
   useEffect(() => {
-    // 1. Dividimos a tela em uma grade 4x4 (16 posições possíveis) para espalhar bem
-    const gridPositions = [];
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 4; col++) {
-        gridPositions.push({ row, col });
-      }
-    }
+    const generated = ALL_WORDS.map((word, i) => {
+      // Divide a tela em 4 colunas verticais e 7 linhas horizontais
+      const col = i % 4; // 0, 1, 2, 3
+      const row = Math.floor(i / 4); // 0 até 6
 
-    // 2. Embaralhamos as posições para ser aleatório a cada carregamento
-    for (let i = gridPositions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [gridPositions[i], gridPositions[j]] = [gridPositions[j], gridPositions[i]];
-    }
+      // Calcula a posição garantindo que cubra de ponta a ponta (0% a 90%)
+      const leftBase = col * 24; 
+      const topBase = row * 14; 
 
-    // 3. Pegamos as posições para as nossas 14 palavras
-    const generated = THEME_WORDS.map((word, i) => {
-      const pos = gridPositions[i];
-      
-      // Calcula a posição na tela (Ex: coluna 0 = 0% a 25% da tela)
-      // Adicionamos um pequeno valor aleatório dentro daquele bloco pra não ficar "duro" demais
-      const topOffset = (pos.row * 25) + (Math.random() * 10 + 5); 
-      const leftOffset = (pos.col * 25) + (Math.random() * 10 + 2); 
+      // Adiciona uma leve aleatoriedade dentro da própria área para ficar natural
+      const left = leftBase + (Math.random() * 8);
+      const top = topBase + (Math.random() * 8);
 
       return {
         id: i,
         word,
-        top: topOffset,
-        left: leftOffset,
-        duration: Math.floor(Math.random() * 10) + 10, // Tempo do pulso (10s a 20s)
-        delay: Math.random() * 10, // Atraso de 0s a 10s pra não piscarem juntas
-        size: Math.random() * 0.8 + 1.2, // Tamanho nítido e elegante (1.2 a 2.0 rem)
+        left: left,
+        top: top,
+        // Duração bem mais rápida: 5s a 10s (Antes estava 10s a 20s)
+        duration: Math.random() * 5 + 5, 
+        // Delay negativo! Faz com que as palavras já comecem na tela sem você ter que esperar.
+        delay: -(Math.random() * 10), 
+        size: Math.random() * 0.7 + 1.0, // Fonte controlada (1.0rem a 1.7rem)
       };
     });
     
@@ -56,22 +51,20 @@ function PulsingWordsBackground() {
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-[#050505] pointer-events-none select-none">
-      {/* Luz Neon centralizada no fundo */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(217,70,239,0.12)_0%,rgba(5,5,5,1)_70%)] z-10"></div>
-
-      {/* Palavras que Surgem e Somem */}
-      <div className="absolute inset-0 z-0">
+      
+      {/* Palavras que Surgem e Somem (Agora na camada certa, bem visíveis) */}
+      <div className="absolute inset-0 z-10">
         {elements.map((el) => (
           <span
             key={el.id}
-            className="absolute text-[#D946EF] font-black uppercase tracking-[0.4em] whitespace-nowrap"
+            className="absolute text-[#D946EF] font-black uppercase tracking-[0.3em] whitespace-nowrap"
             style={{
               top: `${el.top}%`,
               left: `${el.left}%`,
               fontSize: `${el.size}rem`,
               opacity: 0,
-              // Animação de pulso (Fade in / Fade out)
-              animation: `pulseFade ${el.duration}s infinite ease-in-out ${el.delay}s`,
+              // Animação de pulso (Surgir e Sumir sem sair do lugar)
+              animation: `pulsePop ${el.duration}s infinite ease-in-out ${el.delay}s`,
             }}
           >
             {el.word}
@@ -79,13 +72,16 @@ function PulsingWordsBackground() {
         ))}
       </div>
 
-      {/* CSS da Animação (Surge nítido, brilha levemente, e some) */}
+      {/* Sombreamento das bordas beeeem mais fraco para não engolir as palavras da ponta */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(5,5,5,0.7)_100%)] z-20"></div>
+
+      {/* CSS da Animação (Nítido e Brilhante) */}
       <style jsx>{`
-        @keyframes pulseFade {
-          0% { opacity: 0; transform: scale(0.95); filter: blur(4px); }
-          30% { opacity: 0.15; transform: scale(1); filter: blur(0px); text-shadow: 0 0 15px rgba(217,70,239,0.4); }
-          70% { opacity: 0.15; transform: scale(1); filter: blur(0px); text-shadow: 0 0 15px rgba(217,70,239,0.4); }
-          100% { opacity: 0; transform: scale(0.95); filter: blur(4px); }
+        @keyframes pulsePop {
+          0% { opacity: 0; transform: scale(0.95); }
+          20% { opacity: 0.35; transform: scale(1); text-shadow: 0 0 15px rgba(217,70,239,0.8); }
+          80% { opacity: 0.35; transform: scale(1); text-shadow: 0 0 15px rgba(217,70,239,0.8); }
+          100% { opacity: 0; transform: scale(0.95); }
         }
       `}</style>
     </div>
@@ -104,13 +100,13 @@ export default function LandingPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
+    <div className="min-h-screen bg-transparent text-white font-sans relative pb-20 overflow-x-hidden">
       
       {/* 🔥 O NOVO FUNDO PULSANTE ESPALHADO E NÍTIDO 🔥 */}
       <PulsingWordsBackground />
 
       {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
-      <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
+      <div className="relative z-30 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
         
         {/* LOGO CENTRALIZADO */}
         <div className="flex flex-col items-center justify-center mb-8 pointer-events-none">
@@ -124,7 +120,7 @@ export default function LandingPage() {
 
         {/* BOTÃO ÚNICO DE ENTRAR/CADASTRAR */}
         <div className="w-full max-w-sm mb-16">
-            <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-95 cursor-pointer">
+            <button onClick={() => setShowAuthModal(true)} className="w-full bg-gradient-to-r from-[#D946EF] to-[#a832b8] text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(217,70,239,0.6)] hover:scale-[1.02] active:scale-95 cursor-pointer">
                 <LogIn size={18} className="pointer-events-none" /> 
                 <span className="pointer-events-none">Entre ou Cadastre-se</span>
             </button>
