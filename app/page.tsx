@@ -12,20 +12,36 @@ const THEME_WORDS = [
   "DOMINAÇÃO", "INTIMIDADE", "PREMIUM", "HOT"
 ];
 
-// Componente do fundo animado (Custo Zero de Servidor)
+// Componente do fundo animado (Sem sobreposição)
 function FloatingWordsBackground() {
   const [elements, setElements] = useState<any[]>([]);
 
   useEffect(() => {
-    // Geramos posições aleatórias apenas no lado do cliente para evitar erros de hidratação no Next.js
-    const generated = THEME_WORDS.map((word, i) => ({
-      id: i,
-      word,
-      left: Math.floor(Math.random() * 80) + 10, // 10% a 90% da tela
-      delay: Math.random() * 15, // Atraso de 0s a 15s
-      duration: Math.floor(Math.random() * 20) + 20, // Duração de 20s a 40s
-      size: Math.floor(Math.random() * 3) + 2, // Tamanho da fonte
-    }));
+    // 1. Criamos um array com o número de "faixas" (pistas) baseado na quantidade de palavras
+    const lanes = Array.from({ length: THEME_WORDS.length }, (_, i) => i);
+    
+    // 2. Embaralhamos as faixas para que a ordem das palavras pareça aleatória na tela
+    for (let i = lanes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+    }
+
+    const generated = THEME_WORDS.map((word, i) => {
+      const duration = Math.floor(Math.random() * 25) + 25; // Duração mais lenta: 25s a 50s
+      const lane = lanes[i];
+      
+      // 3. Calculamos a posição (left). Divide a tela (90%) em pistas iguais.
+      const leftPosition = 5 + (lane * (90 / THEME_WORDS.length)); 
+
+      return {
+        id: i,
+        word,
+        left: leftPosition, 
+        delay: -(Math.random() * duration), // Delay negativo pra já começar na tela
+        duration: duration, 
+        size: Math.random() * 1.5 + 1.2, // Tamanho menor e controlado: 1.2rem a 2.7rem
+      };
+    });
     setElements(generated);
   }, []);
 
@@ -39,11 +55,15 @@ function FloatingWordsBackground() {
         {elements.map((el) => (
           <span
             key={el.id}
-            className="absolute text-[#D946EF] font-black uppercase tracking-[0.3em] opacity-0"
+            className="absolute text-[#D946EF] font-black uppercase tracking-[0.2em] whitespace-nowrap"
             style={{
               left: `${el.left}%`,
-              bottom: '-20%',
+              bottom: '-10%',
               fontSize: `${el.size}rem`,
+              opacity: 0,
+              // Adicionamos a rotação para caber perfeitamente na pista
+              transform: `rotate(-90deg)`, 
+              transformOrigin: 'left center',
               animation: `floatUp ${el.duration}s infinite linear ${el.delay}s`,
             }}
           >
@@ -55,10 +75,10 @@ function FloatingWordsBackground() {
       {/* CSS da Animação */}
       <style jsx>{`
         @keyframes floatUp {
-          0% { transform: translateY(0) scale(0.8); opacity: 0; filter: blur(8px); }
-          20% { opacity: 0.08; filter: blur(3px); }
-          80% { opacity: 0.08; filter: blur(3px); }
-          100% { transform: translateY(-130vh) scale(1.2); opacity: 0; filter: blur(8px); }
+          0% { transform: translateY(0) rotate(-90deg); opacity: 0; filter: blur(8px); }
+          15% { opacity: 0.06; filter: blur(3px); }
+          85% { opacity: 0.06; filter: blur(3px); }
+          100% { transform: translateY(-120vh) rotate(-90deg); opacity: 0; filter: blur(8px); }
         }
       `}</style>
     </div>
@@ -70,7 +90,6 @@ export default function LandingPage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
-    // Se já estiver logado, joga direto pra vitrine
     const logged = localStorage.getItem("labz_player_logged") === "true";
     if (logged) {
       router.push('/vitrine');
@@ -80,10 +99,10 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans relative pb-20 overflow-x-hidden">
       
-      {/* 🔥 O NOVO FUNDO ANIMADO E LEVE 🔥 */}
+      {/* 🔥 O NOVO FUNDO ANIMADO SEM SOBREPOSIÇÃO 🔥 */}
       <FloatingWordsBackground />
 
-      {/* CONTEÚDO PRINCIPAL DA PÁGINA (Aparece instantaneamente) */}
+      {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
       <div className="relative z-10 flex flex-col items-center justify-center pt-16 pb-16 px-6 animate-in fade-in duration-500">
         
         {/* LOGO CENTRALIZADO */}
