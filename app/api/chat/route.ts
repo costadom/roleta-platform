@@ -6,7 +6,6 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, modelSlug } = await req.json();
 
-    // Detecta se a Sammy já encerrou o treinamento no histórico
     const isFinalized = messages.some((m: any) => 
       m.role === 'assistant' && m.content.includes("Bora faturar!")
     );
@@ -271,21 +270,50 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
       }))
     ];
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
-        messages: groqMessages,
-        temperature: 0.4, 
-        max_tokens: 400 
-      })
-    });
+    // ==========================================
+    // 🔁 SISTEMA DE RETRY SILENCIOSO (ANTI-ALERTA)
+    // ==========================================
+    let attempt = 0;
+    const maxRetries = 3;
 
-    const data = await response.json();
-    return NextResponse.json({ text: data.choices.message.content });
+    while (attempt < maxRetries) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: "llama-3.1-8b-instant",
+            messages: groqMessages,
+            temperature: 0.4, 
+            max_tokens: 400 
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) throw new Error("Falha na Groq");
+        
+        const aiText = data?.choices?.?.message?.content;
+        if (!aiText) throw new Error("Resposta vazia");
+
+        // Se deu tudo certo, retorna a mensagem final e quebra o loop
+        return NextResponse.json({ text: aiText });
+
+      } catch (error: any) {
+        attempt++;
+        if (attempt >= maxRetries) {
+          // Após 3 falhas ocultas, responde como a Sammy no chat em vez de dar erro de sistema
+          return NextResponse.json({ 
+            text: "Amor, estou estruturando sua estratégia aqui e precisei respirar um segundo... 💅✨ Aguarda só uns segundinhos e me manda mais uma mensagem pra gente continuar!" 
+          });
+        }
+        // Espera 3.5 segundos em silêncio antes de tentar ler de novo
+        await new Promise(resolve => setTimeout(resolve, 3500));
+      }
+    }
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Fallback de emergência caso haja erro no corpo da requisição inicial
+    return NextResponse.json({ text: "Amiga, me deu um branco aqui! 😅 Manda de novo?" });
   }
 }
