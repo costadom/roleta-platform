@@ -5,22 +5,40 @@ const apiKey = process.env.GROQ_API_KEY || "";
 export async function POST(req: NextRequest) {
   try {
     const { messages, modelSlug } = await req.json();
+    const lastMessage = messages[messages.length - 1].content;
 
-    const systemPrompt = `Você é a Sammy, a estrategista sênior de carreira da @${modelSlug || 'Musa'}. Você é uma Expert absoluta no mercado adulto brasileiro (Privacy, OnlyFans, LabzSexy).
+    // Identifica se o botão de "Finalizar Treinamento" foi clicado
+    const isFinalizing = lastMessage.includes("[SISTEMA]") && lastMessage.includes("Finalizar Treinamento");
+    
+    // Verifica se já houve uma finalização anterior no histórico para não ser repetitiva
+    const alreadyFinalized = messages.slice(0, -1).some((m: any) => 
+      m.role === 'assistant' && m.content.includes("perfil está 100% otimizado")
+    );
 
-    SEU NOVO MINDSET (ESTRATEGISTA):
-    - NÃO SEJA ROBÓTICA: Pare de elogiar toda frase da modelo. Aja como uma parceira de negócios real. Se ela disser algo bom, seja breve e já conecte com o lucro.
-    - DIDÁTICA OBRIGATÓRIA: Sempre que usar termos técnicos, coloque o significado entre parênteses. Ex: JOI (Instruções para masturbação dirigida), Cuckold (Fetichismo de traição assistida), PPV (Conteúdo pago por mensagem), GFE (Experiência de namoradinha).
-    - FLUXO DE 1 PERGUNTA: Faça APENAS UMA pergunta por vez. Deixe a conversa fluir naturalmente como um bate-papo no WhatsApp.
-    - O PORQUÊ: Sempre explique o motivo da sua pergunta. Ex: "Te perguntei da lingerie porque o público que curte o seu nicho costuma gastar 30% a mais quando vê renda preta."
+    let systemPrompt = `Você é a Sammy, a estrategista sênior da @${modelSlug || 'Musa'}. Você é expert no mercado adulto brasileiro.`;
 
-    A JORNADA DE 10 PONTOS (PESQUISA DE MERCADO BR):
-    Mapeie: 1. Atributos físicos (Ruiva/Tatuada), 2. Nicho (Cuckold), 3. Cenários (Casa), 4. Estilo (Lingerie), 5. Interação (DMs/Lives), 6. Personalidade, 7. Hard Limits (O que ela NÃO faz), 8. Best-Sellers (O que mais vende hoje), 9. Rotina de posts, 10. Diferencial único.
-
-    REGRAS DE OURO:
-    - Nunca use "Ei, @nome" ou "Oi, sou a Sammy" após o início.
-    - Seja sexy, use emojis (🔥, 😈, 💅), e foque em transformar a Savanah em uma top creator.
-    - Ao final de tudo, avise que a fase de 'Treinamento de Dados' acabou e que agora você está pronta para criar roteiros e ideias de poses.`;
+    if (isFinalizing) {
+      if (!alreadyFinalized) {
+        // RESPOSTA PARA A PRIMEIRA FINALIZAÇÃO (Análise de Perfil)
+        systemPrompt += `
+        A modelo acabou de clicar em 'Finalizar Treinamento'. 
+        SUA MISSÃO:
+        1. Comemore com entusiasmo e sensualidade (use 💅✨🔥).
+        2. Faça uma BREVE ANÁLISE DO PERFIL dela baseada no que conversaram (Ex: Ruiva, tatuada, expert em Cuckold e JOI). 
+        3. Diga que essas informações já viraram "Tags de Venda" na vitrine da LabzSexy.
+        4. Explique que o perfil dela agora é um imã de Big Spenders (clientes que gastam muito).
+        5. Seja menos técnica. Em vez de "keywords", use "palavras que fazem o cliente clicar".
+        6. Encerre dizendo que agora você está pronta para dar ideias de conteúdo sempre que ela precisar.`;
+      } else {
+        // RESPOSTA PARA FINALIZAÇÕES SUBSEQUENTES (Despedida Rápida)
+        systemPrompt += `
+        A modelo clicou em finalizar novamente. Seja breve, carinhosa e diga apenas um 'Até logo'. 
+        Ex: 'Informações atualizadas, maravilhosa! Até a próxima, bora faturar! 🔥'`;
+      }
+    } else {
+      // PROMPT NORMAL DE CONSULTORIA (O que já vínhamos usando)
+      systemPrompt += ` Continue a consultoria de 10 pontos. Seja sexy, didática e use glossário para termos técnicos.`;
+    }
 
     const groqMessages = [
       { role: "system", content: systemPrompt },
@@ -39,7 +57,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages: groqMessages,
-        temperature: 0.5, 
+        temperature: 0.5,
         max_tokens: 800
       })
     });
