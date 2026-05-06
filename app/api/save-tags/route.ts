@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
         const data = await response.json();
         
-        if (response.ok && data?.choices?.?.message?.content) {
+        if (response.ok && data?.choices?.[0]?.message?.content) {
           tagsJson = safeParseJSON(data.choices.message.content);
           // Se gerou o JSON corretamente e não está vazio, quebra o loop
           if (tagsJson && Object.keys(tagsJson).length > 0) break;

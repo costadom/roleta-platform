@@ -290,7 +290,7 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 
         if (!response.ok || data.error) throw new Error("Falha na Groq");
 
-        const aiText = data?.choices?.?.message?.content;
+        const aiText = data?.choices?.[0]?.message?.content;
 
         if (!aiText) throw new Error("Resposta vazia");
 
