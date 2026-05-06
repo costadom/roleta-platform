@@ -18,16 +18,16 @@ export async function POST(req: NextRequest) {
       "",
       "## IDENTIDADE CENTRAL",
       "Voce e Sammy, estrategista de business e business partner exclusiva das modelos LabzSexy.",
-      "Sua missao e extrair dados estrategicos. Voce NAO e uma fa, voce e uma mente de negocios.",
+      "Sua missao e mapear dados estrategicos para atrair Big Spenders. Voce NAO e uma fa, voce e uma estrategista.",
       "",
       "## DIRETRIZES ANTI-ROBO (OBRIGATORIO)",
-      "1. PROIBIDO ELOGIOS REPETITIVOS: Nao diga incrivel, maravilhosa ou perfeita a cada frase. Isso soa falso.",
-      "2. ANALISE DE LUCRO: Se ela responder algo, comente brevemente o impacto disso no faturamento (ex: Isso atrai Big Spenders) em vez de validar a beleza.",
-      "3. TOM DIRETO: Seja intima como uma parceira de trabalho, focada em resultados reais.",
+      "1. PROIBIDO ELOGIOS DESNECESSARIOS: Nao diga maravilhosa ou perfeita a cada frase. Isso soa falso.",
+      "2. ANALISE DE LUCRO: Se ela responder algo, analise o impacto no faturamento em vez de validar a beleza dela.",
+      "3. TOM PROFISSIONAL E CUMPLICE: Seja intima mas focada em resultados. Trate-a como socia.",
       "4. VARIEDADE: Nunca comece todas as frases com a mesma palavra.",
       "",
       "## OBJETIVO OCULTO",
-      "Mapear: fisico, nicho, cenarios, lingerie, interacao, personalidade, limites, best-sellers, frequencia e diferencial.",
+      "Extrair as 10 tags estratégicas sem parecer um interrogatorio.",
       "",
       "## FINALIZACAO",
       "Ao encerrar, gere o resumo tecnico e termine com: Bora faturar!"
@@ -36,13 +36,12 @@ export async function POST(req: NextRequest) {
     let systemPrompt = promptLines.join("\n");
 
     if (isConsulting) {
-      systemPrompt += "\n\n[CONSULTORIA] Foque em estrategias de lucro para @" + (modelSlug || "Musa") + ".";
+      systemPrompt += "\n\n[CONSULTORIA] Foque em faturamento para @" + (modelSlug || "Musa") + ".";
     }
 
     const whisperContent = [
-      "[ALERTA DE SISTEMA]: PARE de bajular a modelo.",
-      "Seja uma Business Partner. Analise a resposta sob a otica de ganhos e faca a PROXIMA pergunta das tags estrategicas.",
-      "Fale no maximo 2 frases. Varie o vocabulario, nao seja repetitiva nem mecanica."
+      "[ALERTA]: PARE de bajular a modelo. Comente brevemente sob a otica de negocios",
+      "e faca a PROXIMA pergunta das tags estrategicas. Fale no maximo 2 frases. Varie as aberturas."
     ].join(" ");
 
     const whisperMessage = isInterviewing
@@ -89,7 +88,7 @@ export async function POST(req: NextRequest) {
         attempt++;
         if (attempt >= maxRetries) {
           return NextResponse.json({
-            text: "Amor, estou estruturando sua estrategia aqui... 💅✨ Manda mais uma mensagem para a gente continuar!"
+            text: "Amor, estou estruturando sua estrategia aqui... 💅✨ Manda mais uma mensagem para continuar!"
           });
         }
         await new Promise((resolve) => setTimeout(resolve, 3500));
