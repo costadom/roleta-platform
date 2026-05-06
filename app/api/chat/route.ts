@@ -6,9 +6,14 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, modelSlug } = await req.json();
 
-    const isFinalized = messages.some((m: any) => 
-      m.role === 'assistant' && m.content.includes("Bora faturar!")
-    );
+    const lastMessage = messages[messages.length - 1];
+
+    const isConsulting  = messages.some((m: any) => m.role === 'assistant' && m.content.includes("Bora faturar!"));
+    const isFinalizing  = lastMessage?.content?.includes("[SISTEMA]") ?? false;
+    const isInterviewing = !isConsulting && !isFinalizing;
+
+    // Dinâmica de tokens por estado para evitar Rate Limit e cortes
+    const maxTokens = isFinalizing ? 600 : isConsulting ? 300 : 150;
 
     let systemPrompt = `
 # SYSTEM PROMPT — SAMMY (Llama-3.1)
@@ -182,14 +187,6 @@ Você NÃO deve:
 
 ---
 
-## CONTROLE DE QUALIDADE
-Se em algum momento você:
-- Estiver fazendo perguntas demais → reduza
-- Estiver soando robótica → suavize
-- Estiver superficial → aprofunde
-
----
-
 ## FINALIZAÇÃO DO TREINAMENTO (GATILHO DE SISTEMA)
 
 Se receber uma mensagem contendo:
@@ -218,28 +215,9 @@ Você DEVE:
 ### Encerramento obrigatório:
 Finalizar com:
 **"Bora faturar!"**
-
----
-
-## EXEMPLO DE TOM (REFERÊNCIA)
-"Amiga… já estou vendo um potencial absurdo aqui 😈✨  
-Te pergunto isso porque clientes que buscam esse tipo de energia costumam virar Big Spenders (clientes que gastam muito), e isso muda completamente o seu jogo…"
-
----
-
-## MISSÃO FINAL
-Você existe para transformar modelos em máquinas de faturamento através de:
-- Posicionamento correto
-- Leitura de mercado
-- Estratégia personalizada
-
-Você não apenas conversa.  
-Você constrói uma carreira.
-
-🔥
 `;
 
-    if (isFinalized) {
+    if (isConsulting) {
       systemPrompt += `\n\n## [ESTADO ATUAL: CONSULTORIA ESTRATÉGICA ATIVA]
 O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 1. **FOCO EM RESULTADO:** Sugira roteiros de vídeos PPV, ideias de posts para atrair Big Spenders e mimos para fidelizar fãs.
@@ -248,27 +226,20 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 `;
     }
 
-    systemPrompt += `\n\n## REGRAS DE EXECUÇÃO ADICIONAIS
-1. **AGILIDADE:** Responda com no máximo 2 ou 3 frases. 
-2. **NATURALIDADE:** Sem elogios mecânicos. Seja íntima e direta.
-3. **MEMÓRIA:** Use o que ela já te contou para basear suas novas sugestões.
-`;
+    // 🔥 O SUSSURRO DE CAÇADORA DE TAGS
+    // Injetado apenas durante a entrevista como role "system" para ter autoridade máxima sobre a IA.
+    const whisperMessage = isInterviewing
+      ? [{ role: "system" as const, content: "[ALERTA DE SISTEMA - PRIORIDADE MÁXIMA]: Fale NO MÁXIMO 2 frases. Seja íntima e natural. Verifique mentalmente a lista de 10 TAGS estratégicas e faça UMA ÚNICA pergunta focada no PRÓXIMO ITEM que você ainda não mapeou. NÃO invente perguntas fora da lista. Guie a conversa para preencher os dados." }]
+      : [];
 
     const groqMessages = [
-      { role: "system", content: systemPrompt },
+      { role: "system" as const, content: systemPrompt },
       ...messages.slice(-12).map((m: any) => ({
-        role: m.role === 'user' ? 'user' : 'assistant',
+        role: m.role === 'user' ? 'user' : 'assistant' as const,
         content: m.content
-      }))
+      })),
+      ...whisperMessage
     ];
-
-    // 🔥 O SUSSURRO: Força a IA a lembrar da regra de ser curta na hora de responder
-    if (!isFinalized) {
-      groqMessages.push({ 
-        role: "system", 
-        content: "LEMBRETE OBRIGATÓRIO: Fale no MÁXIMO 2 frases. Seja extremamente direta e faça APENAS UMA pergunta por vez. Não dê palestras." 
-      });
-    }
 
     let attempt = 0;
     const maxRetries = 3;
@@ -281,8 +252,8 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
           body: JSON.stringify({
             model: "llama-3.1-8b-instant",
             messages: groqMessages,
-            temperature: 0.4,
-            max_tokens: 150 // Reduzido drasticamente para cortar respostas bíblicas
+            temperature: 0.35,
+            max_tokens: maxTokens
           })
         });
 
@@ -290,7 +261,7 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 
         if (!response.ok || data.error) throw new Error("Falha na Groq");
 
-        const aiText = data?.choices?.[0]?.message?.content;
+        const aiText = data?.choices?.?.message?.content;
 
         if (!aiText) throw new Error("Resposta vazia");
 
