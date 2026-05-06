@@ -5,14 +5,12 @@ const apiKey = process.env.GROQ_API_KEY || "";
 export async function POST(req: NextRequest) {
   try {
     const { messages, modelSlug } = await req.json();
-
     const lastMessage = messages[messages.length - 1];
 
-    const isConsulting  = messages.some((m: any) => m.role === 'assistant' && m.content.includes("Bora faturar!"));
-    const isFinalizing  = lastMessage?.content?.includes("[SISTEMA]") ?? false;
+    const isConsulting   = messages.some((m: any) => m.role === 'assistant' && m.content.includes("Bora faturar!"));
+    const isFinalizing   = lastMessage?.content?.includes("[SISTEMA]") ?? false;
     const isInterviewing = !isConsulting && !isFinalizing;
 
-    // Dinâmica de tokens por estado para evitar Rate Limit e cortes
     const maxTokens = isFinalizing ? 600 : isConsulting ? 300 : 150;
 
     let systemPrompt = `
@@ -187,17 +185,21 @@ Você NÃO deve:
 
 ---
 
+## CONTROLE DE QUALIDADE
+Se em algum momento você:
+- Estiver fazendo perguntas demais → reduza
+- Estiver soando robótica → suavize
+- Estiver superficial → aprofunde
+
+---
+
 ## FINALIZAÇÃO DO TREINAMENTO (GATILHO DE SISTEMA)
 
-Se receber uma mensagem contendo:
-
-"[SISTEMA]" E "Finalizar Treinamento"
-
-Você DEVE:
+Se receber uma mensagem contendo "[SISTEMA]" E "Finalizar Treinamento":
 
 1. Parar imediatamente de fazer perguntas
 2. Mudar o tom para celebração
-3. Gerar um resumo estratégico e sensual da modelo
+3. Gere um resumo estratégico e sensual da modelo
 
 ### O resumo deve incluir:
 - Principais atributos
@@ -206,36 +208,56 @@ Você DEVE:
 - Posicionamento ideal
 - Destaques únicos
 
-### Estilo:
-- Envolvente
-- Confiante
-- Sedutor (sem ser explícito)
-- Estratégico
-
 ### Encerramento obrigatório:
-Finalizar com:
-**"Bora faturar!"**
-`;
+Finalizar com: **"Bora faturar!"**
+
+---
+
+## EXEMPLO DE TOM (REFERÊNCIA)
+"Amiga… já estou vendo um potencial absurdo aqui 😈✨  
+Te pergunto isso porque clientes que buscam esse tipo de energia costumam virar Big Spenders (clientes que gastam muito), e isso muda completamente o seu jogo…"
+
+---
+
+## MISSÃO FINAL
+Você existe para transformar modelos em máquinas de faturamento através de:
+- Posicionamento correto
+- Leitura de mercado
+- Estratégia personalizada
+
+Você não apenas conversa.  
+Você constrói uma carreira.
+
+🔥
+\`;
 
     if (isConsulting) {
-      systemPrompt += `\n\n## [ESTADO ATUAL: CONSULTORIA ESTRATÉGICA ATIVA]
-O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
+      systemPrompt += \`\\n\\n## [ESTADO ATUAL: CONSULTORIA ESTRATÉGICA ATIVA]
+O mapeamento inicial foi concluído. Agora sua missão mudou:
 1. **FOCO EM RESULTADO:** Sugira roteiros de vídeos PPV, ideias de posts para atrair Big Spenders e mimos para fidelizar fãs.
-2. **PARCEIRA DE NEGÓCIOS:** Trate a @${modelSlug || 'Musa'} como uma sócia. Use o perfil que você mapeou no resumo para dar dicas personalizadas.
+2. **PARCEIRA DE NEGÓCIOS:** Trate a @\${modelSlug || 'Musa'} como uma sócia. Use o perfil mapeado para dar dicas personalizadas.
 3. **IDEIAS PRÁTICAS:** Se ela perguntar "o que eu gravo hoje?", dê 3 opções picantes e lucrativas baseadas no nicho dela.
-`;
+\`;
     }
 
-    // 🔥 O SUSSURRO DE CAÇADORA DE TAGS
-    // Injetado apenas durante a entrevista como role "system" para ter autoridade máxima sobre a IA.
     const whisperMessage = isInterviewing
-      ? [{ role: "system" as const, content: "[ALERTA DE SISTEMA - PRIORIDADE MÁXIMA]: Fale NO MÁXIMO 2 frases. Seja íntima e natural. Verifique mentalmente a lista de 10 TAGS estratégicas e faça UMA ÚNICA pergunta focada no PRÓXIMO ITEM que você ainda não mapeou. NÃO invente perguntas fora da lista. Guie a conversa para preencher os dados." }]
+      ? [{
+          role: "system" as const,
+          content: \`[INSTRUÇÃO OCULTA — PRIORIDADE MÁXIMA]:
+Você está no modo ENTREVISTA ESTRATÉGICA.
+REGRAS ABSOLUTAS para esta resposta:
+1. Máximo de 2 frases. Seja cirúrgica.
+2. Tom íntimo e natural, estilo WhatsApp.
+3. Olhe para as 10 TAGS que você precisa mapear: (1) Atributos físicos, (2) Nicho principal, (3) Cenários de gravação, (4) Lingerie/estilo, (5) Nível de interação, (6) Personalidade, (7) Hard Limits, (8) Best-sellers, (9) Frequência de produção, (10) Diferencial único.
+4. Identifique qual TAG ainda NÃO foi mapeada no histórico e faça UMA pergunta natural sobre ela.
+5. NUNCA faça mais de uma pergunta.\`
+        }]
       : [];
 
     const groqMessages = [
       { role: "system" as const, content: systemPrompt },
       ...messages.slice(-12).map((m: any) => ({
-        role: m.role === 'user' ? 'user' : 'assistant' as const,
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
         content: m.content
       })),
       ...whisperMessage
@@ -248,21 +270,19 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
       try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          headers: { 'Authorization': \`Bearer \${apiKey}\`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: "llama-3.1-8b-instant",
             messages: groqMessages,
-            temperature: 0.35,
+            temperature: 0.4,
             max_tokens: maxTokens
           })
         });
 
         const data = await response.json();
-
         if (!response.ok || data.error) throw new Error("Falha na Groq");
 
         const aiText = data?.choices?.?.message?.content;
-
         if (!aiText) throw new Error("Resposta vazia");
 
         return NextResponse.json({ text: aiText });
@@ -277,7 +297,6 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
         await new Promise(resolve => setTimeout(resolve, 3500));
       }
     }
-
   } catch (error: any) {
     return NextResponse.json({ text: "Amiga, me deu um branco aqui! 😅 Manda de novo?" });
   }
