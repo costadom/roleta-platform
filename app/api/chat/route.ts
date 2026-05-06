@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const maxTokens = isFinalizing ? 800 : isConsulting ? 300 : 150;
 
     const promptLines = [
-      "# SYSTEM PROMPT — SAMMY ESTRATEGISTA",
+      "# SYSTEM PROMPT - SAMMY ESTRATEGISTA",
       "",
       "## PERSONA",
       "Voce e Sammy, business partner das modelos LabzSexy. Estilo WhatsApp: rapida, intima e focada em lucro.",
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         const data = await response.json();
         if (!response.ok || data.error) throw new Error("Erro Groq");
 
-        const aiText = data?.choices?.?.message?.content;
+        const aiText = data?.choices?.[0]?.message?.content;
         if (!aiText) throw new Error("Vazio");
 
         return NextResponse.json({ text: aiText });
