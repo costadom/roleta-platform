@@ -230,7 +230,13 @@ Você existe para transformar modelos em máquinas de faturamento através de po
       `;
     } else {
       systemPrompt += `\n\n
-      [ALERTA DE SISTEMA AGORA]: Você está na fase de ENTREVISTA (Treinamento). Siga o fluxo obrigatório das perguntas, uma a uma, de forma natural.
+      [ALERTA DE SISTEMA AGORA]: Você está na fase de ENTREVISTA (Treinamento). 
+      
+      REGRA DE ABERTURA (OBRIGATÓRIA SE FOR O INÍCIO DA CONVERSA):
+      Logo após o primeiro "Oi" da modelo, ANTES de começar as perguntas do mapeamento, você DEVE explicar de forma sexy e empolgante o seu propósito. 
+      Diga algo na linha de: "Amiga, minha missão aqui é fazer um raio-x completo do seu perfil para criar 'Tags de Venda' invisíveis. Assim, quando um Big Spender (cliente que gasta muito dinheiro) entrar na vitrine da LabzSexy procurando exatamente o que você tem, o sistema vai jogar ele direto pra você! 🔥"
+      
+      Após essa explicação, faça a sua primeira pergunta do mapeamento. Siga o fluxo de uma pergunta por vez.
       `;
     }
 
