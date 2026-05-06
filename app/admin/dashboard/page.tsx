@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, Suspense, useMemo, Component, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useChat } from "ai/react";
 import { 
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
@@ -98,7 +99,7 @@ function DashboardContent() {
   const [isSuper, setIsSuper] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"finance" | "marketing" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
+  const [activeTab, setActiveTab] = useState<"finance" | "sammy" | "marketing" | "hub" | "gallery" | "sales" | "video_requests" | "vitrine" | "players" | "raspadinha" | "chat" | "followers">("finance");
   
   const [modelData, setModelData] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
@@ -152,6 +153,7 @@ function DashboardContent() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const sammyChatEndRef = useRef<HTMLDivElement>(null);
   
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -179,6 +181,29 @@ function DashboardContent() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const { messages: sammyMessages, input: sammyInput, handleInputChange: handleSammyInputChange, handleSubmit: handleSammySubmit, isLoading: isSammyLoading, append: appendSammy } = useChat({
+      api: '/api/chat',
+      body: { modelSlug: modelSlug },
+      initialMessages: [
+          { id: '1', role: 'assistant', content: `Oi, eu sou a Sammy! 💅✨ Vi que você acabou de chegar...\n\nEu sou a sua nova assistente de IA. Meu trabalho aqui é vender seus conteúdos no automático lá na vitrine principal da LabzSexy!\n\nPra eu conseguir os melhores clientes pra você, preciso te conhecer melhor. Me conta: como é o seu estilo, seu corpo e o que você mais gosta de gravar? 🔥` }
+      ]
+  });
+
+  const handleFinishSammyTraining = async () => {
+      setSavingHub(true);
+      await appendSammy({
+          role: 'user',
+          content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme para ela que você absorveu as informações e que o perfil dela está otimizado.'
+      });
+      setSavingHub(false);
+  };
+
+  useEffect(() => {
+      if (activeTab === "sammy") {
+          setTimeout(() => sammyChatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      }
+  }, [sammyMessages, activeTab]);
+
   useEffect(() => {
     setIsMounted(true);
     setIsSuper(localStorage.getItem("super_admin_auth") === "true");
@@ -200,7 +225,6 @@ function DashboardContent() {
               if (!res.ok) return null; 
               return await res.json();
           } catch (e) {
-              console.error("Falha silenciosa na rota:", url);
               return null; 
           }
       };
@@ -258,7 +282,6 @@ function DashboardContent() {
              setSalesHistory(mySales.sort((a:any, b:any) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime()));
           }
 
-          // 🔥 PUXANDO GALERIA NORMAL E RASPADINHA PARA ALIMENTAR O FEED 🔥
           await sleep(200); 
           const resMedia = await safeFetch(`${supabaseUrl}/rest/v1/Media?model_id=eq.${modelId}&order=created_at.desc`);
           const resScratch = await safeFetch(`${supabaseUrl}/rest/v1/ModelScratchPhotos?model_id=eq.${modelId}&active=eq.true`);
@@ -272,30 +295,24 @@ function DashboardContent() {
       loadBackgroundData();
 
     } catch (err) { 
-        console.error(err); 
         setDashboardLoading(false); 
     }
   };
 
   useEffect(() => { loadData(); }, [modelId]);
 
-  // 🔥 O NOVO FEED DE ATIVIDADES: PUXANDO FOTOS DO FEED E DA RASPADINHA 🔥
   const loadActivityFeed = async (medias: any[], scratches: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          
-          // Combina IDs das duas galerias (Limitando para as 15 mais recentes pra não travar)
           const recentMedias = medias.slice(0, 15); 
           const recentScratches = scratches.slice(0, 15);
-          
           const allMediaItems = [...recentMedias, ...recentScratches];
-          const mediaIds = allMediaItems.map(m => m.id || m.photo_url); // Usa photo_url como ID para raspadinha se não tiver ID
+          const mediaIds = allMediaItems.map(m => m.id || m.photo_url); 
           
           let likesList: any[] = []; let commentsList: any[] = [];
           
           if (mediaIds.length > 0) {
-              const mediaIdsStr = mediaIds.join('","'); // Formatação segura para in.("id1","id2")
-              
+              const mediaIdsStr = mediaIds.join('","'); 
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.("${mediaIdsStr}")&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.("${mediaIdsStr}")&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
@@ -314,45 +331,32 @@ function DashboardContent() {
           }
           
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
-          
           const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-             .slice(0, 50); // Limita a 50 notificações no total
+             .slice(0, 50); 
              
           setActivityFeed(combinedFeed);
-      } catch (e) {
-          console.error("Erro silencioso feed:", e);
-      }
+      } catch (e) { }
   };
 
-  // 🔥 NOVA FUNÇÃO: LIMPAR FEED 🔥
   const clearActivityFeed = async () => {
     if (!confirm("Isso irá apagar todas as curtidas e comentários exibidos nestas notificações. Continuar?")) return;
-    
     setClearingFeed(true);
     try {
         const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        
-        // Pega todos os IDs das notificações na tela
         const likeIds = activityFeed.filter(n => n.type === 'like').map(n => n.id);
         const commentIds = activityFeed.filter(n => n.type === 'comment').map(n => n.id);
 
         if (likeIds.length > 0) {
             await fetch(`${supabaseUrl}/rest/v1/Likes?id=in.(${likeIds.join(',')})`, { method: 'DELETE', headers });
         }
-        
         if (commentIds.length > 0) {
             await fetch(`${supabaseUrl}/rest/v1/Comments?id=in.(${commentIds.join(',')})`, { method: 'DELETE', headers });
         }
-        
-        // Followers não apagamos o player, apenas limpamos do visual
         setActivityFeed([]);
-    } catch(e) {
-        alert("Erro ao limpar notificações.");
-    }
+    } catch(e) { alert("Erro ao limpar notificações."); }
     setClearingFeed(false);
   };
-
 
   const handleSaveTgToken = async () => {
     setSavingToken(true);
@@ -363,9 +367,7 @@ function DashboardContent() {
           body: JSON.stringify({ tg_bot_token: tgToken }) 
       });
       alert("Token do Bot atualizado com sucesso!");
-    } catch (error) {
-      alert("Erro ao salvar o Token.");
-    }
+    } catch (error) { alert("Erro ao salvar o Token."); }
     setSavingToken(false);
   };
 
@@ -376,13 +378,11 @@ function DashboardContent() {
     setTgStatus("");
 
     let finalChatId = tgGroupId.trim();
-    
     if (finalChatId.includes("t.me/")) {
         const slugStr = finalChatId.split("t.me/")[1].split("/")[0].split("?")[0];
         if (slugStr.startsWith("+") || slugStr.startsWith("joinchat")) {
              setTgStatus("❌ Erro: Não use Link de Convite (+...). Para grupos privados, use o ID Numérico (-100...).");
-             setSendingTg(false);
-             return;
+             setSendingTg(false); return;
         }
         finalChatId = "@" + slugStr;
     } else if (!finalChatId.startsWith("-") && !finalChatId.startsWith("@")) {
@@ -391,24 +391,13 @@ function DashboardContent() {
 
     try {
       const res = await fetch("/api/tg-post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-            canal: finalChatId,
-            mensagem: tgMessage, 
-            modelId: modelId
-        })
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ canal: finalChatId, mensagem: tgMessage, modelId: modelId })
       });
       const data = await res.json();
-      
-      if (data.success) {
-        setTgStatus(`✅ Disparo de sucesso para ${finalChatId}!`);
-      } else {
-        setTgStatus(`❌ Erro: ${data.error}`);
-      }
-    } catch (e) {
-      setTgStatus("❌ Erro de conexão ao disparar.");
-    }
+      if (data.success) setTgStatus(`✅ Disparo de sucesso para ${finalChatId}!`);
+      else setTgStatus(`❌ Erro: ${data.error}`);
+    } catch (e) { setTgStatus("❌ Erro de conexão ao disparar."); }
     setSendingTg(false);
   };
 
@@ -442,10 +431,7 @@ function DashboardContent() {
           }
           alert("Slots gerados com sucesso!");
           loadData(); 
-      } catch (error) {
-          alert("Erro de conexão ao gerar fatias. Atualize a página.");
-          setDashboardLoading(false);
-      }
+      } catch (error) { alert("Erro de conexão ao gerar fatias. Atualize a página."); setDashboardLoading(false); }
   };
 
   const loadMediaStats = async (mediaItem: any) => {
@@ -458,10 +444,7 @@ function DashboardContent() {
           ]);
           setMediaLikes(Array.isArray(likesRes) ? likesRes.length : 0);
           setMediaComments(Array.isArray(commentsRes) ? commentsRes : []);
-      } catch(e) {
-          setMediaLikes(0);
-          setMediaComments([]);
-      }
+      } catch(e) { setMediaLikes(0); setMediaComments([]); }
   }
 
   const handleDeleteComment = async (commentId: string) => {
@@ -518,7 +501,7 @@ function DashboardContent() {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
           const res = await fetch(`${supabaseUrl}/rest/v1/Chats?model_id=eq.${modelId}&select=*,Players(name, whatsapp, id)&order=updated_at.desc`, { headers });
           if (res.ok) setChatList(await res.json());
-      } catch (e) { console.error("Erro ChatList", e); }
+      } catch (e) {}
   };
 
   const openAdminChat = async (chat: any, scroll = true) => {
@@ -763,7 +746,6 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-8 font-sans pb-24 relative overflow-x-hidden">
       
-      {/* 🔥 CENTRAL DE NOTIFICAÇÕES COM O BOTÃO DE LIMPAR 🔥 */}
       {showNotificationsPanel && (
           <>
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowNotificationsPanel(false)}></div>
@@ -884,6 +866,11 @@ function DashboardContent() {
         </div>
 
         <div className="flex gap-2 mb-8 bg-white/5 p-1.5 rounded-2xl border border-white/5 overflow-x-auto custom-scrollbar">
+          
+          <button onClick={() => setActiveTab("sammy")} className={`flex-1 min-w-[110px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "sammy" ? "bg-gradient-to-r from-[#D946EF] to-[#FF1493] text-white shadow-lg shadow-[#D946EF]/30" : "text-white/30 hover:bg-white/5"}`}>
+              <Sparkles size={14}/> Sammy (IA)
+          </button>
+
           <button onClick={() => setActiveTab("finance")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeTab === "finance" ? "bg-[#FF1493] text-white shadow-lg" : "text-white/30 hover:bg-white/5"}`}>Ganhos</button>
           
           <button onClick={() => setActiveTab("marketing")} className={`flex-1 min-w-[100px] py-3 rounded-xl text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === "marketing" ? "bg-[#00f0ff] text-black shadow-lg shadow-[#00f0ff]/30" : "text-white/30 hover:bg-white/5"}`}>
@@ -905,6 +892,56 @@ function DashboardContent() {
         </div>
 
         {/* -------------------- CONTEÚDO DAS ABAS -------------------- */}
+
+        {activeTab === "sammy" && (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="bg-[#0a0a0a] border border-[#D946EF]/30 p-4 sm:p-6 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col h-[75vh]">
+                    <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Sparkles size={100} className="text-[#D946EF]"/></div>
+                    
+                    <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4 relative z-10">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#D946EF] to-[#FF1493] flex items-center justify-center shadow-lg shadow-[#D946EF]/30">
+                                <Sparkles size={20} className="text-white"/>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-black uppercase italic text-white tracking-tighter">Sammy <span className="text-[#D946EF]">IA</span></h2>
+                                <p className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Sua Agente de Vendas</p>
+                            </div>
+                        </div>
+                        <button onClick={handleFinishSammyTraining} disabled={savingHub} className="bg-[#D946EF]/20 hover:bg-[#D946EF] text-[#D946EF] hover:text-white border border-[#D946EF]/50 px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 active:scale-95">
+                            {savingHub ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle2 size={14}/>} 
+                            <span className="hidden sm:inline">Finalizar Treinamento</span>
+                            <span className="sm:hidden">Finalizar</span>
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar relative z-10">
+                        {sammyMessages.map(m => (
+                            <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                <div className={`max-w-[85%] p-4 text-sm rounded-2xl ${m.role === 'user' ? 'bg-white/10 text-white rounded-tr-sm border border-white/5' : 'bg-gradient-to-br from-[#D946EF]/20 to-[#FF1493]/10 text-white rounded-tl-sm border border-[#D946EF]/30 shadow-lg'}`}>
+                                    <p className="leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                                </div>
+                            </div>
+                        ))}
+                        {isSammyLoading && (
+                            <div className="flex items-start">
+                                <div className="bg-[#D946EF]/10 p-4 rounded-2xl rounded-tl-sm border border-[#D946EF]/20 flex items-center gap-2">
+                                    <Loader2 size={14} className="animate-spin text-[#D946EF]"/> <span className="text-xs text-[#D946EF] font-black uppercase italic">Sammy está digitando...</span>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={sammyChatEndRef} />
+                    </div>
+
+                    <form onSubmit={handleSammySubmit} className="mt-4 pt-4 border-t border-white/5 relative z-10 flex gap-2">
+                        <input value={sammyInput} onChange={handleSammyInputChange} placeholder="Converse com a Sammy..." className="flex-1 bg-black border border-white/10 rounded-2xl px-5 py-4 text-xs text-white outline-none focus:border-[#D946EF] transition-all"/>
+                        <button type="submit" disabled={isSammyLoading || !sammyInput.trim()} className="bg-gradient-to-r from-[#D946EF] to-[#FF1493] text-white w-14 rounded-2xl flex items-center justify-center shadow-lg disabled:opacity-50 hover:scale-105 active:scale-95 transition-all">
+                            <Send size={18} className="-ml-1"/>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
 
         {activeTab === "marketing" && (
             <div className="animate-in fade-in space-y-6">
@@ -1166,7 +1203,6 @@ function DashboardContent() {
             </div>
         )}
 
-        {/* 🔥 ABA: CONFIGURAÇÃO DA VITRINE E ROLETA 🔥 */}
         {activeTab === "vitrine" && (
             <div className="space-y-6 animate-in fade-in">
                 
@@ -1332,9 +1368,8 @@ function DashboardContent() {
 
       </div>
 
-      {/* -------------------- MODAIS E CAMADAS FLUTUANTES (Z-INDEX SUPERIOR) -------------------- */}
+      {/* -------------------- MODAIS E CAMADAS FLUTUANTES -------------------- */}
 
-      {/* MODAL DE CHAT GERAL DA MUSA (LISTA E INTERFACE) */}
       {activeTab === "chat" && activeChat && (
           <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in slide-in-from-bottom-full duration-300">
               <div className="absolute inset-0 bg-black/60" onClick={() => setActiveChat(null)}></div>
@@ -1424,7 +1459,7 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA (CURTIDAS E COMENTÁRIOS DA GALERIA) - LIVRE DE ABAS 🔥 */}
+      {/* 🔥 MODAL DE ESTATÍSTICAS DA MÍDIA */}
       {showMediaStats && (
           <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-center p-4 animate-in fade-in zoom-in duration-300 gap-6">
               <button onClick={() => setShowMediaStats(null)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/50 hover:text-white bg-white/10 p-3 rounded-full border border-white/10 transition-colors z-[510]">
@@ -1465,7 +1500,7 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) 🔥 */}
+      {/* 🔥 MODAL DE ENVIAR MÍDIA NO CHAT (PPV OU GRÁTIS) */}
       {showMediaModal && chatMediaPreview && (
           <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[3rem] w-full max-w-sm shadow-2xl relative">
@@ -1510,9 +1545,9 @@ function DashboardContent() {
           </div>
       )}
 
-      {/* 🔥 MODAL EDITAR PRÊMIO COM TODOS OS CAMPOS DINÂMICOS (VITRINE/ROLETA) 🔥 */}
+      {/* 🔥 MODAL EDITAR PRÊMIO */}
       {editingPrize && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[500] flex items-center justify-center p-4">
           <form onSubmit={async (e) => { 
               e.preventDefault(); 
               await fetch(`${supabaseUrl}/rest/v1/Prize?id=eq.${editingPrize.id}`, { method: "PATCH", headers: { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: editingPrize.name, color: editingPrize.color, delivery_type: editingPrize.delivery_type, delivery_value: editingPrize.delivery_value }) });
@@ -1635,7 +1670,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF1493]" size={40} /></div>}>
         <DashboardContent />
       </Suspense>
     </ErrorBoundary>
