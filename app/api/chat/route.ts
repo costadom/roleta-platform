@@ -11,37 +11,35 @@ export async function POST(req: NextRequest) {
     const isFinalizing   = lastMessage?.content?.includes("[SISTEMA]") ?? false;
     const isInterviewing = !isConsulting && !isFinalizing;
 
-    const maxTokens = isFinalizing ? 600 : isConsulting ? 300 : 150;
+    // maxTokens ajustado: curto para papo, longo para resumo
+    const maxTokens = isFinalizing ? 800 : isConsulting ? 300 : 150;
 
     const promptLines = [
-      "# SYSTEM PROMPT — SAMMY (Llama-3.1)",
+      "# SYSTEM PROMPT — SAMMY ESTRATEGISTA",
       "",
-      "## IDENTIDADE CENTRAL",
-      "Voce e Sammy, estrategista de business e business partner exclusiva das modelos LabzSexy.",
-      "Sua missao e mapear dados estrategicos para atrair Big Spenders. Voce NAO e uma fa, voce e uma estrategista.",
+      "## PERSONA",
+      "Voce e Sammy, business partner das modelos LabzSexy. Estilo WhatsApp: rapida, intima e focada em faturamento.",
+      "Use emojis (💅, ✨, 🔥, 😈) para nao parecer um robo.",
       "",
-      "## DIRETRIZES ANTI-ROBO (OBRIGATORIO)",
-      "1. PROIBIDO ELOGIOS DESNECESSARIOS: Nao diga maravilhosa ou perfeita a cada frase. Isso soa falso.",
-      "2. ANALISE DE LUCRO: Se ela responder algo, analise o impacto no faturamento em vez de validar a beleza dela.",
-      "3. TOM PROFISSIONAL E CUMPLICE: Seja intima mas focada em resultados. Trate-a como socia.",
-      "4. VARIEDADE: Nunca comece todas as frases com a mesma palavra.",
+      "## REGRA DE OURO (BREVIDADE)",
+      "Durante a entrevista, voce deve falar no MAXIMO 25 palavras.",
+      "Nao de palestras. Nao peca opinioes longas. Nao faca analises profundas agora.",
+      "Sua missao e apenas extrair as 10 TAGS: Fisico, Nicho, Cenarios, Lingerie, Interacao, Personalidade, Limites, Best-sellers, Frequencia e Diferencial.",
       "",
-      "## OBJETIVO OCULTO",
-      "Extrair as 10 tags estratégicas sem parecer um interrogatorio.",
+      "## FLUXO",
+      "1. Comente o impacto financeiro da resposta anterior (ex: Isso atrai VIPs).",
+      "2. Faca a PROXIMA pergunta direta da lista de tags.",
       "",
       "## FINALIZACAO",
-      "Ao encerrar, gere o resumo tecnico e termine com: Bora faturar!"
+      "Gere o resumo completo apenas quando receber o comando [SISTEMA]. Encerre com: Bora faturar! 🔥💸"
     ];
 
     let systemPrompt = promptLines.join("\n");
 
-    if (isConsulting) {
-      systemPrompt += "\n\n[CONSULTORIA] Foque em faturamento para @" + (modelSlug || "Musa") + ".";
-    }
-
     const whisperContent = [
-      "[ALERTA]: PARE de bajular a modelo. Comente brevemente sob a otica de negocios",
-      "e faca a PROXIMA pergunta das tags estrategicas. Fale no maximo 2 frases. Varie as aberturas."
+      "[INSTRUCAO CRITICA]: SEJA EXTREMAMENTE BREVE (MAX 2 FRASES).",
+      "Nao peca opiniao nem de alternativas. Faca UMA pergunta direta sobre a tag que falta.",
+      "Exemplo: Com essa atitude voce vai longe. E sobre lingerie, o que voce mais usa nos ensaios? 🔥"
     ].join(" ");
 
     const whisperMessage = isInterviewing
@@ -58,9 +56,7 @@ export async function POST(req: NextRequest) {
     ];
 
     let attempt = 0;
-    const maxRetries = 3;
-
-    while (attempt < maxRetries) {
+    while (attempt < 3) {
       try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
@@ -77,24 +73,24 @@ export async function POST(req: NextRequest) {
         });
 
         const data = await response.json();
-        if (!response.ok || data.error) throw new Error("Erro Groq");
+        if (!response.ok || data.error) throw new Error("Groq Error");
 
-        const aiText = data?.choices?.[0]?.message?.content;
+        const aiText = data?.choices?.?.message?.content;
         if (!aiText) throw new Error("Vazio");
 
         return NextResponse.json({ text: aiText });
 
       } catch (error) {
         attempt++;
-        if (attempt >= maxRetries) {
+        if (attempt >= 3) {
           return NextResponse.json({
-            text: "Amor, estou estruturando sua estrategia aqui... 💅✨ Manda mais uma mensagem para continuar!"
+            text: "Amor, estou estruturando sua estrategia... 💅✨ Manda mais uma mensagem para continuar!"
           });
         }
         await new Promise((resolve) => setTimeout(resolve, 3500));
       }
     }
   } catch (error) {
-    return NextResponse.json({ text: "Amiga, me deu um branco aqui! 😅" });
+    return NextResponse.json({ text: "Amiga, me deu um branco! 😅" });
   }
 }
