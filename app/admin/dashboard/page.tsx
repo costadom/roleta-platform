@@ -216,6 +216,20 @@ function DashboardContent() {
           if (!res.ok || data.error) throw new Error(data.error || "A Chave da IA falhou.");
           
           setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
+
+      // 🔥 Salvando tags no Supabase
+      fetch('/api/save-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: [...newMessages, { role: 'assistant', content: data.text }],
+          modelSlug: modelSlug
+        })
+      }).then(() => {
+        console.log("✅ Tags enviadas para o Supabase");
+      }).catch(err => {
+        console.error("❌ Erro ao salvar tags:", err);
+      });
       } catch (error: any) {
           alert("❌ ALERTA DA SAMMY: " + error.message);
       } finally {
@@ -224,6 +238,7 @@ function DashboardContent() {
   };
 
   const handleFinishSammyTraining = async () => {
+    console.log("MODEL SLUG:", modelSlug);
       if (isSammyLoading) return;
       setSavingHub(true);
       setIsSammyLoading(true);
