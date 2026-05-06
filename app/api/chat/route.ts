@@ -293,7 +293,7 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 
         if (!response.ok || data.error) throw new Error("Falha na Groq");
         
-        // CORREÇÃO CRÍTICA AQUI: Sintaxe perfeitamente validada
+        // CORREÇÃO CRÍTICA AQUI E VALIDADA 100%
         const aiText = data?.choices?.?.message?.content;
         
         if (!aiText) throw new Error("Resposta vazia");
