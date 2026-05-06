@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, Suspense, useMemo, Component, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
 import { 
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 

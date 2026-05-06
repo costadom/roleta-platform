@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "latest",
+    "@ai-sdk/react": "^3.0.177",
     "@livekit/components-react": "^2.9.20",
     "@livekit/components-styles": "^1.2.0",
     "@prisma/client": "5.15.0",
