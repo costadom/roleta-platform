@@ -218,13 +218,6 @@ function DashboardContent() {
           setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
 
       // 🔥 SALVAR TAGS AUTOMATICAMENTE
-      fetch('/api/save-tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          messages: [...newMessages, { role: 'assistant', content: data.text }],
-          modelSlug: modelSlug 
-        })
       })
       .then(() => console.log("✅ TAGS SALVAS"))
       .catch(err => console.error("❌ ERRO AO SALVAR TAGS:", err));
@@ -242,12 +235,55 @@ function DashboardContent() {
   };
 
   const handleFinishSammyTraining = async () => {
-    console.log("MODEL SLUG:", modelSlug);
-      if (isSammyLoading) return;
-      setSavingHub(true);
-      setIsSammyLoading(true);
+  if (isSammyLoading) return;
+  setSavingHub(true);
+  setIsSammyLoading(true);
 
-      const userMsg = { id: Date.now().toString(), role: 'user', content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme para ela que você absorveu as informações e que o perfil dela está otimizado.' };
+  console.log("🔥 MODEL SLUG:", modelSlug);
+
+  const userMsg = { 
+    id: Date.now().toString(), 
+    role: 'user', 
+    content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme.' 
+  };
+
+  const newMessages = [...sammyMessages, userMsg];
+  setSammyMessages(newMessages);
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: newMessages, modelSlug })
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Erro de conexão.");
+
+    setSammyMessages(prev => [
+      ...prev,
+      { id: Date.now().toString(), role: 'assistant', content: data.text }
+    ]);
+
+    // ✅ SAVE TAGS (CORRETO)
+    fetch('/api/save-tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [...newMessages, { role: 'assistant', content: data.text }],
+        modelSlug: modelSlug
+      })
+    })
+    .then(() => console.log("✅ TAGS SALVAS"))
+    .catch(err => console.error("❌ ERRO AO SALVAR TAGS:", err));
+
+  } catch (error) {
+    alert("❌ ALERTA DA SAMMY: " + error.message);
+  } finally {
+    setIsSammyLoading(false);
+    setSavingHub(false);
+  }
+};
       const newMessages = [...sammyMessages, userMsg];
       setSammyMessages(newMessages);
       
