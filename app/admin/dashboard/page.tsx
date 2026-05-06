@@ -354,15 +354,16 @@ useEffect(() => {
           const recentMedias = medias.slice(0, 15); 
           const recentScratches = scratches.slice(0, 15);
           const allMediaItems = [...recentMedias, ...recentScratches];
-          const mediaIds = recentMedias.map(m => m.id).filter(Boolean); 
+          const mediaIds = allMediaItems.map(m => m.id || m.photo_url).filter(Boolean); 
           
           let likesList: any[] = []; let commentsList: any[] = [];
           
+          // SOLUÇÃO SÊNIOR 1: Trava de segurança para impedir o Erro 400 no Supabase
           if (mediaIds.length > 0) {
               const mediaIdsStr = mediaIds.join(','); 
               const [likesRes, commentsRes] = await Promise.all([
-                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.("${mediaIdsStr}")&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
-                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.("${mediaIdsStr}")&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
+                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
+                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
               ]);
               
               const safeLikes = Array.isArray(likesRes) ? likesRes : [];
@@ -378,31 +379,24 @@ useEffect(() => {
           }
           
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
-          const combinedFeed = [...followersMapped, ...likesList, ...commentsList]
-             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-             .slice(0, 50); 
+          let combinedFeed = [...followersMapped, ...likesList, ...commentsList]
+             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
              
-          setActivityFeed(combinedFeed);
+          // SOLUÇÃO SÊNIOR 2: Filtra as notificações usando o carimbo de tempo da memória do navegador
+          const clearedAt = localStorage.getItem('notifications_cleared_at');
+          if (clearedAt) {
+              combinedFeed = combinedFeed.filter(item => new Date(item.created_at).getTime() > Number(clearedAt));
+          }
+             
+          setActivityFeed(combinedFeed.slice(0, 50));
       } catch (e) { }
   };
 
   const clearActivityFeed = async () => {
-    if (!confirm("Isso irá apagar todas as curtidas e comentários exibidos nestas notificações. Continuar?")) return;
-    setClearingFeed(true);
-    try {
-        const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-        const likeIds = activityFeed.filter(n => n.type === 'like').map(n => n.id);
-        const commentIds = activityFeed.filter(n => n.type === 'comment').map(n => n.id);
-
-        if (likeIds.length > 0) {
-            await fetch(`${supabaseUrl}/rest/v1/Likes?id=in.(${likeIds.join(',')})`, { method: 'DELETE', headers });
-        }
-        if (commentIds.length > 0) {
-            await fetch(`${supabaseUrl}/rest/v1/Comments?id=in.(${commentIds.join(',')})`, { method: 'DELETE', headers });
-        }
-        setActivityFeed([]);
-    } catch(e) { alert("Erro ao limpar notificações."); }
-    setClearingFeed(false);
+    if (!confirm("Isso irá ocultar todas as notificações atuais da sua tela. Continuar?")) return;
+    // SOLUÇÃO SÊNIOR 3: Em vez de tentar forçar exclusão no banco, salvamos o timestamp de leitura
+    localStorage.setItem('notifications_cleared_at', Date.now().toString());
+    setActivityFeed([]);
   };
 
   const handleSaveTgToken = async () => {
