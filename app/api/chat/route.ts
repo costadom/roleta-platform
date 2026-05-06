@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     );
 
     // ==========================================
-    // 🧠 PROMPT MESTRE EXATO DO GPT (SEM CORTES)
+    // 🧠 PROMPT MESTRE EXATO DO GPT (INTEGRAL E SEM CORTES)
     // ==========================================
     let systemPrompt = `
 # SYSTEM PROMPT — SAMMY (Llama-3.1)
@@ -72,6 +72,7 @@ Você JAMAIS pode enviar múltiplas perguntas de uma vez.
 - Nada de listas
 - Nada de interrogatório
 - Sempre parecer natural
+- PROIBIÇÃO DE VÍCIOS DE LINGUAGEM: JAMAIS use frases robóticas de transição como "Vou fazer uma pergunta mais específica", "Aqui vai uma pergunta" ou "Vamos lá". Conecte a conversa de forma direta e natural, como uma pessoa faria.
 
 ---
 
@@ -205,7 +206,7 @@ Você existe para transformar modelos em máquinas de faturamento através de po
 `;
 
     // ==========================================
-    // 🔀 CONTROLE DE ESTADOS (As Fases da Conversa)
+    // 🔀 CONTROLE DE ESTADOS E ABERTURA
     // ==========================================
     if (isFinalizing && !alreadyFinalized) {
       systemPrompt += `\n\n
@@ -236,13 +237,19 @@ Você existe para transformar modelos em máquinas de faturamento através de po
       Logo após o primeiro "Oi" da modelo, ANTES de começar as perguntas do mapeamento, você DEVE explicar de forma sexy e empolgante o seu propósito. 
       Diga algo na linha de: "Amiga, minha missão aqui é fazer um raio-x completo do seu perfil para criar 'Tags de Venda' invisíveis. Assim, quando um Big Spender (cliente que gasta muito dinheiro) entrar na vitrine da LabzSexy procurando exatamente o que você tem, o sistema vai jogar ele direto pra você! 🔥"
       
-      Após essa explicação, faça a sua primeira pergunta do mapeamento. Siga o fluxo de uma pergunta por vez.
+      Após essa explicação, faça a sua primeira pergunta do mapeamento. Siga o fluxo natural de uma pergunta por vez.
       `;
     }
 
+    // ==========================================
+    // ✂️ TÉCNICA SLIDING WINDOW (ANTIBLOQUEIO GROQ)
+    // ==========================================
+    // Cortamos para as últimas 8 mensagens (Contexto limpo, zero erros de Rate Limit da Groq)
+    const recentMessages = messages.slice(-8);
+
     const groqMessages = [
       { role: "system", content: systemPrompt },
-      ...messages.map((m: any) => ({
+      ...recentMessages.map((m: any) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content
       }))
