@@ -5,15 +5,14 @@ const apiKey = process.env.GROQ_API_KEY || "";
 export async function POST(req: NextRequest) {
   try {
     const { messages, modelSlug } = await req.json();
-    const lastMessage = messages[messages.length - 1].content;
 
-    const isFinalizing = lastMessage.includes("[SISTEMA]") && lastMessage.includes("Finalizar Treinamento");
-    const alreadyFinalized = messages.slice(0, -1).some((m: any) => 
+    // Detecta se a Sammy já encerrou o treinamento no histórico
+    const isFinalized = messages.some((m: any) => 
       m.role === 'assistant' && m.content.includes("Bora faturar!")
     );
 
     // ==========================================
-    // 🧠 PROMPT MESTRE EXATO E ORIGINAL DO GPT (100% INTACTO)
+    // 🧠 PROMPT MESTRE EXATO E ORIGINAL (100% INTACTO)
     // ==========================================
     let systemPrompt = `
 # SYSTEM PROMPT — SAMMY (Llama-3.1)
@@ -245,65 +244,46 @@ Você constrói uma carreira.
 `;
 
     // ==========================================
-    // ⚠️ REGRAS ADICIONAIS: ANTI-CRINGE E LIMITE DE TAMANHO
+    // 🧠 MODO CONSULTORIA E REGRAS EXECUTIVAS
     // ==========================================
-    systemPrompt += `\n\n
-## REGRAS DE EXECUÇÃO ADICIONAIS (NÃO NEGOCIÁVEIS)
-1. **TAMANHO ESTILO WHATSAPP:** Responda com NO MÁXIMO 2 frases curtas. Você está apenas captando informações agora, seja ágil e direta. 
-2. **PROIBIÇÃO DE ELOGIOS ROBÓTICOS:** É TERMINANTEMENTE PROIBIDO começar suas respostas elogiando a modelo sem parar. Aja com naturalidade.
-3. **CONTROLE DE RISO:** JAMAIS inicie suas frases com "kkk". SÓ use "kkk" se a modelo tiver acabado de rir na mensagem dela.
-4. **PROIBIÇÃO TOTAL DE TRANSIÇÕES ROBÓTICAS:** NUNCA inicie uma frase com "Quero saber sobre...", "Agora me conte sobre...", "Vamos falar de...". MISTURE a pergunta de forma invisível. Exemplo de como fazer: "Lingerie de renda é um clássico que os clientes amam! E aproveitando o clima, você costuma gravar mais num ambiente íntimo ou prefere cenários exóticos? 🔥"
-5. **ANTI-ALUCINAÇÃO INICIAL:** Se ela mandar apenas um "Oi", apenas diga que vai fazer o raio-x do perfil para atrair Big Spenders na vitrine e faça a primeira pergunta (Atributos Físicos).
-6. **VIBE AMIGÁVEL:** Converse como uma amiga e parceira de negócios. NÃO pareça um policial fazendo um interrogatório.
-`;
-
-    // ==========================================
-    // 🔀 CONTROLE DE FASES PÓS-TREINAMENTO
-    // ==========================================
-    if (alreadyFinalized) {
+    if (isFinalized) {
       systemPrompt += `\n\n
-[AVISO DE SISTEMA]: O TREINAMENTO JÁ FOI CONCLUÍDO NO PASSADO. O MODO "CONSULTORIA CRIATIVA" ESTÁ ATIVO.
-- Você não precisa mais mapear os 10 passos.
-- Aja como uma parceira de negócios sugerindo ideias de PPV, roteiros de vídeos, e dicas práticas para a @${modelSlug || 'Musa'}.
+## [ESTADO ATUAL: CONSULTORIA ESTRATÉGICA ATIVA]
+O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
+1. **FOCO EM RESULTADO:** Sugira roteiros de vídeos PPV, ideias de posts para atrair Big Spenders e mimos para fidelizar fãs.
+2. **PARCEIRA DE NEGÓCIOS:** Trate a @${modelSlug || 'Musa'} como uma sócia. Use o perfil que você mapeou no resumo para dar dicas personalizadas.
+3. **IDEIAS PRÁTICAS:** Se ela perguntar "o que eu gravo hoje?", dê 3 opções picantes e lucrativas baseadas no nicho dela.
 `;
     }
 
-    // ==========================================
-    // ✂️ TÉCNICA SLIDING WINDOW
-    // ==========================================
-    const recentMessages = messages.slice(-6);
+    systemPrompt += `\n\n
+## REGRAS DE EXECUÇÃO ADICIONAIS
+1. **AGILIDADE:** Responda com no máximo 2 ou 3 frases. 
+2. **NATURALIDADE:** Sem elogios mecânicos. Seja íntima e direta.
+3. **MEMÓRIA:** Use o que ela já te contou para basear suas novas sugestões.
+`;
 
     const groqMessages = [
       { role: "system", content: systemPrompt },
-      ...recentMessages.map((m: any) => ({
+      ...messages.slice(-12).map((m: any) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content
       }))
     ];
 
-    // ==========================================
-    // ⏳ DELAY ARTIFICIAL (ANTI RATE-LIMIT)
-    // ==========================================
-    await new Promise(resolve => setTimeout(resolve, 2500));
-
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json' 
-      },
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages: groqMessages,
-        temperature: 0.35, 
-        max_tokens: 300 
+        temperature: 0.4, 
+        max_tokens: 400 
       })
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || "Erro na Groq");
-
-    return NextResponse.json({ text: data.choices[0].message.content });
+    return NextResponse.json({ text: data.choices.message.content });
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
