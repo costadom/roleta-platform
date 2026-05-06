@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm install ai @ai-sdk/google --legacy-peer-deps && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -35,6 +35,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   }
 }
