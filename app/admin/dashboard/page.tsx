@@ -368,7 +368,7 @@ useEffect(() => {
           let likesList: any[] = []; let commentsList: any[] = [];
           
           if (validMediaIds.length > 0) {
-              const mediaIdsStr = validMediaIds.join(','); 
+              const mediaIdsStr = validMediaIds.map(id => '%22' + id + '%22').join(','); 
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
                   fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
