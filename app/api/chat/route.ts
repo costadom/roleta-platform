@@ -27,6 +27,7 @@ export async function POST(req: Request) {
 
     return new Response(JSON.stringify({ text: result.text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (error: any) {
+    console.error("ERRO CRÍTICO NA SAMMY:", error);
     return new Response(JSON.stringify({ error: error.message || "Erro interno na IA" }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

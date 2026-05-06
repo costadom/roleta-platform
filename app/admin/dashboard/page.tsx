@@ -208,7 +208,7 @@ function DashboardContent() {
           });
           const data = await res.json();
           
-          if (!res.ok || data.error) throw new Error(data.error || "A Chave do Google (API_KEY) está inválida ou faltando na Vercel.");
+          if (!res.ok || data.error) throw new Error(data.error || "A Chave da IA falhou.");
           
           setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
       } catch (error: any) {
@@ -218,7 +218,6 @@ function DashboardContent() {
       }
   };
 
-  
   const handleFinishSammyTraining = async () => {
       if (isSammyLoading) return;
       setSavingHub(true);
@@ -235,7 +234,7 @@ function DashboardContent() {
               body: JSON.stringify({ messages: newMessages, modelSlug: modelSlug })
           });
           const data = await res.json();
-          if (!res.ok || data.error) throw new Error(data.error || "Erro de conexão com o cérebro da IA.");
+          if (!res.ok || data.error) throw new Error(data.error || "Erro de conexão.");
           
           setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
       } catch (error: any) {
@@ -246,7 +245,7 @@ function DashboardContent() {
       }
   };
 
-  useEffect(() => {
+useEffect(() => {
       if (activeTab === "sammy") {
           setTimeout(() => sammyChatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       }
