@@ -354,7 +354,7 @@ useEffect(() => {
           const recentMedias = medias.slice(0, 15); 
           const recentScratches = scratches.slice(0, 15);
           const allMediaItems = [...recentMedias, ...recentScratches];
-          const mediaIds = allMediaItems.map(m => m.id || m.photo_url); 
+          const mediaIds = recentMedias.map(m => m.id).filter(Boolean); 
           
           let likesList: any[] = []; let commentsList: any[] = [];
           
