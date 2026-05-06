@@ -297,18 +297,46 @@ function DashboardContent() {
   };
 
 
-const handleFinishSammyTraining = async () => {
-  if (isSammyLoading) return;
+  const handleFinishSammyTraining = async () => {
+      if (isSammyLoading) return;
+      setSavingHub(true);
+      setIsSammyLoading(true);
 
-  setSavingHub(true);
-  setIsSammyLoading(true);
+      const userMsg = { 
+        id: Date.now().toString(), 
+        role: 'user', 
+        content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme para ela que você absorveu as informações e que o perfil dela está otimizado.' 
+      };
+      const newMessages = [...sammyMessages, userMsg];
+      setSammyMessages(newMessages);
+      
+      try {
+          const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messages: newMessages, modelSlug: modelSlug })
+          });
+          
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || "Erro de conexão.");
+          
+          setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
 
-  console.log("🔥 MODEL SLUG:", modelSlug);
+          fetch('/api/save-tags', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  messages: [...newMessages, { role: 'assistant', content: data.text }], 
+                  modelSlug: modelSlug 
+              })
+          }).catch(err => console.error("Erro ao salvar tags:", err));
 
-  const userMsg = {
-    id: Date.now().toString(),
-    role: 'user',
-    content: '[SISTEMA]: Finalizar Treinamento'
+      } catch (error: any) {
+          alert("❌ ALERTA DA SAMMY: " + error.message);
+      } finally {
+          setIsSammyLoading(false);
+          setSavingHub(false);
+      }
   };
 
   const newMessages = [...sammyMessages, userMsg];
