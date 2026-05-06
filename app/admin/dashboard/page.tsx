@@ -378,7 +378,7 @@ function DashboardContent() {
     setSendingTg(true); 
     setTgStatus("");
 
-    let finalChatId = tgGroupId.trim();
+    let finalChatId = tgGroupId?.trim();
     if (finalChatId.includes("t.me/")) {
         const slugStr = finalChatId.split("t.me/")[1].split("/")[0].split("?")[0];
         if (slugStr.startsWith("+") || slugStr.startsWith("joinchat")) {
@@ -527,7 +527,7 @@ function DashboardContent() {
 
   const handleAdminSendMessage = async (contentStr = "", mediaUrl = null, isLocked = false, price = 0, mType = 'text') => {
       const textToSend = contentStr || chatInput;
-      if (!textToSend.trim() && !mediaUrl) return;
+      if (!textToSend?.trim() && !mediaUrl) return;
       const censored = censorText(textToSend);
       const msgObj = { chat_id: activeChat.id, sender_type: 'model', content: censored, media_url: mediaUrl, media_type: mType, is_locked: isLocked, price: price, created_at: new Date().toISOString() };
       setChatMessages(prev => [...prev, msgObj]);
@@ -936,7 +936,7 @@ function DashboardContent() {
 
                     <form onSubmit={handleSammySubmit} className="mt-4 pt-4 border-t border-white/5 relative z-10 flex gap-2">
                         <input value={sammyInput} onChange={handleSammyInputChange} placeholder="Converse com a Sammy..." className="flex-1 bg-black border border-white/10 rounded-2xl px-5 py-4 text-xs text-white outline-none focus:border-[#D946EF] transition-all"/>
-                        <button type="submit" disabled={isSammyLoading || !sammyInput.trim()} className="bg-gradient-to-r from-[#D946EF] to-[#FF1493] text-white w-14 rounded-2xl flex items-center justify-center shadow-lg disabled:opacity-50 hover:scale-105 active:scale-95 transition-all">
+                        <button type="submit" disabled={isSammyLoading || !sammyInput?.trim()} className="bg-gradient-to-r from-[#D946EF] to-[#FF1493] text-white w-14 rounded-2xl flex items-center justify-center shadow-lg disabled:opacity-50 hover:scale-105 active:scale-95 transition-all">
                             <Send size={18} className="-ml-1"/>
                         </button>
                     </form>
@@ -1450,7 +1450,7 @@ function DashboardContent() {
                               {isRecording ? <Square size={16} className="fill-current"/> : <Mic size={18} />}
                           </button>
                           {!isRecording && (
-                              <button onClick={() => handleAdminSendMessage()} disabled={!chatInput.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
+                              <button onClick={() => handleAdminSendMessage()} disabled={!chatInput?.trim()} className="w-10 h-10 rounded-full bg-[#D946EF] text-white flex items-center justify-center shadow-lg disabled:opacity-50 hover:bg-[#f062ff] transition-all shrink-0">
                                   <Send size={16} className="-ml-0.5" />
                               </button>
                           )}
