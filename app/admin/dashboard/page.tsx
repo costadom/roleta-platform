@@ -217,15 +217,17 @@ function DashboardContent() {
           
           setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
 
-      // 🔥 SALVAR TAGS AUTOMATICAMENTE
-      })
-      .then(() => console.log("✅ TAGS SALVAS"))
-      .catch(err => console.error("❌ ERRO AO SALVAR TAGS:", err));
+      // ✅ SALVAR TAGS EM BACKGROUND (SEGURO)
+      fetch('/api/save-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: [...newMessages, { role: 'assistant', content: data.text }],
+          modelSlug: modelSlug 
+        })
+      }).catch(() => {});
 
-      // 🔥 Salvando tags no Supabase
       
-      }).catch(err => {
-        console.error("❌ Erro ao salvar tags:", err);
       });
       } catch (error: any) {
           alert("❌ ALERTA DA SAMMY: " + error.message);
