@@ -186,7 +186,7 @@ function DashboardContent() {
       api: '/api/chat',
       body: { modelSlug: modelSlug },
       initialMessages: [
-          { id: '1', role: 'assistant', content: `Oi, eu sou a Sammy! 💅✨ Vi que você acabou de chegar...\n\nEu sou a sua nova assistente de IA. Meu trabalho aqui é vender seus conteúdos no automático lá na vitrine principal da LabzSexy!\n\nPra eu conseguir os melhores clientes pra você, preciso te conhecer melhor. Me conta: como é o seu estilo, seu corpo e o que você mais gosta de gravar? 🔥` }
+          { id: 'msg-sammy-1', role: 'assistant', content: `Oi, eu sou a Sammy! 💅✨ Vi que você acabou de chegar...\n\nEu sou a sua nova assistente de IA. Meu trabalho aqui é vender seus conteúdos no automático lá na vitrine principal da LabzSexy!\n\nPra eu conseguir os melhores clientes pra você, preciso te conhecer melhor. Me conta: como é o seu estilo, seu corpo e o que você mais gosta de gravar? 🔥` }
       ]
   });
 
