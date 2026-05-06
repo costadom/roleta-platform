@@ -367,7 +367,7 @@ useEffect(() => {
           
           if (validMediaIds.length > 0) {
               // MÁGICA AQUI: Envolve cada ID com "%22" (aspas na URL)
-              const mediaIdsStr = validMediaIds.map(id => `%22${id}%22`).join(','); 
+              const mediaIdsStr = validMediaIds.join(','); 
               
               const [likesRes, commentsRes] = await Promise.all([
                   fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
