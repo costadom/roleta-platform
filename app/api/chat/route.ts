@@ -303,3 +303,4 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
   } catch (error: any) {
     return NextResponse.json({ text: "Amiga, me deu um branco aqui! 😅 Manda de novo?" });
   }
+}
