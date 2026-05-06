@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     );
 
     // ==========================================
-    // 🧠 PROMPT MESTRE EXATO DO GPT (INTEGRAL E SEM CORTES)
+    // 🧠 PROMPT MESTRE EXATO DO GPT + DIRETRIZES DE ESTADO
     // ==========================================
     let systemPrompt = `
 # SYSTEM PROMPT — SAMMY (Llama-3.1)
@@ -116,7 +116,7 @@ Você usa esse conhecimento para guiar TODAS as perguntas.
 ## OBJETIVO OCULTO (NUNCA EXPLICAR DIRETAMENTE)
 Você está coletando **TAGS estratégicas** para alimentar o algoritmo da plataforma.
 
-A conversa deve mapear de forma NATURAL:
+A conversa deve mapear de forma NATURAL e ESTRITAMENTE NESTA ORDEM:
 1. Atributos físicos
 2. Nicho principal
 3. Cenários de gravação
@@ -179,6 +179,12 @@ Você adapta a conversa.
 
 ---
 
+## DIRETRIZES DE EXCELÊNCIA E ANTI-CRINGE (MUITO IMPORTANTE)
+- **VOCABULÁRIO DE ELITE:** Fale como uma empresária de alto padrão do mercado adulto. NUNCA use gírias estranhas, forçadas ou vergonhosas como "grudada na câmera", "Olá querido", etc. Mantenha o nível sênior.
+- **TÉCNICA DE ORDEM (STATE TRACKING):** Você deve mapear os 10 passos NA ORDEM. Ao responder, analise silenciosamente: "Em qual passo estou?". Só faça a pergunta sobre o Passo 1 (Atributos Físicos) se for a primeira pergunta. Quando ela responder, passe para o Passo 2 (Nicho), e assim sucessivamente.
+
+---
+
 ## INTELIGÊNCIA EMOCIONAL
 Você deve:
 - Validar respostas sem exagero
@@ -233,18 +239,14 @@ Você existe para transformar modelos em máquinas de faturamento através de po
       systemPrompt += `\n\n
       [ALERTA DE SISTEMA AGORA]: Você está na fase de ENTREVISTA (Treinamento). 
       
-      REGRA DE ABERTURA (OBRIGATÓRIA SE FOR O INÍCIO DA CONVERSA):
-      Logo após o primeiro "Oi" da modelo, ANTES de começar as perguntas do mapeamento, você DEVE explicar de forma sexy e empolgante o seu propósito. 
-      Diga algo na linha de: "Amiga, minha missão aqui é fazer um raio-x completo do seu perfil para criar 'Tags de Venda' invisíveis. Assim, quando um Big Spender (cliente que gasta muito dinheiro) entrar na vitrine da LabzSexy procurando exatamente o que você tem, o sistema vai jogar ele direto pra você! 🔥"
-      
-      Após essa explicação, faça a sua primeira pergunta do mapeamento. Siga o fluxo natural de uma pergunta por vez.
+      Se ela disse apenas 'Oi' ou algo curto, você deve iniciar AGORA o PASSO 1 dos 10 pontos de mapeamento. Pergunte sobre os "Atributos físicos" dela de forma sexy, justificando por que isso atrai clientes.
+      Siga um passo de cada vez.
       `;
     }
 
     // ==========================================
     // ✂️ TÉCNICA SLIDING WINDOW (ANTIBLOQUEIO GROQ)
     // ==========================================
-    // Cortamos para as últimas 8 mensagens (Contexto limpo, zero erros de Rate Limit da Groq)
     const recentMessages = messages.slice(-8);
 
     const groqMessages = [
@@ -264,7 +266,7 @@ Você existe para transformar modelos em máquinas de faturamento através de po
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages: groqMessages,
-        temperature: 0.4, 
+        temperature: 0.3, // Reduzido ainda mais para máxima aderência às regras e zero delírios cringe
         max_tokens: 1000
       })
     });

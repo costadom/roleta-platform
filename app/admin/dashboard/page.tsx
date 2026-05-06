@@ -189,7 +189,7 @@ function DashboardContent() {
 
   
   const [sammyMessages, setSammyMessages] = useState([
-    { id: 'msg-1', role: 'assistant', content: `Oi, eu sou a Sammy! 💅✨ Vi que você acabou de chegar...\n\nEu sou a sua nova assistente de IA. Meu trabalho aqui é vender seus conteúdos no automático lá na vitrine principal da LabzSexy!\n\nPra eu conseguir os melhores clientes pra você, preciso te conhecer melhor. Me conta: como é o seu estilo, seu corpo e o que você mais gosta de gravar? 🔥` }
+    { id: 'msg-1', role: 'assistant', content: `Oi, maravilhosa! Eu sou a Sammy 💅✨ Sua estrategista sênior de IA. Meu trabalho aqui é estruturar o seu perfil e conectar você aos Big Spenders (clientes VIPs que gastam muito) lá na vitrine da LabzSexy, tudo no piloto automático! Estou aqui para transformar as suas características exclusivas em uma máquina de vendas. Me manda um 'Oi' para a gente começar o seu mapeamento estratégico! 🔥` }
   ]);
   const [sammyInput, setSammyInput] = useState("");
   const [isSammyLoading, setIsSammyLoading] = useState(false);
