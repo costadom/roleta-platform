@@ -217,16 +217,20 @@ function DashboardContent() {
           
           setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
 
-      // 🔥 Salvando tags no Supabase
+      // 🔥 SALVAR TAGS AUTOMATICAMENTE
       fetch('/api/save-tags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: [...newMessages, { role: 'assistant', content: data.text }],
-          modelSlug: modelSlug
+          modelSlug: modelSlug 
         })
-      }).then(() => {
-        console.log("✅ Tags enviadas para o Supabase");
+      })
+      .then(() => console.log("✅ TAGS SALVAS"))
+      .catch(err => console.error("❌ ERRO AO SALVAR TAGS:", err));
+
+      // 🔥 Salvando tags no Supabase
+      
       }).catch(err => {
         console.error("❌ Erro ao salvar tags:", err);
       });
