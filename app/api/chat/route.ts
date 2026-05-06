@@ -1,4 +1,4 @@
-import { streamText } from 'ai';
+import { generateText } from 'ai';
 import { google } from '@ai-sdk/google';
 
 export const maxDuration = 30;
@@ -17,22 +17,16 @@ export async function POST(req: Request) {
     6. Confirmação: Quando receber um aviso [SISTEMA], responda que o perfil dela está otimizado.
     
     A modelo se chama: @${modelSlug || 'Musa'}.
-    Tom de voz: Animada, empoderadora, chique.`;
+    Tom de voz: Animada, empoderadora, chique, vendedora e focada em fazer a modelo ganhar muito dinheiro (use emojis).`;
 
-    const result = await streamText({
+    const result = await generateText({
       model: google('gemini-1.5-flash'),
       system: systemPrompt,
       messages,
     });
 
-    // Compatibilidade automática com as versões mais novas do Vercel AI SDK
-    if (typeof result.toDataStreamResponse === 'function') {
-        return result.toDataStreamResponse();
-    } else {
-        return (result as any).toTextStreamResponse();
-    }
+    return new Response(JSON.stringify({ text: result.text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error("ERRO CRÍTICO NA SAMMY:", error);
-    return new Response(JSON.stringify({ error: error.message || "Erro interno na IA" }), { status: 500 });
+    return new Response(JSON.stringify({ error: error.message || "Erro interno na IA" }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, Suspense, useMemo, Component, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useChat } from "@ai-sdk/react";
+
 import { 
   ImageIcon, Check, Gift, DollarSign, Users, Link as LinkIcon, 
   Edit3, ArrowLeft, Palette, Copy, LogOut, Megaphone, Trophy, Crown, 
@@ -182,21 +182,68 @@ function DashboardContent() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const { messages: sammyMessages, input: sammyInput, handleInputChange: handleSammyInputChange, handleSubmit: handleSammySubmit, isLoading: isSammyLoading, append: appendSammy } = useChat({
-      api: '/api/chat',
-      body: { modelSlug: modelSlug },
-      initialMessages: [
-          { id: 'msg-sammy-1', role: 'assistant', content: `Oi, eu sou a Sammy! 💅✨ Vi que você acabou de chegar...\n\nEu sou a sua nova assistente de IA. Meu trabalho aqui é vender seus conteúdos no automático lá na vitrine principal da LabzSexy!\n\nPra eu conseguir os melhores clientes pra você, preciso te conhecer melhor. Me conta: como é o seu estilo, seu corpo e o que você mais gosta de gravar? 🔥` }
-      ]
-  });
+  
+  const [sammyMessages, setSammyMessages] = useState([
+    { id: 'msg-1', role: 'assistant', content: `Oi, eu sou a Sammy! 💅✨ Vi que você acabou de chegar...\n\nEu sou a sua nova assistente de IA. Meu trabalho aqui é vender seus conteúdos no automático lá na vitrine principal da LabzSexy!\n\nPra eu conseguir os melhores clientes pra você, preciso te conhecer melhor. Me conta: como é o seu estilo, seu corpo e o que você mais gosta de gravar? 🔥` }
+  ]);
+  const [sammyInput, setSammyInput] = useState("");
+  const [isSammyLoading, setIsSammyLoading] = useState(false);
 
+  const handleSammySubmit = async (e?: any) => {
+      if(e) e.preventDefault();
+      if (!sammyInput?.trim() || isSammyLoading) return;
+      
+      const userMsg = { id: Date.now().toString(), role: 'user', content: sammyInput };
+      const newMessages = [...sammyMessages, userMsg];
+      
+      setSammyMessages(newMessages);
+      setSammyInput("");
+      setIsSammyLoading(true);
+
+      try {
+          const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messages: newMessages, modelSlug: modelSlug })
+          });
+          const data = await res.json();
+          
+          if (!res.ok || data.error) throw new Error(data.error || "A Chave do Google (API_KEY) está inválida ou faltando na Vercel.");
+          
+          setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
+      } catch (error: any) {
+          alert("❌ ALERTA DA SAMMY: " + error.message);
+      } finally {
+          setIsSammyLoading(false);
+      }
+  };
+
+  
   const handleFinishSammyTraining = async () => {
+      if (isSammyLoading) return;
       setSavingHub(true);
-      await appendSammy({
-          role: 'user',
-          content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme para ela que você absorveu as informações e que o perfil dela está otimizado.'
-      });
-      setSavingHub(false);
+      setIsSammyLoading(true);
+
+      const userMsg = { id: Date.now().toString(), role: 'user', content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme para ela que você absorveu as informações e que o perfil dela está otimizado.' };
+      const newMessages = [...sammyMessages, userMsg];
+      setSammyMessages(newMessages);
+      
+      try {
+          const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messages: newMessages, modelSlug: modelSlug })
+          });
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || "Erro de conexão com o cérebro da IA.");
+          
+          setSammyMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.text }]);
+      } catch (error: any) {
+           alert("❌ ALERTA DA SAMMY: " + error.message);
+      } finally {
+          setIsSammyLoading(false);
+          setSavingHub(false);
+      }
   };
 
   useEffect(() => {
@@ -935,7 +982,7 @@ function DashboardContent() {
                     </div>
 
                     <form onSubmit={handleSammySubmit} className="mt-4 pt-4 border-t border-white/5 relative z-10 flex gap-2">
-                        <input value={sammyInput} onChange={handleSammyInputChange} placeholder="Converse com a Sammy..." className="flex-1 bg-black border border-white/10 rounded-2xl px-5 py-4 text-xs text-white outline-none focus:border-[#D946EF] transition-all"/>
+                        <input value={sammyInput} onChange={(e) => setSammyInput(e.target.value)} placeholder="Converse com a Sammy..." className="flex-1 bg-black border border-white/10 rounded-2xl px-5 py-4 text-xs text-white outline-none focus:border-[#D946EF] transition-all"/>
                         <button type="submit" disabled={isSammyLoading || !sammyInput?.trim()} className="bg-gradient-to-r from-[#D946EF] to-[#FF1493] text-white w-14 rounded-2xl flex items-center justify-center shadow-lg disabled:opacity-50 hover:scale-105 active:scale-95 transition-all">
                             <Send size={18} className="-ml-1"/>
                         </button>
