@@ -2,22 +2,20 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const groqApiKey = process.env.GROQ_API_KEY || "";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 function safeParseJSON(text: string) {
   try {
-    const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(clean);
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(cleanText);
   } catch {
     try {
       const match = text.match(/\{[\s\S]*\}/);
-      if (match) return JSON.parse(match[0]);
-    } catch (e) {
-      console.error("❌ Falha ao parsear JSON:", text);
-    }
+      if (match) return JSON.parse(match);
+    } catch (e) {}
     return null;
   }
 }
@@ -26,76 +24,74 @@ export async function POST(req: Request) {
   try {
     const { messages, modelSlug } = await req.json();
 
-    const cleanMessages = messages.map((m: any) => ({
-      role: m.role,
-      content: m.content.replace(/git push|commit|[\u0000-\u001F\u007F-\u009F]/g, "")
+    // Filtra as mensagens para pegar as últimas da conversa (limite para não estourar tokens)
+    const cleanMessages = messages.slice(-14).map((m: any) => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content
     }));
 
+    const extractPrompt = `Você é um robô invisível de extração de dados.
+Sua única função é ler a conversa acima e extrair as tags estratégicas da modelo.
+Retorne EXATAMENTE este objeto JSON preenchido, sem markdown, sem explicações. Se não houver a info, retorne string ou array vazio.
+{
+  "atributos_fisicos": [],
+  "nicho_principal": "",
+  "cenarios": [],
+  "estilo_roupas": [],
+  "hard_limits": [],
+  "diferencial": ""
+}`;
+
     let attempt = 0;
-    const maxRetries = 2;
+    let tagsJson = null;
 
-    while (attempt <= maxRetries) {
+    while (attempt < 3) {
       try {
-        console.log("🧠 Tentativa:", attempt + 1);
-
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${groqApiKey}`,
-            "Content-Type": "application/json"
-          },
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${groqApiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: "llama-3.1-8b-instant",
             messages: [
-              {
-                role: "system",
-                content: "Retorne APENAS JSON puro. Sem explicações."
-              },
+              { role: "system", content: extractPrompt },
               ...cleanMessages
             ],
             temperature: 0.1,
+            max_tokens: 400, // 🔥 A MÁGICA: Isso impede a Groq de dar Rate Limit por solicitar tokens demais
             response_format: { type: "json_object" }
           })
         });
 
         const data = await response.json();
-        const raw = data.choices?.[0]?.message?.content;
-
-        console.log("📦 Resposta IA:", raw);
-
-        const parsed = safeParseJSON(raw);
-
-        if (!parsed) throw new Error("JSON inválido");
-
-        const { error } = await supabase
-          .from("profiles")
-          .upsert({
-            slug: modelSlug || "default",
-            sammy_tags: parsed,
-            updated_at: new Date()
-          }, { onConflict: "slug" });
-
-        if (error) {
-          console.error("❌ Supabase erro:", error);
-          throw error;
+        
+        if (response.ok && data?.choices?.?.message?.content) {
+          tagsJson = safeParseJSON(data.choices.message.content);
+          if (tagsJson && Object.keys(tagsJson).length > 0) break; // Sai do loop se deu certo
         }
-
-        console.log("✅ Salvo com sucesso!");
-        return NextResponse.json({ success: true });
-
+        
       } catch (err) {
-        attempt++;
-        console.error("❌ Tentativa falhou:", err);
+        console.error("Tentativa de extração falhou:", err);
       }
+      
+      attempt++;
+      await new Promise(resolve => setTimeout(resolve, 4000)); // Espera 4s antes de tentar extrair de novo
     }
 
-    return NextResponse.json({
-      success: false,
-      fallback: true
-    });
+    // Se falhou todas, não salva {} vazio no banco
+    if (!tagsJson || Object.keys(tagsJson).length === 0) {
+       return NextResponse.json({ success: false, message: "IA não conseguiu extrair as tags." });
+    }
 
-  } catch (err: any) {
-    console.error("🔥 Erro geral:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // Salva no Supabase
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .upsert({ slug: modelSlug || 'musa-padrao', sammy_tags: tagsJson }, { onConflict: 'slug' });
+
+    if (dbError) throw dbError;
+
+    return NextResponse.json({ success: true, tags: tagsJson });
+
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
