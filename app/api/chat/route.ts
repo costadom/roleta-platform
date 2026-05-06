@@ -29,7 +29,7 @@ Seja animada, chique, use emojis e foque em descobrir o estilo dela para ajudar 
         'Content-Type': 'application/json' 
       },
       body: JSON.stringify({
-        model: "llama3-8b-8192", // Modelo ultrarrápido e gratuito
+        model: "llama-3.1-8b-instant", // Modelo ultrarrápido e gratuito
         messages: groqMessages,
         temperature: 0.7,
         max_tokens: 500

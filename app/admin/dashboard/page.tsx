@@ -356,57 +356,42 @@ useEffect(() => {
   const loadActivityFeed = async (medias: any[], scratches: any[], followers: any[]) => {
       try {
           const headers = { apikey: supabaseKey!, Authorization: `Bearer ${supabaseKey}` };
-          const recentMedias = medias.slice(0, 15); 
-          const recentScratches = scratches.slice(0, 15);
-          const allMediaItems = [...recentMedias, ...recentScratches];
           
-          // Regex rigorosa para pegar APENAS UUIDs da Galeria
-          const validMediaIds = recentMedias.map(m => m.id).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id));
+          // Filtra APENAS IDs reais (ignora fotos de raspadinha e valores vazios)
+          const validMediaIds = (medias || [])
+            .map(m => m.id)
+            .filter(id => id && typeof id === 'string' && id.length > 20);
           
-          let likesList: any[] = []; let commentsList: any[] = [];
+          let likesList = []; let commentsList = [];
           
           if (validMediaIds.length > 0) {
-              // MÁGICA AQUI: Envolve cada ID com "%22" (aspas na URL)
-              const mediaIdsStr = validMediaIds.join(','); 
+              const mediaIdsStr = validMediaIds.map(id => `"${id}"`).join(','); 
               
               const [likesRes, commentsRes] = await Promise.all([
-                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => []),
-                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})&order=created_at.desc&limit=20`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
+                  fetch(`${supabaseUrl}/rest/v1/Likes?media_id=in.(${mediaIdsStr})`, { headers }).then(r => r.ok ? r.json() : []),
+                  fetch(`${supabaseUrl}/rest/v1/Comments?media_id=in.(${mediaIdsStr})`, { headers }).then(r => r.ok ? r.json() : [])
               ]);
               
-              const findImageUrl = (mId: string) => {
-                 const item = allMediaItems.find(m => m.id === mId || m.photo_url === mId);
-                 return item?.url || item?.photo_url || null;
-              }
-
-              likesList = (Array.isArray(likesRes) ? likesRes : []).map((l: any) => ({ ...l, type: 'like', media_url: findImageUrl(l.media_id) }));
-              commentsList = (Array.isArray(commentsRes) ? commentsRes : []).map((c: any) => ({ ...c, type: 'comment', media_url: findImageUrl(c.media_id) }));
+              likesList = (likesRes || []).map(l => ({ ...l, type: 'like' }));
+              commentsList = (commentsRes || []).map(c => ({ ...c, type: 'comment' }));
           }
           
           const followersMapped = (followers || []).map(f => ({ ...f, type: 'follower' }));
           let combinedFeed = [...followersMapped, ...likesList, ...commentsList]
              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
              
-          const clearedAt = localStorage.getItem('notifications_cleared_at');
-          if (clearedAt) {
-              combinedFeed = combinedFeed.filter(item => new Date(item.created_at).getTime() > Number(clearedAt));
-          }
+          const hidden = JSON.parse(localStorage.getItem('hidden_notifications') || '[]');
+          combinedFeed = combinedFeed.filter(item => !hidden.includes(item.created_at));
              
           setActivityFeed(combinedFeed.slice(0, 50));
-      } catch (err) { console.error('Erro feed:', err); }
+      } catch (e) { console.error("Erro Feed:", e); }
   };
 
   const clearActivityFeed = async () => {
-    if (!confirm("Isso irá ocultar todas as notificações atuais da sua tela. Continuar?")) return;
-    
-    // Adiciona todos os itens atuais na lista de ocultos (Como o GPT sugeriu)
-    const currentTimestamps = activityFeed.map(item => item.created_at);
-    const stored = localStorage.getItem('hidden_notifications');
-    const hiddenTimestamps = stored ? JSON.parse(stored) : [];
-    
-    const updated = [...hiddenTimestamps, ...currentTimestamps];
-    localStorage.setItem('hidden_notifications', JSON.stringify(updated));
-    
+    if (!confirm("Ocultar notificações atuais?")) return;
+    const current = activityFeed.map(n => n.created_at);
+    const existing = JSON.parse(localStorage.getItem('hidden_notifications') || '[]');
+    localStorage.setItem('hidden_notifications', JSON.stringify([...existing, ...current]));
     setActivityFeed([]);
   };
 
