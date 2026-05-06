@@ -228,7 +228,7 @@ function DashboardContent() {
       }).catch(() => {});
 
       
-      });
+      })
       } catch (error: any) {
           alert("❌ ALERTA DA SAMMY: " + error.message);
       } finally {
@@ -769,7 +769,7 @@ useEffect(() => {
               if (res.ok) newUrls.push(`${supabaseUrl}/storage/v1/object/public/assets/${fileName}`);
           }
           const updatedUrls = [...currentMedia, ...newUrls].join(',');
-          setEditingPrize({...editingPrize, delivery_value: updatedUrls});
+          setEditingPrize({...editingPrize, delivery_value: updatedUrls})
       } catch(e) { alert("Erro ao subir mídia para a roleta."); } finally { setUploadingSliceMedia(false); }
   };
 
