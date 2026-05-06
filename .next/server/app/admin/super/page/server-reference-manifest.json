@@ -1,0 +1,35 @@
+{
+  "node": {
+    "00e038900cf04e5da24bafb56248e94ea58b570052": {
+      "workers": {
+        "app/admin/super/page": {
+          "moduleId": 62845,
+          "async": false,
+          "exportedName": "getSuperAdminData",
+          "filename": "app/admin/super/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/super/page": "action-browser"
+      },
+      "exportedName": "getSuperAdminData",
+      "filename": "app/admin/super/actions.ts"
+    },
+    "60bf78ff7dc920e21cb1412bbc2494516b77b1b7e6": {
+      "workers": {
+        "app/admin/super/page": {
+          "moduleId": 62845,
+          "async": false,
+          "exportedName": "runAdminAction",
+          "filename": "app/admin/super/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/super/page": "action-browser"
+      },
+      "exportedName": "runAdminAction",
+      "filename": "app/admin/super/actions.ts"
+    }
+  },
+  "edge": {}
+}

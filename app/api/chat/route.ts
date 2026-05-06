@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
 ## IDENTIDADE CENTRAL
 Você é **Sammy**, assistente virtual, estrategista de carreira e business partner exclusiva das modelos da plataforma LabzSexy.  
-Sua função é **entrevistar, mapear, posicionar e potencializar** modelos para maximizar conexão com clientes de alto valor (“Big Spenders”).
+Sua função é **entrevistar, mapear, posicionar e potencializar** modelos para maximizar conexão com clientes de alto valor ("Big Spenders").
 
 Você NÃO é apenas uma assistente.  
 Você é:
@@ -36,7 +36,7 @@ Você é:
 
 ### Forma de tratamento:
 - Use o nome da modelo sempre que possível
-- Ou use: “amiga”, “maravilhosa”, “deusa”
+- Ou use: "amiga", "maravilhosa", "deusa"
 
 ### PROIBIDO:
 - Termos masculinos (ex: querido, amigo, cara)
@@ -73,7 +73,7 @@ Você JAMAIS pode enviar múltiplas perguntas de uma vez.
 Sempre que usar termos do mercado adulto, você DEVE explicar entre parênteses de forma breve e didática.
 
 Exemplos:
-- GFE (experiência de “namoradinha”, com proximidade emocional)
+- GFE (experiência de "namoradinha", com proximidade emocional)
 - PPV (conteúdo pago separado dentro da plataforma)
 - Big Spender (cliente que gasta valores altos com frequência)
 - JOI (conteúdo guiado onde a modelo dá instruções)
@@ -122,7 +122,7 @@ A conversa deve mapear de forma NATURAL:
 9. Frequência de produção
 10. Diferencial único
 
-Você NÃO pode dizer que está coletando “tags”.  
+Você NÃO pode dizer que está coletando "tags".  
 Você deve fazer isso de forma invisível.
 
 ---
@@ -131,7 +131,7 @@ Você deve fazer isso de forma invisível.
 Sempre que fizer uma pergunta, explique o PORQUÊ.
 
 ### Exemplo:
-“Te pergunto sobre lingerie porque no seu nicho, peças específicas podem aumentar o valor percebido em até 30% 🔥”
+"Te pergunto sobre lingerie porque no seu nicho, peças específicas podem aumentar o valor percebido em até 30% 🔥"
 
 Isso:
 - Aumenta confiança
@@ -222,8 +222,8 @@ Finalizar com:
 ---
 
 ## EXEMPLO DE TOM (REFERÊNCIA)
-“Amiga… já estou vendo um potencial absurdo aqui 😈✨  
-Te pergunto isso porque clientes que buscam esse tipo de energia costumam virar Big Spenders (clientes que gastam muito), e isso muda completamente o seu jogo…”
+"Amiga… já estou vendo um potencial absurdo aqui 😈✨  
+Te pergunto isso porque clientes que buscam esse tipo de energia costumam virar Big Spenders (clientes que gastam muito), e isso muda completamente o seu jogo…"
 
 ---
 
@@ -244,32 +244,36 @@ Você constrói uma carreira.
 O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 1. **FOCO EM RESULTADO:** Sugira roteiros de vídeos PPV, ideias de posts para atrair Big Spenders e mimos para fidelizar fãs.
 2. **PARCEIRA DE NEGÓCIOS:** Trate a @${modelSlug || 'Musa'} como uma sócia. Use o perfil que você mapeou no resumo para dar dicas personalizadas.
-3. **IDEIAS PRÁTICAS:** Se ela perguntar "o que eu gravo hoje?", dê 3 opções picantes e lucrativas baseadas no nicho dela.`;
-    } else {
-      systemPrompt += `\n\n## REGRAS DE EXECUÇÃO ADICIONAIS
-1. **AGILIDADE:** Responda com no máximo 2 ou 3 frases curtas. 
-2. **NATURALIDADE:** Sem elogios mecânicos. Seja íntima e direta.
-3. **MEMÓRIA:** Você DEVE fazer uma pergunta para mapear as TAGS. SÓ UMA PERGUNTA POR VEZ.`;
+3. **IDEIAS PRÁTICAS:** Se ela perguntar "o que eu gravo hoje?", dê 3 opções picantes e lucrativas baseadas no nicho dela.
+`;
     }
+
+    systemPrompt += `\n\n## REGRAS DE EXECUÇÃO ADICIONAIS
+1. **AGILIDADE:** Responda com no máximo 2 ou 3 frases. 
+2. **NATURALIDADE:** Sem elogios mecânicos. Seja íntima e direta.
+3. **MEMÓRIA:** Use o que ela já te contou para basear suas novas sugestões.
+`;
 
     const groqMessages = [
       { role: "system", content: systemPrompt },
-      ...messages.slice(-10).map((m: any) => ({
+      ...messages.slice(-12).map((m: any) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content
       }))
     ];
 
-    // 🔥 O SUSSURRO: Força a IA a lembrar da regra principal logo antes de gerar a resposta
+    // 🔥 O SUSSURRO: Força a IA a lembrar da regra de ser curta na hora de responder
     if (!isFinalized) {
       groqMessages.push({ 
         role: "system", 
-        content: "LEMBRETE CRÍTICO: Fale no máximo 2 frases. Seja extremamente breve. Aja naturalmente e faça APENAS A PRÓXIMA PERGUNTA do mapeamento. Não dê palestras." 
+        content: "LEMBRETE OBRIGATÓRIO: Fale no MÁXIMO 2 frases. Seja extremamente direta e faça APENAS UMA pergunta por vez. Não dê palestras." 
       });
     }
 
     let attempt = 0;
-    while (attempt < 3) {
+    const maxRetries = 3;
+
+    while (attempt < maxRetries) {
       try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: 'POST',
@@ -277,29 +281,33 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
           body: JSON.stringify({
             model: "llama-3.1-8b-instant",
             messages: groqMessages,
-            temperature: 0.3,
-            max_tokens: 250 // Limitando drasticamente para forçar respostas curtas e não estourar a API
+            temperature: 0.4,
+            max_tokens: 150 // Reduzido drasticamente para cortar respostas bíblicas
           })
         });
 
         const data = await response.json();
-        if (!response.ok || data.error) throw new Error("Groq Error");
+
+        if (!response.ok || data.error) throw new Error("Falha na Groq");
+
         const aiText = data?.choices?.?.message?.content;
-        if (!aiText) throw new Error("Empty");
+
+        if (!aiText) throw new Error("Resposta vazia");
 
         return NextResponse.json({ text: aiText });
 
       } catch (error: any) {
         attempt++;
-        if (attempt >= 3) {
+        if (attempt >= maxRetries) {
           return NextResponse.json({
-            text: "Amor, a conexão deu uma travada rápida aqui... 💅✨ Me manda de novo?"
+            text: "Amor, estou estruturando sua estratégia aqui e precisei respirar um segundo... 💅✨ Aguarda só uns segundinhos e me manda mais uma mensagem pra gente continuar!"
           });
         }
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3500));
       }
     }
+
   } catch (error: any) {
-    return NextResponse.json({ text: "Amiga, me deu um branco! 😅" });
+    return NextResponse.json({ text: "Amiga, me deu um branco aqui! 😅 Manda de novo?" });
   }
 }

@@ -24,15 +24,13 @@ export async function POST(req: Request) {
   try {
     const { messages, modelSlug } = await req.json();
 
-    // Filtra as mensagens para pegar as últimas da conversa (limite para não estourar tokens)
+    // Limita as mensagens para não estourar o limite de tokens na Groq
     const cleanMessages = messages.slice(-14).map((m: any) => ({
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content
     }));
 
-    const extractPrompt = `Você é um robô invisível de extração de dados.
-Sua única função é ler a conversa acima e extrair as tags estratégicas da modelo.
-Retorne EXATAMENTE este objeto JSON preenchido, sem markdown, sem explicações. Se não houver a info, retorne string ou array vazio.
+    const extractPrompt = `Você é um robô de extração. Leia a conversa e retorne EXATAMENTE este JSON preenchido. Sem texto adicional. Se não houver, deixe vazio.
 {
   "atributos_fisicos": [],
   "nicho_principal": "",
@@ -57,7 +55,7 @@ Retorne EXATAMENTE este objeto JSON preenchido, sem markdown, sem explicações.
               ...cleanMessages
             ],
             temperature: 0.1,
-            max_tokens: 400, // 🔥 A MÁGICA: Isso impede a Groq de dar Rate Limit por solicitar tokens demais
+            max_tokens: 400, // Limite para evitar erro de Rate Limit
             response_format: { type: "json_object" }
           })
         });
@@ -66,23 +64,20 @@ Retorne EXATAMENTE este objeto JSON preenchido, sem markdown, sem explicações.
         
         if (response.ok && data?.choices?.?.message?.content) {
           tagsJson = safeParseJSON(data.choices.message.content);
-          if (tagsJson && Object.keys(tagsJson).length > 0) break; // Sai do loop se deu certo
+          // Se gerou o JSON corretamente e não está vazio, quebra o loop
+          if (tagsJson && Object.keys(tagsJson).length > 0) break;
         }
-        
-      } catch (err) {
-        console.error("Tentativa de extração falhou:", err);
-      }
+      } catch (err) {}
       
       attempt++;
-      await new Promise(resolve => setTimeout(resolve, 4000)); // Espera 4s antes de tentar extrair de novo
+      await new Promise(resolve => setTimeout(resolve, 3500));
     }
 
-    // Se falhou todas, não salva {} vazio no banco
+    // 🔥 TRAVA DE SEGURANÇA: Se falhar ou for vazio, NÃO salva no banco
     if (!tagsJson || Object.keys(tagsJson).length === 0) {
-       return NextResponse.json({ success: false, message: "IA não conseguiu extrair as tags." });
+       return NextResponse.json({ success: false, message: "IA retornou vazio, ignorando salvamento." });
     }
 
-    // Salva no Supabase
     const { error: dbError } = await supabase
       .from('profiles')
       .upsert({ slug: modelSlug || 'musa-padrao', sammy_tags: tagsJson }, { onConflict: 'slug' });

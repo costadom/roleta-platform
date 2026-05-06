@@ -1,0 +1,3 @@
+{
+  "/webhooks/pushinpay/route": "app/webhooks/pushinpay/route.js"
+}
