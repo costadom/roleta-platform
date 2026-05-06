@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Usando as variáveis de ambiente padrão do Supabase no Next.js
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const groqApiKey = process.env.GROQ_API_KEY || "";
@@ -12,7 +11,6 @@ export async function POST(req: Request) {
   try {
     const { messages, modelSlug } = await req.json();
 
-    // 1. PROMPT OCULTO PARA EXTRAÇÃO EM JSON
     const extractPrompt = `
     Você é um extrator de dados de perfis de modelos de conteúdo adulto.
     Leia o histórico da conversa entre a modelo e a IA.
@@ -20,7 +18,7 @@ export async function POST(req: Request) {
     
     O JSON deve seguir esta estrutura exata:
     {
-      "atributos_fisicos": ["ruiva", "tatuada", "bunda grande"],
+      "atributos_fisicos": ["exemplo"],
       "nicho_principal": "exemplo",
       "cenarios": ["exemplo"],
       "estilo_roupas": ["exemplo"],
@@ -38,7 +36,6 @@ export async function POST(req: Request) {
       }))
     ];
 
-    // 2. CHAMA A GROQ FORÇANDO A SAÍDA EM JSON
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: 'POST',
       headers: { 
@@ -48,8 +45,8 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages: groqMessages,
-        temperature: 0.1, // Quase zero para evitar alucinação no JSON
-        response_format: { type: "json_object" } // FORÇA O RETORNO EM JSON
+        temperature: 0.1, 
+        response_format: { type: "json_object" } 
       })
     });
 
@@ -57,13 +54,15 @@ export async function POST(req: Request) {
     if (!response.ok) throw new Error(data.error?.message || "Erro na Groq");
 
     const tagsJson = JSON.parse(data.choices[0].message.content);
+    const safeSlug = modelSlug || 'musa-padrao';
 
-    // 3. SALVA NO SUPABASE
-    // ATENÇÃO: Ajuste 'profiles' para o nome exato da sua tabela, e 'slug' para o identificador correto.
+    // A MÁGICA ACONTECE AQUI: UPSERT! Cria se não existe, atualiza se existe.
     const { error: dbError } = await supabase
-      .from('profiles') // <-- NOME DA SUA TABELA
-      .update({ sammy_tags: tagsJson }) // <-- NOME DA SUA COLUNA JSONB
-      .eq('slug', modelSlug);
+      .from('profiles')
+      .upsert(
+        { slug: safeSlug, sammy_tags: tagsJson }, 
+        { onConflict: 'slug' }
+      );
 
     if (dbError) throw new Error(`Erro no Supabase: ${dbError.message}`);
 
