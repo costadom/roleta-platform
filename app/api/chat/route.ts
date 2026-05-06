@@ -282,8 +282,8 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
 
         if (!response.ok || data.error) throw new Error("Falha na Groq");
 
-        // ✅ SYNTAX FIX APLICADO
-        const aiText = data?.choices?.?.message?.content;
+        // ✅ SYNTAX FIX: era data?.choices?.?.message?.content (inválido)
+        const aiText = data?.choices?.[0]?.message?.content;
 
         if (!aiText) throw new Error("Resposta vazia");
 
@@ -303,4 +303,3 @@ O mapeamento inicial foi concluído com sucesso. Agora sua missão mudou:
   } catch (error: any) {
     return NextResponse.json({ text: "Amiga, me deu um branco aqui! 😅 Manda de novo?" });
   }
-}
