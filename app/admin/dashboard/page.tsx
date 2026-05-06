@@ -234,18 +234,7 @@ function DashboardContent() {
       }
   };
 
-  const handleFinishSammyTraining = async () => {
-  if (isSammyLoading) return;
-  setSavingHub(true);
-  setIsSammyLoading(true);
-
-  console.log("🔥 MODEL SLUG:", modelSlug);
-
-  const userMsg = { 
-    id: Date.now().toString(), 
-    role: 'user', 
-    content: '[SISTEMA]: A modelo clicou no botão "Finalizar Treinamento". Por favor, confirme.' 
-  };
+  
 
   const newMessages = [...sammyMessages, userMsg];
   setSammyMessages(newMessages);
@@ -304,6 +293,67 @@ function DashboardContent() {
           setSavingHub(false);
       }
   };
+
+
+const handleFinishSammyTraining = async () => {
+  if (isSammyLoading) return;
+
+  setSavingHub(true);
+  setIsSammyLoading(true);
+
+  console.log("🔥 MODEL SLUG:", modelSlug);
+
+  const userMsg = {
+    id: Date.now().toString(),
+    role: 'user',
+    content: '[SISTEMA]: Finalizar Treinamento'
+  };
+
+  const newMessages = [...sammyMessages, userMsg];
+  setSammyMessages(newMessages);
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: newMessages, modelSlug })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      throw new Error(data.error || "Erro na IA");
+    }
+
+    setSammyMessages(prev => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: data.text
+      }
+    ]);
+
+    // ✅ SALVAR TAGS
+    await fetch('/api/save-tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [...newMessages, { role: 'assistant', content: data.text }],
+        modelSlug
+      })
+    });
+
+    console.log("✅ TAGS SALVAS");
+
+  } catch (error) {
+    console.error(error);
+    alert("Erro ao finalizar treinamento");
+  } finally {
+    setIsSammyLoading(false);
+    setSavingHub(false);
+  }
+};
 
 useEffect(() => {
       if (activeTab === "sammy") {
