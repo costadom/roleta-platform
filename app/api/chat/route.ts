@@ -19,9 +19,9 @@ export async function POST(req: Request) {
     A modelo se chama: @${modelSlug || 'Musa'}.
     Tom de voz: Animada, empoderadora, chique, vendedora e focada em fazer a modelo ganhar muito dinheiro.`;
 
+    // CORREÇÃO: Usando a string explícita recomendada pelo Google para evitar o Erro 404/500
     const result = await generateText({
-      // MODELO CORRIGIDO: Versão oficial de acesso gratuito e universal
-      model: google('gemini-1.5-flash'),
+      model: google('gemini-1.5-flash-latest'),
       system: systemPrompt,
       messages,
     });
