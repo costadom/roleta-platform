@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         const data = await response.json();
         if (!response.ok || data.error) throw new Error("Groq Error");
 
-        const aiText = data?.choices?.?.message?.content;
+        const aiText = data?.choices?.[0]?.message?.content;
         if (!aiText) throw new Error("Vazio");
 
         return NextResponse.json({ text: aiText });
