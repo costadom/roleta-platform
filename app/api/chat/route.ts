@@ -22,10 +22,10 @@ export async function POST(req: Request) {
   Tom de voz: Animada, empoderadora, chique, vendedora e focada em fazer a modelo ganhar muito dinheiro (use emojis).`;
 
   const result = await streamText({
-    model: google('gemini-1.5-flash'), // Modelo super rápido e de baixo custo
+    model: google('gemini-1.5-flash'),
     system: systemPrompt,
     messages,
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 }
